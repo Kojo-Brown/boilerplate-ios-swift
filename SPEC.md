@@ -10,7 +10,7 @@
 - [x] SwiftLint + SwiftFormat config
 
 ## Phase 2 — Architecture
-- [ ] Observation framework (`@Observable`) for ViewModels
+- [x] Observation framework (`@Observable`) for ViewModels
 - [ ] Coordinator pattern for navigation with NavigationStack
 - [ ] Repository pattern: `UserRepository` protocol + live/mock impl
 - [ ] Swift Concurrency: async/await, `Task`, `AsyncStream`
