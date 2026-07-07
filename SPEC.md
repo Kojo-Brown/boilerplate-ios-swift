@@ -12,7 +12,7 @@
 ## Phase 2 — Architecture
 - [x] Observation framework (`@Observable`) for ViewModels
 - [x] Coordinator pattern for navigation with NavigationStack
-- [ ] Repository pattern: `UserRepository` protocol + live/mock impl
+- [x] Repository pattern: `UserRepository` protocol + live/mock impl
 - [ ] Swift Concurrency: async/await, `Task`, `AsyncStream`
 
 ## Phase 3 — Network & Persistence
