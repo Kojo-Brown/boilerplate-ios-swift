@@ -3,24 +3,26 @@ import SwiftUI
 @main
 struct BoilerplateApp: App {
     @State private var appState = AppState()
+    @State private var coordinator = AppCoordinator()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .environment(coordinator)
         }
     }
 }
 
 /// Routes between authenticated and unauthenticated experiences.
-/// `AppState` is `@Observable`, so `RootView` re-renders only when
-/// `isAuthenticated` changes — no manual `objectWillChange` needed.
+/// The authenticated branch hands off to `AppNavigationView`, which owns the
+/// coordinator-backed `NavigationStack`.
 struct RootView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
         if appState.isAuthenticated {
-            HomeView()
+            AppNavigationView()
         } else {
             LoginView()
         }
