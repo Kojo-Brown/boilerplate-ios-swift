@@ -18,6 +18,11 @@ final class HomeViewModel: ViewModelProtocol {
 
     var searchQuery = ""
 
+    /// Stored `Task` reference for the live-update stream.
+    /// Keeping a reference enables explicit cancellation in `onDisappear`,
+    /// preventing orphaned work after the view leaves the screen.
+    private var liveUpdateTask: Task<Void, Never>?
+
     var filteredItems: [HomeItem] {
         guard !searchQuery.isEmpty else { return items }
         return items.filter {
@@ -33,6 +38,11 @@ final class HomeViewModel: ViewModelProtocol {
         await loadItems()
     }
 
+    /// Cancels all in-flight Tasks when the view disappears.
+    func onDisappear() {
+        stopLiveUpdates()
+    }
+
     // MARK: - Actions
 
     func refresh() async {
@@ -42,6 +52,37 @@ final class HomeViewModel: ViewModelProtocol {
     func deleteItems(at offsets: IndexSet) {
         let targets = offsets.map { filteredItems[$0].id }
         items.removeAll { targets.contains($0.id) }
+    }
+
+    // MARK: - Live Updates via AsyncStream + Task
+
+    /// Starts consuming a `PollingStream` and appending each yielded batch to `items`.
+    ///
+    /// The consuming `Task` is stored in `liveUpdateTask` so it can be cancelled
+    /// via `stopLiveUpdates()` or `onDisappear()`. Cancelling the Task propagates
+    /// into `PollingStream`'s inner task via `onTermination`, stopping all work.
+    func startLiveUpdates(interval: Duration = .seconds(10)) {
+        liveUpdateTask?.cancel()
+        liveUpdateTask = Task {
+            let stream = PollingStream.make(interval: interval) {
+                // Stub — Phase 3 replaces this with a typed URLSession call
+                [HomeItem(
+                    id: UUID(),
+                    title: "Live Update",
+                    subtitle: "Streamed via AsyncStream at \(Date().formatted(.dateTime.hour().minute().second()))"
+                )]
+            }
+            for await batch in stream {
+                guard !Task.isCancelled else { break }
+                items.append(contentsOf: batch)
+            }
+        }
+    }
+
+    /// Cancels the live-update Task, which propagates into the underlying `PollingStream`.
+    func stopLiveUpdates() {
+        liveUpdateTask?.cancel()
+        liveUpdateTask = nil
     }
 
     // MARK: - Private
