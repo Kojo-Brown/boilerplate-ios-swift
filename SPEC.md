@@ -16,7 +16,7 @@
 - [x] Swift Concurrency: async/await, `Task`, `AsyncStream`
 
 ## Phase 3 — Network & Persistence
-- [ ] URLSession typed API client with JWT Bearer + refresh
+- [x] URLSession typed API client with JWT Bearer + refresh
 - [ ] `Codable` model layer with `@CodingKey` strategy
 - [ ] SwiftData persistence layer (User entity)
 - [ ] Keychain wrapper for secure token storage

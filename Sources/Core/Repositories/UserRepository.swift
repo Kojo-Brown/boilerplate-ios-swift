@@ -26,29 +26,27 @@ enum UserRepositoryError: LocalizedError, Equatable {
     }
 }
 
-// MARK: - Live implementation (stub — real URLSession client added in Phase 3)
+// MARK: - Live implementation
 
 struct LiveUserRepository: UserRepository {
+    private let client: any APIClient
+
+    init(client: any APIClient = URLSessionAPIClient.shared) {
+        self.client = client
+    }
+
     func fetchCurrentUser() async throws -> User {
-        try await Task.sleep(for: .milliseconds(500))
-        return User(
-            id: UUID(),
-            email: "user@example.com",
-            name: "Demo User"
-        )
+        try await client.send(APIEndpoint.get("/users/me"))
     }
 
     func updateProfile(name: String) async throws -> User {
-        try await Task.sleep(for: .milliseconds(300))
-        return User(
-            id: UUID(),
-            email: "user@example.com",
-            name: name
+        try await client.send(
+            APIEndpoint.patch("/users/me", body: UpdateProfileRequest(name: name))
         )
     }
 
     func deleteAccount() async throws {
-        try await Task.sleep(for: .milliseconds(300))
+        let _: EmptyResponse = try await client.send(APIEndpoint.delete("/users/me"))
     }
 }
 

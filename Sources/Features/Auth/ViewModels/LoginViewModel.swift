@@ -48,12 +48,30 @@ protocol AuthServiceProtocol: Sendable {
     func login(email: String, password: String) async throws -> Bool
 }
 
-// MARK: - Live implementation (stub — real URLSession client added in Phase 3)
+// MARK: - Live implementation
 
 struct LiveAuthService: AuthServiceProtocol {
+    private let client: any APIClient
+    private let tokenStore: TokenStore
+
+    init(
+        client: any APIClient = URLSessionAPIClient.shared,
+        tokenStore: TokenStore = .shared
+    ) {
+        self.client = client
+        self.tokenStore = tokenStore
+    }
+
     func login(email: String, password: String) async throws -> Bool {
-        // Replaced by typed API client in Phase 3.
-        try await Task.sleep(for: .seconds(1))
+        let endpoint = try APIEndpoint.post(
+            "/auth/login",
+            body: LoginRequest(email: email, password: password),
+            requiresAuth: false
+        )
+        let response: LoginResponse = try await client.send(endpoint)
+        await tokenStore.setTokens(
+            TokenPair(accessToken: response.accessToken, refreshToken: response.refreshToken)
+        )
         return true
     }
 }
