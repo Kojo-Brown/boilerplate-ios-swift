@@ -13,7 +13,7 @@
 - [x] Observation framework (`@Observable`) for ViewModels
 - [x] Coordinator pattern for navigation with NavigationStack
 - [x] Repository pattern: `UserRepository` protocol + live/mock impl
-- [ ] Swift Concurrency: async/await, `Task`, `AsyncStream`
+- [x] Swift Concurrency: async/await, `Task`, `AsyncStream`
 
 ## Phase 3 — Network & Persistence
 - [ ] URLSession typed API client with JWT Bearer + refresh
