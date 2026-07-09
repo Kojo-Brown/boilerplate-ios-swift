@@ -69,7 +69,7 @@ struct LiveAuthService: AuthServiceProtocol {
             requiresAuth: false
         )
         let response: LoginResponse = try await client.send(endpoint)
-        await tokenStore.setTokens(
+        try await tokenStore.setTokens(
             TokenPair(accessToken: response.accessToken, refreshToken: response.refreshToken)
         )
         return true

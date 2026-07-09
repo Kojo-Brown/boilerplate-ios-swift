@@ -24,32 +24,53 @@ struct TokenRefreshRequest: Encodable, Sendable {
 
 // MARK: - Token store
 
-/// Actor-isolated in-memory token store.
+/// Actor-isolated, Keychain-backed token store.
 ///
-/// Concurrent 401 responses are coalesced: the first caller that notices the
-/// token is stale triggers a refresh Task; all other callers await that same
-/// Task instead of firing duplicate refresh requests.
-///
-/// Phase 3 will replace the in-memory store with Keychain persistence.
+/// Tokens are persisted to Keychain on every `setTokens` call so they survive
+/// app restarts. Concurrent 401 responses are coalesced: the first caller that
+/// notices the token is stale triggers a refresh Task; all other callers await
+/// that same Task instead of firing duplicate refresh requests.
 actor TokenStore {
     static let shared = TokenStore()
 
-    private(set) var accessToken: String?
-    private(set) var refreshToken: String?
+    private let keychain: any KeychainStoring
     private var inflightRefresh: Task<String, Error>?
 
-    func setTokens(_ pair: TokenPair) {
-        accessToken = pair.accessToken
-        refreshToken = pair.refreshToken
+    private enum Keys {
+        static let accessToken = "com.boilerplate.accessToken"
+        static let refreshToken = "com.boilerplate.refreshToken"
+    }
+
+    init(keychain: any KeychainStoring = KeychainWrapper()) {
+        self.keychain = keychain
+    }
+
+    // MARK: - Token access
+
+    var accessToken: String? {
+        try? keychain.string(forKey: Keys.accessToken)
+    }
+
+    var refreshToken: String? {
+        try? keychain.string(forKey: Keys.refreshToken)
+    }
+
+    // MARK: - Mutations
+
+    func setTokens(_ pair: TokenPair) throws {
+        try keychain.set(pair.accessToken, forKey: Keys.accessToken)
+        try keychain.set(pair.refreshToken, forKey: Keys.refreshToken)
         inflightRefresh = nil
     }
 
     func clearTokens() {
-        accessToken = nil
-        refreshToken = nil
+        try? keychain.remove(forKey: Keys.accessToken)
+        try? keychain.remove(forKey: Keys.refreshToken)
         inflightRefresh?.cancel()
         inflightRefresh = nil
     }
+
+    // MARK: - Auth helpers
 
     /// Returns the stored access token or throws `APIError.unauthorized`.
     func currentToken() throws -> String {
@@ -65,7 +86,6 @@ actor TokenStore {
     func refreshIfNeeded(
         using performer: @Sendable @escaping (String) async throws -> TokenPair
     ) async throws -> String {
-        // Coalesce concurrent refresh attempts.
         if let existing = inflightRefresh {
             return try await existing.value
         }
@@ -75,7 +95,7 @@ actor TokenStore {
         let task = Task { [weak self] () throws -> String in
             guard let self else { throw APIError.tokenRefreshFailed }
             let pair = try await performer(rt)
-            await self.setTokens(pair)
+            try await self.setTokens(pair)
             return pair.accessToken
         }
         inflightRefresh = task

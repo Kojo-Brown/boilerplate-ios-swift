@@ -19,7 +19,7 @@
 - [x] URLSession typed API client with JWT Bearer + refresh
 - [x] `Codable` model layer with `@CodingKey` strategy
 - [x] SwiftData persistence layer (User entity)
-- [ ] Keychain wrapper for secure token storage
+- [x] Keychain wrapper for secure token storage
 
 ## Phase 4 — Auth & ML
 - [ ] Sign in with Apple + Google Sign-In
