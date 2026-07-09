@@ -89,14 +89,14 @@ struct APIClientTests {
     // MARK: - TokenStore
 
     @Test func tokenStoreStoresAndRetrievesToken() async throws {
-        let store = TokenStore()
-        await store.setTokens(TokenPair(accessToken: "access123", refreshToken: "refresh456"))
+        let store = TokenStore(keychain: InMemoryKeychain())
+        try await store.setTokens(TokenPair(accessToken: "access123", refreshToken: "refresh456"))
         let token = try await store.currentToken()
         #expect(token == "access123")
     }
 
     @Test func tokenStoreThrowsWhenNoToken() async {
-        let store = TokenStore()
+        let store = TokenStore(keychain: InMemoryKeychain())
         var caught: (any Error)?
         do {
             _ = try await store.currentToken()
@@ -106,9 +106,9 @@ struct APIClientTests {
         #expect(caught != nil)
     }
 
-    @Test func tokenStoreClearsTokens() async {
-        let store = TokenStore()
-        await store.setTokens(TokenPair(accessToken: "a", refreshToken: "r"))
+    @Test func tokenStoreClearsTokens() async throws {
+        let store = TokenStore(keychain: InMemoryKeychain())
+        try await store.setTokens(TokenPair(accessToken: "a", refreshToken: "r"))
         await store.clearTokens()
         var caught: (any Error)?
         do {
@@ -120,8 +120,8 @@ struct APIClientTests {
     }
 
     @Test func tokenStoreRefreshCoalescesOnSingleTask() async throws {
-        let store = TokenStore()
-        await store.setTokens(TokenPair(accessToken: "old", refreshToken: "rt"))
+        let store = TokenStore(keychain: InMemoryKeychain())
+        try await store.setTokens(TokenPair(accessToken: "old", refreshToken: "rt"))
 
         let callCount = AtomicCounter()
 
@@ -166,7 +166,7 @@ struct APIClientTests {
 
     @Test func liveAuthServiceStoresTokensOnSuccess() async throws {
         let client = MockAPIClient()
-        let tokenStore = TokenStore()
+        let tokenStore = TokenStore(keychain: InMemoryKeychain())
         let fakeResponse = LoginResponse(
             accessToken: "access_tok",
             refreshToken: "refresh_tok",
@@ -188,7 +188,7 @@ struct APIClientTests {
             throw APIError.networkUnavailable(URLError(.notConnectedToInternet))
         }
 
-        let service = LiveAuthService(client: client, tokenStore: TokenStore())
+        let service = LiveAuthService(client: client, tokenStore: TokenStore(keychain: InMemoryKeychain()))
         var caught: (any Error)?
         do {
             _ = try await service.login(email: "u@example.com", password: "password1")
