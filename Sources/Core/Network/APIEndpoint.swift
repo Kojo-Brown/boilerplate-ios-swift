@@ -102,6 +102,11 @@ struct EmptyResponse: Decodable, Sendable {}
 // MARK: - JSONDecoder / JSONEncoder defaults
 
 extension JSONDecoder {
+    /// Standard decoder used by all API responses.
+    ///
+    /// All `Codable` models define explicit `CodingKeys` enums for precise
+    /// snake_case ↔ camelCase mapping. `.convertFromSnakeCase` acts as a
+    /// fallback for any type that does not define its own `CodingKeys`.
     static let apiDecoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
@@ -111,6 +116,10 @@ extension JSONDecoder {
 }
 
 extension JSONEncoder {
+    /// Standard encoder used for all API request bodies.
+    ///
+    /// All `Encodable` models define explicit `CodingKeys` enums. `.convertToSnakeCase`
+    /// acts as a fallback for any type that does not define its own `CodingKeys`.
     static let apiEncoder: JSONEncoder = {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
