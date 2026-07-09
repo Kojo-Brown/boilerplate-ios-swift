@@ -1,9 +1,18 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct BoilerplateApp: App {
     @State private var appState = AppState()
     @State private var coordinator = AppCoordinator()
+
+    private let container: ModelContainer = {
+        do {
+            return try PersistenceController.makeContainer()
+        } catch {
+            fatalError("SwiftData container failed to initialise: \(error)")
+        }
+    }()
 
     var body: some Scene {
         WindowGroup {
@@ -11,6 +20,7 @@ struct BoilerplateApp: App {
                 .environment(appState)
                 .environment(coordinator)
         }
+        .modelContainer(container)
     }
 }
 
