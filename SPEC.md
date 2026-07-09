@@ -18,7 +18,7 @@
 ## Phase 3 — Network & Persistence
 - [x] URLSession typed API client with JWT Bearer + refresh
 - [x] `Codable` model layer with `@CodingKey` strategy
-- [ ] SwiftData persistence layer (User entity)
+- [x] SwiftData persistence layer (User entity)
 - [ ] Keychain wrapper for secure token storage
 
 ## Phase 4 — Auth & ML
