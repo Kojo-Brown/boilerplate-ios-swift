@@ -29,3 +29,21 @@ struct UpdateProfileRequest: Encodable, Sendable {
         case name
     }
 }
+
+struct SocialLoginRequest: Encodable, Sendable {
+    let provider: String
+    let identityToken: String
+    let authorizationCode: String?
+    let nonce: String?
+    let givenName: String?
+    let familyName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case identityToken = "identity_token"
+        case authorizationCode = "authorization_code"
+        case nonce
+        case givenName = "given_name"
+        case familyName = "family_name"
+    }
+}
