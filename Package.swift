@@ -12,6 +12,10 @@ let package = Package(
             url: "https://github.com/google/GoogleSignIn-iOS",
             from: "7.0.0"
         ),
+        .package(
+            url: "https://github.com/google-mlkit/ml-kit-ios",
+            from: "9.0.0"
+        ),
     ],
     targets: [
         .target(
@@ -19,6 +23,8 @@ let package = Package(
             dependencies: [
                 .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
                 .product(name: "GoogleSignInSwift", package: "GoogleSignIn-iOS"),
+                .product(name: "MLKitTextRecognitionV2", package: "ml-kit-ios"),
+                .product(name: "MLKitVision", package: "ml-kit-ios"),
             ],
             path: "Sources",
             swiftSettings: [
