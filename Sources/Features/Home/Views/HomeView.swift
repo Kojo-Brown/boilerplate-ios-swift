@@ -18,12 +18,21 @@ struct HomeView: View {
                     if viewModel.isLoading {
                         ProgressView()
                     } else {
-                        Button {
-                            coordinator.push(.settings)
+                        Menu {
+                            Button {
+                                coordinator.push(.textRecognition)
+                            } label: {
+                                Label("Scan Text", systemImage: "text.viewfinder")
+                            }
+                            Button {
+                                coordinator.push(.settings)
+                            } label: {
+                                Label("Settings", systemImage: "gearshape")
+                            }
                         } label: {
-                            Image(systemName: "gearshape")
+                            Image(systemName: "ellipsis.circle")
                         }
-                        .accessibilityLabel("Settings")
+                        .accessibilityLabel("More options")
                     }
                 }
             }

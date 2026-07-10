@@ -26,6 +26,8 @@ struct AppNavigationView: View {
             SettingsView()
         case .itemDetail(let id, let title):
             ItemDetailView(id: id, title: title)
+        case .textRecognition:
+            TextRecognitionView()
         }
     }
 }

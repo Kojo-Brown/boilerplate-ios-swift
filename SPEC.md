@@ -23,7 +23,7 @@
 
 ## Phase 4 — Auth & ML
 - [x] Sign in with Apple + Google Sign-In
-- [ ] MLKit text recognition with camera integration
+- [x] MLKit text recognition with camera integration
 - [ ] Vision framework: barcode + QR scanning overlay
 - [ ] Face ID / Touch ID biometric auth wrapper
 

@@ -7,4 +7,5 @@ import Foundation
 enum Route: Hashable {
     case settings
     case itemDetail(id: UUID, title: String)
+    case textRecognition
 }
