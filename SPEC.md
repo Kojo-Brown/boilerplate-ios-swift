@@ -22,7 +22,7 @@
 - [x] Keychain wrapper for secure token storage
 
 ## Phase 4 — Auth & ML
-- [ ] Sign in with Apple + Google Sign-In
+- [x] Sign in with Apple + Google Sign-In
 - [ ] MLKit text recognition with camera integration
 - [ ] Vision framework: barcode + QR scanning overlay
 - [ ] Face ID / Touch ID biometric auth wrapper
