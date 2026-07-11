@@ -3,11 +3,12 @@ import GoogleSignInSwift
 import SwiftUI
 import UIKit
 
-/// Login screen with email/password and social sign-in options.
-/// Backed by `LoginViewModel` (email/password) and `SocialLoginViewModel` (Apple + Google).
+/// Login screen with email/password, social sign-in, and biometric options.
+/// Backed by `LoginViewModel`, `SocialLoginViewModel`, and `BiometricAuthViewModel`.
 struct LoginView: View {
     @State private var viewModel = LoginViewModel()
     @State private var socialViewModel = SocialLoginViewModel()
+    @State private var biometricViewModel = BiometricAuthViewModel()
     @Environment(AppState.self) private var appState
 
     var body: some View {
@@ -16,12 +17,17 @@ struct LoginView: View {
                 VStack(spacing: 24) {
                     header
                     fields
-                    if let message = viewModel.errorMessage ?? socialViewModel.errorMessage {
+                    if let message = viewModel.errorMessage
+                        ?? socialViewModel.errorMessage
+                        ?? biometricViewModel.errorMessage {
                         errorBanner(message)
                     }
                     loginButton
                     divider
                     socialButtons
+                    if biometricViewModel.isAvailable {
+                        biometricSection
+                    }
                 }
                 .padding()
             }
@@ -31,6 +37,9 @@ struct LoginView: View {
                 if authenticated { appState.isAuthenticated = true }
             }
             .onChange(of: socialViewModel.isAuthenticated) { _, authenticated in
+                if authenticated { appState.isAuthenticated = true }
+            }
+            .onChange(of: biometricViewModel.isAuthenticated) { _, authenticated in
                 if authenticated { appState.isAuthenticated = true }
             }
         }
@@ -81,6 +90,7 @@ struct LoginView: View {
         .onTapGesture {
             viewModel.clearError()
             socialViewModel.clearError()
+            biometricViewModel.clearError()
         }
     }
 
@@ -112,6 +122,13 @@ struct LoginView: View {
             Text("or").font(.footnote).foregroundStyle(.secondary)
             Rectangle().fill(.secondary.opacity(0.3)).frame(height: 1)
         }
+    }
+
+    private var biometricSection: some View {
+        BiometricAuthButton(viewModel: biometricViewModel) {
+            appState.isAuthenticated = true
+        }
+        .disabled(viewModel.isLoading || socialViewModel.isLoading)
     }
 
     private var socialButtons: some View {

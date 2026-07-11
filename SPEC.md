@@ -25,7 +25,7 @@
 - [x] Sign in with Apple + Google Sign-In
 - [x] MLKit text recognition with camera integration
 - [x] Vision framework: barcode + QR scanning overlay
-- [ ] Face ID / Touch ID biometric auth wrapper
+- [x] Face ID / Touch ID biometric auth wrapper
 
 ## Phase 5 — UI Components
 - [ ] Design system: `AppButton`, `AppTextField`, `LoadingView`
