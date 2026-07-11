@@ -25,6 +25,11 @@ struct HomeView: View {
                                 Label("Scan Text", systemImage: "text.viewfinder")
                             }
                             Button {
+                                coordinator.push(.barcodeScanner)
+                            } label: {
+                                Label("Scan Barcode / QR", systemImage: "qrcode.viewfinder")
+                            }
+                            Button {
                                 coordinator.push(.settings)
                             } label: {
                                 Label("Settings", systemImage: "gearshape")

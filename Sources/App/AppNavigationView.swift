@@ -28,6 +28,8 @@ struct AppNavigationView: View {
             ItemDetailView(id: id, title: title)
         case .textRecognition:
             TextRecognitionView()
+        case .barcodeScanner:
+            BarcodeScannerView()
         }
     }
 }
