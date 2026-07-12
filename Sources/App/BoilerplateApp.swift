@@ -19,6 +19,9 @@ struct BoilerplateApp: App {
             RootView()
                 .environment(appState)
                 .environment(coordinator)
+                // Apply the user's colour scheme preference at the window level.
+                // `nil` means "follow the system setting".
+                .preferredColorScheme(appState.colorSchemePreference.colorScheme)
         }
         .modelContainer(container)
     }
