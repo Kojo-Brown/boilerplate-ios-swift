@@ -28,7 +28,7 @@
 - [x] Face ID / Touch ID biometric auth wrapper
 
 ## Phase 5 — UI Components
-- [ ] Design system: `AppButton`, `AppTextField`, `LoadingView`
+- [x] Design system: `AppButton`, `AppTextField`, `LoadingView`
 - [ ] Dark/light mode via `@Environment(\.colorScheme)`
 - [ ] Adaptive layout with `GeometryReader` + size classes
 
