@@ -14,6 +14,21 @@ final class AppState {
     var isAuthenticated = false
     var currentUserEmail: String?
 
+    /// User's preferred colour scheme — persisted across launches.
+    var colorSchemePreference: AppColorScheme {
+        didSet {
+            UserDefaults.standard.set(
+                colorSchemePreference.rawValue,
+                forKey: AppColorScheme.defaultsKey
+            )
+        }
+    }
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: AppColorScheme.defaultsKey) ?? ""
+        colorSchemePreference = AppColorScheme(rawValue: saved) ?? .system
+    }
+
     func signOut() {
         isAuthenticated = false
         currentUserEmail = nil
