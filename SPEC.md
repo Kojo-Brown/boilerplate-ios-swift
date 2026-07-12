@@ -29,7 +29,7 @@
 
 ## Phase 5 — UI Components
 - [x] Design system: `AppButton`, `AppTextField`, `LoadingView`
-- [ ] Dark/light mode via `@Environment(\.colorScheme)`
+- [x] Dark/light mode via `@Environment(\.colorScheme)`
 - [ ] Adaptive layout with `GeometryReader` + size classes
 
 ## Phase 6 — Testing & DevOps
