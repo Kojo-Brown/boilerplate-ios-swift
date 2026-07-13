@@ -30,7 +30,7 @@
 ## Phase 5 — UI Components
 - [x] Design system: `AppButton`, `AppTextField`, `LoadingView`
 - [x] Dark/light mode via `@Environment(\.colorScheme)`
-- [ ] Adaptive layout with `GeometryReader` + size classes
+- [x] Adaptive layout with `GeometryReader` + size classes
 
 ## Phase 6 — Testing & DevOps
 - [ ] XCTest unit tests for ViewModels with `@MainActor`
