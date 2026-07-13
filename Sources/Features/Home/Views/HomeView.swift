@@ -3,9 +3,14 @@ import SwiftUI
 /// Home screen driven by `HomeViewModel` via the Observation framework.
 /// Navigation is handled by `AppCoordinator` — call `coordinator.push(_:)` to
 /// navigate rather than embedding `NavigationLink` directly in the view.
+///
+/// Layout adapts to the horizontal size class: compact (iPhone) renders a `List`
+/// while regular (iPad) switches to an `AdaptiveGrid` whose column count is
+/// determined by `GeometryReader` + size classes.
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         content
@@ -54,10 +59,14 @@ struct HomeView: View {
             errorView(message)
         } else if viewModel.filteredItems.isEmpty {
             emptyView
+        } else if horizontalSizeClass == .regular {
+            itemGrid
         } else {
             itemList
         }
     }
+
+    // MARK: - List layout (compact / iPhone)
 
     private var itemList: some View {
         List {
@@ -84,6 +93,34 @@ struct HomeView: View {
         .listStyle(.insetGrouped)
     }
 
+    // MARK: - Grid layout (regular / iPad)
+
+    /// Uses `AdaptiveContainer` (`GeometryReader` + size classes) to resolve
+    /// the optimal column count for the available canvas.
+    private var itemGrid: some View {
+        AdaptiveContainer { ctx in
+            let columns = Array(
+                repeating: GridItem(.flexible(), spacing: 16),
+                count: ctx.preferredColumnCount
+            )
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(viewModel.filteredItems) { item in
+                        Button {
+                            coordinator.push(.itemDetail(id: item.id, title: item.title))
+                        } label: {
+                            HomeItemCard(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    // MARK: - Error / empty states
+
     private func errorView(_ message: String) -> some View {
         ContentUnavailableView {
             Label("Something went wrong", systemImage: "exclamationmark.triangle")
@@ -101,6 +138,31 @@ struct HomeView: View {
             systemImage: "tray",
             description: Text("Pull to refresh or check back later.")
         )
+    }
+}
+
+// MARK: - Grid card
+
+/// Card-style item used in the iPad grid layout.
+private struct HomeItemCard: View {
+    let item: HomeItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(item.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            Text(item.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
     }
 }
 
