@@ -33,7 +33,7 @@
 - [x] Adaptive layout with `GeometryReader` + size classes
 
 ## Phase 6 — Testing & DevOps
-- [ ] XCTest unit tests for ViewModels with `@MainActor`
+- [x] XCTest unit tests for ViewModels with `@MainActor`
 - [ ] SwiftUI Preview tests with `PreviewProvider`
 - [ ] GitHub Actions: build + test on macOS runner
 - [ ] Fastlane setup for TestFlight deploy
