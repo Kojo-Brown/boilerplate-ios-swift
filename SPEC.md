@@ -35,5 +35,5 @@
 ## Phase 6 — Testing & DevOps
 - [x] XCTest unit tests for ViewModels with `@MainActor`
 - [x] SwiftUI Preview tests with `PreviewProvider`
-- [ ] GitHub Actions: build + test on macOS runner
+- [x] GitHub Actions: build + test on macOS runner
 - [ ] Fastlane setup for TestFlight deploy
