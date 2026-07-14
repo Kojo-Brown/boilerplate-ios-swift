@@ -1,0 +1,109 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: SwiftLint
+        run: |
+          if command -v swiftlint &>/dev/null && [ -f .swiftlint.yml ]; then
+            swiftlint lint --reporter github-actions-logging
+          else
+            echo "No .swiftlint.yml found or swiftlint unavailable — skipping."
+          fi
+
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-15
+
+    env:
+      SCHEME: boilerplate-ios-swift
+      DESTINATION: platform=iOS Simulator,name=iPhone 16,OS=18.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: Print tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Cache SPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve package dependencies
+        run: swift package resolve
+
+      - name: Build (iOS Simulator)
+        run: |
+          xcodebuild build \
+            -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            -quiet
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            -resultBundlePath TestResults.xcresult
+
+      - name: Export code coverage
+        if: success()
+        run: |
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json 2>/dev/null || true
+          if [ -f coverage.json ]; then
+            echo "=== Coverage Summary ==="
+            python3 -c "
+import json, sys
+with open('coverage.json') as f:
+    data = json.load(f)
+print(f\"Line coverage: {data.get('lineCoverage', 0) * 100:.1f}%\")
+" || true
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            TestResults.xcresult
+            coverage.json
+          retention-days: 14
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: success()
+        with:
+          files: coverage.json
+          fail_ci_if_error: false
+          flags: ios-unittests
