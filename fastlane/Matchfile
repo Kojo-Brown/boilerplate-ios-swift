@@ -1,0 +1,6 @@
+git_url(ENV["MATCH_GIT_URL"])
+storage_mode("git")
+type("appstore")
+app_identifier([ENV["APP_BUNDLE_ID"] || "com.example.boilerplate-ios-swift"])
+username(ENV["APPLE_ID"] || "your-apple-id@example.com")
+readonly(ENV["CI"] ? true : false)

@@ -1,0 +1,158 @@
+default_platform(:ios)
+
+SCHEME        = ENV["SCHEME"]         || "boilerplate-ios-swift"
+WORKSPACE     = ENV["WORKSPACE"]      || "boilerplate-ios-swift.xcworkspace"
+XCODEPROJ     = ENV["XCODEPROJ"]      || "boilerplate-ios-swift.xcodeproj"
+BUNDLE_ID     = ENV["APP_BUNDLE_ID"]  || "com.example.boilerplate-ios-swift"
+OUTPUT_DIR    = "build"
+
+platform :ios do
+  before_all do
+    # Ensure API key is available when running in CI
+    if ENV["ASC_API_KEY_ID"]
+      app_store_connect_api_key(
+        key_id:        ENV["ASC_API_KEY_ID"],
+        issuer_id:     ENV["ASC_API_KEY_ISSUER_ID"],
+        key_content:   ENV["ASC_API_KEY_CONTENT"],
+        in_house:      false
+      )
+    end
+  end
+
+  # ─── Test ──────────────────────────────────────────────────────────────────
+
+  desc "Run all unit and UI tests"
+  lane :test do
+    run_tests(
+      scheme:      SCHEME,
+      device:      "iPhone 16",
+      clean:       true,
+      code_coverage: true,
+      output_directory:   "test-output",
+      output_types:       "html,junit",
+      result_bundle:      true,
+      result_bundle_path: "TestResults.xcresult"
+    )
+  end
+
+  # ─── Code Signing ──────────────────────────────────────────────────────────
+
+  desc "Sync certificates and provisioning profiles via Match"
+  lane :sync_signing do |options|
+    match(
+      type:           options[:type] || "appstore",
+      readonly:       is_ci,
+      app_identifier: BUNDLE_ID
+    )
+  end
+
+  # ─── Beta (TestFlight) ─────────────────────────────────────────────────────
+
+  desc "Build and upload a new beta build to TestFlight"
+  lane :beta do |options|
+    ensure_git_status_clean unless options[:skip_clean_check]
+
+    increment_build_number(
+      build_number: latest_testflight_build_number + 1
+    )
+
+    sync_signing(type: "appstore")
+
+    build_app(
+      scheme:                 SCHEME,
+      output_directory:       OUTPUT_DIR,
+      output_name:            "#{SCHEME}.ipa",
+      export_method:          "app-store",
+      include_symbols:        true,
+      include_bitcode:        false,
+      clean:                  true,
+      export_options: {
+        provisioningProfiles: {
+          BUNDLE_ID => "match AppStore #{BUNDLE_ID}"
+        }
+      }
+    )
+
+    upload_to_testflight(
+      ipa:                    "#{OUTPUT_DIR}/#{SCHEME}.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog:              options[:changelog] || changelog_from_git_commits(
+        between:      ["HEAD~10", "HEAD"],
+        merge_commit_filtering: "exclude_merges"
+      )
+    )
+
+    clean_build_artifacts
+    slack_notify("Beta #{get_version_number}/#{get_build_number} uploaded to TestFlight") if ENV["SLACK_URL"]
+  end
+
+  # ─── Release (App Store) ───────────────────────────────────────────────────
+
+  desc "Build and submit a release to the App Store"
+  lane :release do |options|
+    ensure_git_status_clean unless options[:skip_clean_check]
+
+    bump_type = options[:bump] || "patch"
+    increment_version_number(bump_type: bump_type)
+    increment_build_number(build_number: 1)
+
+    sync_signing(type: "appstore")
+
+    build_app(
+      scheme:           SCHEME,
+      output_directory: OUTPUT_DIR,
+      output_name:      "#{SCHEME}.ipa",
+      export_method:    "app-store",
+      include_symbols:  true,
+      include_bitcode:  false,
+      clean:            true,
+      export_options: {
+        provisioningProfiles: {
+          BUNDLE_ID => "match AppStore #{BUNDLE_ID}"
+        }
+      }
+    )
+
+    upload_to_app_store(
+      ipa:                  "#{OUTPUT_DIR}/#{SCHEME}.ipa",
+      force:                true,
+      reject_if_possible:   true,
+      submit_for_review:    false,
+      automatic_release:    false,
+      skip_metadata:        false,
+      skip_screenshots:     true
+    )
+
+    version = get_version_number
+    tag     = "v#{version}"
+    add_git_tag(tag: tag)
+    push_git_tags(tag: tag)
+
+    clean_build_artifacts
+    slack_notify("v#{version} submitted to App Store for review") if ENV["SLACK_URL"]
+  end
+
+  # ─── Helpers ───────────────────────────────────────────────────────────────
+
+  private_lane :slack_notify do |message|
+    slack(
+      message:     message,
+      slack_url:   ENV["SLACK_URL"],
+      success:     true,
+      payload:     {
+        "Repo"   => ENV["GITHUB_REPOSITORY"] || SCHEME,
+        "Branch" => git_branch,
+        "Commit" => last_git_commit[:abbreviated_commit_hash]
+      }
+    )
+  end
+
+  after_all do |lane|
+    clean_build_artifacts
+  end
+
+  error do |lane, exception|
+    clean_build_artifacts
+    UI.error("Lane #{lane} failed: #{exception.message}")
+  end
+end

@@ -1,0 +1,4 @@
+app_identifier(ENV["APP_BUNDLE_ID"] || "com.example.boilerplate-ios-swift")
+apple_id(ENV["APPLE_ID"] || "your-apple-id@example.com")
+team_id(ENV["APPLE_TEAM_ID"] || "XXXXXXXXXX")
+itc_team_id(ENV["APP_STORE_CONNECT_TEAM_ID"] || "XXXXXXXXXX")
