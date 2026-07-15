@@ -1,0 +1,39 @@
+# Xcode
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SPM
+.build/
+.swiftpm/
+*.resolved
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+build/
+
+# Ruby / Bundler
+vendor/bundle/
+.bundle/
+Gemfile.lock
+
+# Certificates (never commit)
+*.p12
+*.cer
+*.mobileprovision
+
+# Misc
+.DS_Store
+*.log
+test-output/
+TestResults.xcresult

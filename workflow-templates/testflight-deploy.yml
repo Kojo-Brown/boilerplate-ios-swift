@@ -1,0 +1,106 @@
+name: TestFlight Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: "Release notes for TestFlight"
+        required: false
+        default: ""
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Cache SPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Run tests
+        run: bundle exec fastlane test
+        env:
+          SCHEME: ${{ vars.SCHEME || 'boilerplate-ios-swift' }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            test-output/
+            TestResults.xcresult
+          retention-days: 14
+
+  beta:
+    name: Build & Upload to TestFlight
+    needs: test
+    runs-on: macos-15
+    environment: testflight
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Cache SPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Set up git for Match
+        run: |
+          git config --global url."https://x-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Run Fastlane beta lane
+        run: bundle exec fastlane beta changelog:"${{ github.event.inputs.changelog }}"
+        env:
+          APP_BUNDLE_ID:           ${{ vars.APP_BUNDLE_ID }}
+          APPLE_ID:                ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:           ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
+          ASC_API_KEY_ID:          ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID:   ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+          ASC_API_KEY_CONTENT:     ${{ secrets.ASC_API_KEY_CONTENT }}
+          MATCH_GIT_URL:           ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD:          ${{ secrets.MATCH_PASSWORD }}
+          SLACK_URL:               ${{ secrets.SLACK_URL }}
+          SCHEME:                  ${{ vars.SCHEME || 'boilerplate-ios-swift' }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-${{ github.run_number }}
+          path: build/*.ipa
+          retention-days: 30

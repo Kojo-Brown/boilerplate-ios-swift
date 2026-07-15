@@ -36,4 +36,4 @@
 - [x] XCTest unit tests for ViewModels with `@MainActor`
 - [x] SwiftUI Preview tests with `PreviewProvider`
 - [x] GitHub Actions: build + test on macOS runner
-- [ ] Fastlane setup for TestFlight deploy
+- [x] Fastlane setup for TestFlight deploy
