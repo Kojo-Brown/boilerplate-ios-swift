@@ -13,7 +13,8 @@ DerivedData/
 # SPM
 .build/
 .swiftpm/
-*.resolved
+# Package.resolved is the dependency lockfile and is deliberately tracked — an
+# earlier `*.resolved` rule here is why the repo never had one.
 
 # Fastlane
 fastlane/report.xml

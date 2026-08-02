@@ -1,6 +1,6 @@
 import CoreMedia
 import Foundation
-import MLKitTextRecognitionV2
+import MLKitTextRecognition
 import MLKitVision
 import UIKit
 
@@ -27,7 +27,7 @@ protocol TextRecognizing: Sendable {
 
 // MARK: - Live implementation
 
-/// Wraps `MLKitTextRecognitionV2`'s callback API in async/await.
+/// Wraps `MLKitTextRecognition`'s callback API in async/await.
 ///
 /// `TextRecognizer` is thread-safe; one instance is created at init and reused.
 /// Block frames from the image are normalized to 0–1 before storage so the UI

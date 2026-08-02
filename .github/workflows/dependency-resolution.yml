@@ -1,0 +1,79 @@
+name: Dependency Resolution
+
+# Phase 0 gate: proves every Swift Package dependency declared in Package.swift
+# actually exists and resolves, and that Package.resolved in the repo is the
+# lockfile that resolution produces.
+#
+# This deliberately does not compile, lint, or test — those are separate Phase 0
+# items and land in ci.yml. Keeping them apart means a broken dependency graph
+# reports as a broken dependency graph rather than as a wall of compiler errors.
+#
+# It also deliberately does not cache the resolved artifacts. Caching them would
+# let the job pass against a warm cache while the upstream package or binary
+# artifact had gone missing, which is the exact failure this gate exists to catch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve every declared dependency
+    runs-on: macos-15
+    # Resolution pulls ML Kit's xcframework binary artifacts, which are large but
+    # finite. Anything near this ceiling means the job is wedged, and a wedged job
+    # should fail rather than hold a runner for the six-hour default.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # CLAUDE.md pins the project to Swift 6 / Xcode 16. Pick the newest Xcode 16
+      # on the image rather than a hardcoded point release, whose path changes as
+      # the runner image is updated.
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      - name: Print tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: swift package resolve
+
+      - name: Show the resolved graph
+        run: |
+          echo '=== Package.resolved ==='
+          cat Package.resolved
+          echo '=== show-dependencies ==='
+          swift package show-dependencies
+
+      # The lockfile is the artifact of this item: it records the exact version and
+      # revision each range resolved to. If resolution produces something other than
+      # what is committed, the committed file is stale and the build is not
+      # reproducible — so that is a failure, not a warning.
+      - name: Package.resolved must be committed and current
+        run: |
+          if [ -n "$(git status --porcelain -- Package.resolved)" ]; then
+            echo "::error::Package.resolved is missing or out of date. Commit the file printed in the previous step."
+            git status --porcelain -- Package.resolved
+            exit 1
+          fi
+          echo "Package.resolved matches the resolved graph."
