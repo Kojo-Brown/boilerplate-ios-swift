@@ -3,10 +3,45 @@
 > Spec-driven. Mark `[x]` only after pushing.
 
 ## Phase 0 — Green Baseline (blocks all feature work)
-- [ ] Confirm the Xcode project resolves all Swift Package dependencies at pinned versions
+- [x] Confirm the Xcode project resolves all Swift Package dependencies at pinned versions — the graph could never have resolved: `google-mlkit/ml-kit-ios` does not exist and neither product it was asked for is real (PR #19)
 - [ ] Get build, SwiftLint (strict), and the XCTest suite passing locally on a simulator
 - [ ] Promote `workflow-templates/ios-ci.yml` to `.github/workflows/` and confirm it runs green on a PR
 - [ ] Confirm the project builds under Swift 6 strict concurrency with no warnings
+
+Item 1 complete as of PR #19 (2026-08-02). `dependency-resolution.yml` resolves
+the full graph on a macOS runner — 9 pins, no version conflicts, every ML Kit
+xcframework downloaded and checksum-verified — and fails if `Package.resolved`
+drifts from what resolution produces. `Package.resolved` is committed for the
+first time.
+
+Three things had to be false at once for the old manifest to work. Google ships
+ML Kit for iOS through **CocoaPods only**, so `google-mlkit/ml-kit-ios` was never
+a repository at any version; `MLKitTextRecognitionV2` and `MLKitVision` are not
+products of any published ML Kit package; and `.gitignore` carried a `*.resolved`
+rule that ignored the lockfile. Text recognition now resolves through
+`d-date/google-mlkit-swiftpm`, pinned `exact: "9.0.0"` — a floating range on a
+binary mirror swaps the shipped framework with no source diff to review.
+`GoogleSignIn-iOS` resolved to 7.1.0, and the two competing `gtm-session-fetcher`
+requirements (GoogleSignIn's `~> 3.3` vs the mirror's `exact 3.5.0`) met at 3.5.0
+rather than deadlocking.
+
+**Every gate in CLAUDE.md is unrunnable in the scheduled agent's environment,
+and that is not a shortcut taken by choice.** It runs on Linux: `swift`,
+`xcodebuild` and `swiftlint` are all absent and Xcode cannot be installed there,
+so zero of the five gates can execute locally. CI is the source of truth for this
+repo, the same conclusion `boilerplate-android-kotlin` reached for its own item 1.
+Future runs should expect the same and read the PR checks, not a local run.
+
+Known gaps carried into item 2: nothing has been **compiled** — whether the
+package builds against `MLKitTextRecognition` is item 2's job, and the source
+still calls the V2 API through that module on the assumption it is the right one.
+There is no `.swiftlint.yml` or SwiftFormat config anywhere in the repo despite
+Phase 1 marking "SwiftLint + SwiftFormat config" done, so `swiftlint --strict`
+has nothing to run against. There is no `.xcodeproj` either — this is an SPM
+package, and CLAUDE.md's `-scheme App` does not match anything here. The ML Kit
+mirror is a single-maintainer republish of Google's binaries, not a Google
+artifact; a consumer who cannot accept that should move `TextRecognitionService`
+onto Apple's Vision framework, which this repo already uses for barcode scanning.
 
 ## Phase 1 — Foundation
 - [x] Swift 6 + Xcode 16 project targeting iOS 17+
