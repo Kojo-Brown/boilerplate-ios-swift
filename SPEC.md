@@ -6,7 +6,7 @@
 - [x] Confirm the Xcode project resolves all Swift Package dependencies at pinned versions — the graph could never have resolved: `google-mlkit/ml-kit-ios` does not exist and neither product it was asked for is real (PR #19)
 - [x] Get build, SwiftLint (strict), and the XCTest suite passing locally on a simulator — the package had never been compiled, linked or run; ML Kit could not link on any Apple silicon simulator so text recognition moved to Apple's Vision framework, and the test process was dying on an orphaned `ModelContext` (PR #21)
 - [x] Promote `workflow-templates/ios-ci.yml` to `.github/workflows/` and confirm it runs green on a PR — the template could never have run (invented scheme, hardcoded Xcode path, a simulator runtime that is gone, and a lint step that exited 0 when swiftlint was absent), so `gates.yml` was folded in under the template's name instead of being replaced by it; coverage is read for the first time at 44.29% overall / 26.07% for the library (PR #22)
-- [ ] Confirm the project builds under Swift 6 strict concurrency with no warnings
+- [x] Confirm the project builds under Swift 6 strict concurrency with no warnings — strict concurrency was already on and had been reporting five diagnostics into a build log nothing read; `xcodebuild` exits 0 with any number of warnings, so the claim had never been measured (PR #23)
 
 Item 1 complete as of PR #19 (2026-08-02). `dependency-resolution.yml` resolves
 the full graph on a macOS runner — 9 pins, no version conflicts, every ML Kit
@@ -103,6 +103,65 @@ executed, since the modern invocation worked. Coverage is reported, not gated.
 template. And CLAUDE.md's gate list still says `-scheme App`, which names nothing
 in this package — the workflow comments record it, but the file itself is
 uncorrected.
+
+**Phase 0 complete as of PR #23 (2026-08-03).** All four items closed.
+
+Item 4 was two claims, both unverified. Strict concurrency was genuinely on —
+`-swift-version 6` is on the `swiftc` invocation in the run — but it rested on
+one line of `Package.swift`, and nothing failed if that line were dropped,
+downgraded to `.v5`, or overridden by a `SWIFT_VERSION` build setting on the
+xcodebuild command line. Each target now carries a `#if !swift(>=6.0)` /
+`#error` guard, so the language mode is a compile-time fact in the target it
+protects. `#if swift(...)` tests the language mode; `#if compiler(...)` is the
+one that reports the toolchain, and is the wrong check here.
+
+"No warnings" had never been measured at all. `xcodebuild` exits 0 with any
+number of them, so five had been accumulating in a ~5,000-line log that nothing
+read. `.github/scripts/assert-no-warnings.py` now fails the job on any
+`path:line:col: warning:` attributed to `Sources/` or `Tests/`, collapsing the
+duplicates xcodebuild emits once per compilation unit, and runs between build
+and test — it is a property of a compile that has already happened, so there is
+nothing to gain by spending the simulator run first.
+
+Three of the five were concurrency diagnostics. `CameraService.makeFrameStream`
+had two `sessionQueue.async` bodies reading the enclosing `AsyncStream`
+closure's `[weak self]` binding instead of capturing their own — a weak capture
+is a mutable box, and two concurrently-executing closures were sharing one.
+`DesignSystemTests.defaultStyleIsPrimary` set a captured `var` from a
+`@Sendable` closure: `AppButton("Tap me") { ... }` resolves to the
+`asyncAction:` initialiser, whose closure is `@escaping @Sendable () async ->
+Void`. That flag was written and never read — the `_ = capturedAction // silence
+warning` beneath it said so — and is gone; no assertion was lost. The other two
+were an unused `withLock` result in `EventBus` and a `var` that is only read in
+`AdaptiveLayoutTests`.
+
+Scope of the gate, deliberately drawn: warnings from `GoogleSignIn-iOS` (checked
+out into DerivedData, outside the workspace) and warnings carrying no source
+location are printed, counted and grouped but do not fail the job. The first are
+not this package's to fix and would hand a dependency a veto over every build
+here; the second come from the build system rather than from compiling a source
+file. Both stay visible in the log. `-warnings-as-errors` on the xcodebuild
+command line was rejected because command-line build settings apply to every
+target including dependencies, and `.unsafeFlags` in `Package.swift` because it
+makes this package unusable as a dependency of any other.
+`SwiftSetting.treatAllWarnings(as:)` is the tool that would replace this script,
+and it needs swift-tools-version 6.2 — CI selects Xcode 16, which ships Swift
+6.1.
+
+Known gaps carried into Phase 1: the gate reads warnings only, so coverage is
+still reported rather than enforced. `AppButton`'s action is never invoked by
+any test — the `asyncAction:` initialiser wraps it in a detached `Task`, so
+asserting it fires needs a deterministic handle on that Task, which is Phase 1
+work rather than a warning fix. Everything item 3 recorded is still open: the
+`--legacy` `xccov` fallback has still never executed,
+`workflow-templates/testflight-deploy.yml` is still unpromoted, and CLAUDE.md's
+gate list still says `-scheme App`, which names nothing in this package.
+
+**Every gate in CLAUDE.md remains unrunnable in the scheduled agent's
+environment.** It runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do
+not exist and Xcode cannot be installed. What was verified locally for this item
+was the Python gate itself, against a synthetic xcodebuild log. The PR checks
+are the source of truth for this repo, as items 1 and 2 also concluded.
 
 ## Phase 1 — Foundation
 - [x] Swift 6 + Xcode 16 project targeting iOS 17+
