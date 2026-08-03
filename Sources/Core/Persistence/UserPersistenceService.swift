@@ -52,12 +52,7 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
     }
 
     func update(user: User) throws {
-        let id = user.id
-        var descriptor = FetchDescriptor<UserEntity>(
-            predicate: #Predicate { $0.id == id }
-        )
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else {
+        guard let entity = try entity(withID: user.id) else {
             throw PersistenceError.userNotFound
         }
         entity.name = user.name
@@ -67,16 +62,30 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
     }
 
     func delete(userId: UUID) throws {
-        let id = userId
-        var descriptor = FetchDescriptor<UserEntity>(
-            predicate: #Predicate { $0.id == id }
-        )
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else {
+        guard let entity = try entity(withID: userId) else {
             throw PersistenceError.userNotFound
         }
         context.delete(entity)
         try context.save()
+    }
+
+    /// Looks up one entity by identity.
+    ///
+    /// This reads as the job of `FetchDescriptor(predicate: #Predicate { $0.id == id })`,
+    /// and that is what it used to be. Executing that fetch traps inside SwiftData
+    /// (`EXC_BREAKPOINT`) on this model, in the same frame that a sort over an optional
+    /// key path does — see `fetchCurrentUser()`. `UserEntity.id` is a `UUID`, and
+    /// SwiftData does not reliably translate a `UUID` comparison in a `#Predicate` into
+    /// a store query. Since it traps rather than throwing, one call takes the whole
+    /// process with it.
+    ///
+    /// The same reasoning as `fetchCurrentUser()` applies: this store holds the
+    /// signed-in user, so "fetch all and match" is over a handful of rows. On a model
+    /// with real row counts this would be the wrong shape, and the fix would be to give
+    /// the entity a `String` identifier the predicate can compare.
+    private func entity(withID id: UUID) throws -> UserEntity? {
+        try context.fetch(FetchDescriptor<UserEntity>())
+            .first { $0.id == id }
     }
 
     func deleteAll() throws {
