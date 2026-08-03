@@ -1,0 +1,93 @@
+# SwiftLint configuration
+#
+# Phase 0 item 2 gate. CLAUDE.md runs `swiftlint --strict`, which promotes every
+# warning to an error, so nothing here may be aspirational: a rule is on only if
+# the tree is clean against it. Where the tree was not clean, the code was fixed
+# rather than the rule relaxed — see the PR for the list.
+#
+# This repo had no SwiftLint config at all before this file, despite Phase 1
+# marking "SwiftLint + SwiftFormat config" done, so `swiftlint --strict` had
+# nothing to run against and had never been run against these 87 files.
+
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - .swiftpm
+
+# --- Opt-in rules -----------------------------------------------------------
+# Chosen to enforce what CLAUDE.md's Conventions section already asks for, plus
+# the ordinary correctness rules. Analyzer rules (unused_import,
+# unused_declaration) are deliberately absent: they need `swiftlint analyze`
+# against a compiler log, which is a different invocation than `swiftlint lint`
+# and belongs with the build gate, not this one.
+opt_in_rules:
+  - array_init
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - discouraged_object_literal
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - explicit_init
+  - fallthrough
+  - first_where
+  - flatmap_over_map_reduce
+  - identical_operands
+  - joined_default_parameter
+  - last_where
+  - legacy_multiple
+  - literal_expression_end_indentation
+  - lower_acl_than_parent
+  - modifier_order
+  - operator_usage_whitespace
+  - overridden_super_call
+  - prefer_self_type_over_type_of_self
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - static_operator
+  - toggle_bool
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+  - untyped_error_in_catch
+  - vertical_parameter_alignment_on_call
+  - yoda_condition
+
+disabled_rules:
+  # A SwiftUI `body` is one deeply-nested expression by construction, and this
+  # rule counts a `.sheet { } content: { }` style modifier pair as a violation
+  # on code that reads exactly as Apple's own samples do.
+  - multiple_closures_with_trailing_closure
+
+# --- Rule configuration -----------------------------------------------------
+# Only three rules are tuned, and each is tuned *tighter* than its default.
+# Everything else runs at SwiftLint's defaults on purpose: a baseline gate that
+# starts by relaxing defaults is not a baseline.
+
+# Default is 120 warning / 200 error. The error ceiling comes down to 140 —
+# 200 is wide enough that nothing in this codebase could ever reach it.
+line_length:
+  warning: 120
+  error: 140
+  ignores_urls: true
+
+# Default is 400 warning / 1000 error. The largest file here is 298 lines.
+file_length:
+  warning: 400
+  error: 600
+
+# The codebase already writes every multiline collection literal with a trailing
+# comma — 14 of them, with no counter-examples — so requiring it matches the
+# house style instead of overturning it. The SwiftLint default is the opposite
+# (forbid), which would have meant deleting 14 commas to satisfy a preference
+# the authors clearly did not hold.
+trailing_comma:
+  mandatory_comma: true
+
+reporter: "xcode"

@@ -108,10 +108,10 @@ extension JSONDecoder {
     /// snake_case ↔ camelCase mapping. `.convertFromSnakeCase` acts as a
     /// fallback for any type that does not define its own `CodingKeys`.
     static let apiDecoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
-        return d
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }()
 }
 
@@ -121,9 +121,9 @@ extension JSONEncoder {
     /// All `Encodable` models define explicit `CodingKeys` enums. `.convertToSnakeCase`
     /// acts as a fallback for any type that does not define its own `CodingKeys`.
     static let apiEncoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        e.dateEncodingStrategy = .iso8601
-        return e
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }()
 }

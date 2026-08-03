@@ -1,0 +1,163 @@
+name: Gates
+
+# Phase 0 item 2: build, SwiftLint (strict), and the XCTest suite.
+#
+# CLAUDE.md asks for these to be run locally. They cannot be: the scheduled
+# agent runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do not exist
+# and Xcode cannot be installed. `download.swift.org` and Docker Hub's blob CDN
+# are both refused by the agent's egress policy (403 on CONNECT), so even a
+# Linux Swift toolchain — which still could not build for iOS — is out of reach.
+# This workflow is therefore the source of truth for these three gates, the same
+# conclusion item 1 reached for dependency resolution.
+#
+# Dependency resolution deliberately lives in its own workflow. Keeping it apart
+# means a broken dependency graph still reports as a broken dependency graph
+# rather than as a wall of compiler errors here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned rather than taken from the runner image, whose preinstalled SwiftLint
+  # moves without notice — a lint gate that changes rule set under you is not a
+  # gate. Bumping this is a deliberate commit, and the checksum has to move with it.
+  SWIFTLINT_VERSION: "0.59.1"
+  SWIFTLINT_SHA256: "58f9be8a4677900c945e2c618168223f4dd620a0cc65c9ccc5ea0f70433e89c1"
+
+jobs:
+  lint:
+    name: SwiftLint (strict)
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pinned SwiftLint
+        run: |
+          set -euo pipefail
+          curl -fsSL -o portable_swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          echo "${SWIFTLINT_SHA256}  portable_swiftlint.zip" | shasum -a 256 -c -
+          unzip -q portable_swiftlint.zip -d "$RUNNER_TEMP/swiftlint"
+          chmod +x "$RUNNER_TEMP/swiftlint/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+
+      - name: Print SwiftLint version
+        run: swiftlint version
+
+      # --strict promotes every warning to an error, which is what CLAUDE.md
+      # specifies. `lint` (not `analyze`) is correct here: the rule set in
+      # .swiftlint.yml deliberately contains no analyzer rules, so no compiler
+      # log is needed and lint can run without waiting on the build job.
+      - name: SwiftLint --strict
+        run: swiftlint lint --strict --no-cache --reporter github-actions-logging
+
+  build-and-test:
+    name: Build & Test (iOS Simulator)
+    runs-on: macos-15
+    # Resolution pulls ML Kit's xcframework binaries, which are large; a first
+    # cold build on top of that is slow but finite. Anything near this ceiling
+    # means the job is wedged, and a wedged job should fail rather than hold a
+    # runner for the six-hour default.
+    timeout-minutes: 60
+
+    env:
+      SCHEME: BoilerplateiOSSwift
+      SIMULATOR_NAME: iPhone 16
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # CLAUDE.md pins the project to Swift 6 / Xcode 16. Pick the newest Xcode 16
+      # on the image rather than a hardcoded point release, whose path changes as
+      # the runner image is updated.
+      - name: Select Xcode 16
+        run: |
+          set -euo pipefail
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      - name: Print tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # Diagnostic, not a gate. This is an SPM package with no .xcodeproj, so the
+      # schemes are the ones Xcode derives from Package.swift. Printing them makes
+      # a scheme-name mismatch legible instead of a bare "scheme not found".
+      - name: List schemes and destinations
+        run: xcodebuild -list
+
+      - name: Resolve Swift Package dependencies
+        run: swift package resolve
+
+      # Fail with the available device list rather than letting xcodebuild report
+      # a generic "Unable to find a destination" several minutes into a build.
+      - name: Locate the simulator
+        run: |
+          set -euo pipefail
+          udid=$(xcrun simctl list devices available --json \
+            | jq -r --arg name "$SIMULATOR_NAME" \
+              '[.devices | to_entries[] | select(.key | test("SimRuntime.iOS"))
+                | .value[] | select(.name == $name) | .udid] | first // empty')
+          if [ -z "$udid" ]; then
+            echo "::error::No available '$SIMULATOR_NAME' iOS simulator on this runner image."
+            exit 1
+          fi
+          echo "Using $SIMULATOR_NAME ($udid)"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: Show available simulators
+        if: failure()
+        run: xcrun simctl list devices available
+
+      - name: Build (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run the XCTest suite
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -derivedDataPath DerivedData \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test result summary
+        if: always()
+        run: |
+          if [ -d TestResults.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path TestResults.xcresult || true
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ github.run_number }}
+          path: TestResults.xcresult
+          retention-days: 14

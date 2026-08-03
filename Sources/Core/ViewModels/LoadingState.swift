@@ -13,12 +13,12 @@ enum LoadingState<Value> {
     }
 
     var value: Value? {
-        if case .success(let v) = self { return v }
+        if case .success(let value) = self { return value }
         return nil
     }
 
     var error: Error? {
-        if case .failure(let e) = self { return e }
+        if case .failure(let error) = self { return error }
         return nil
     }
 }

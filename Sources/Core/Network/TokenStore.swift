@@ -90,11 +90,11 @@ actor TokenStore {
             return try await existing.value
         }
 
-        guard let rt = refreshToken else { throw APIError.unauthorized }
+        guard let storedRefreshToken = refreshToken else { throw APIError.unauthorized }
 
         let task = Task { [weak self] () throws -> String in
             guard let self else { throw APIError.tokenRefreshFailed }
-            let pair = try await performer(rt)
+            let pair = try await performer(storedRefreshToken)
             try await self.setTokens(pair)
             return pair.accessToken
         }

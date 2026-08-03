@@ -84,10 +84,10 @@ final class GoogleSignInService: SocialAuthProvider {
     // MARK: - Helpers
 
     private func topViewController(from window: UIWindow) -> UIViewController? {
-        var vc: UIViewController? = window.rootViewController
-        while let presented = vc?.presentedViewController {
-            vc = presented
+        var controller: UIViewController? = window.rootViewController
+        while let presented = controller?.presentedViewController {
+            controller = presented
         }
-        return vc
+        return controller
     }
 }
