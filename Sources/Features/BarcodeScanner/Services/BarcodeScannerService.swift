@@ -108,7 +108,7 @@ struct MockBarcodeScannerService: BarcodeScanning {
             normalizedFrame: CGRect(x: 0.2, y: 0.25, width: 0.6, height: 0.5)
         ),
     ])
-    var stubbedError: Error?
+    var stubbedError: (any Error & Sendable)?
 
     func scan(sampleBuffer _: CMSampleBuffer) async throws -> ScanResult {
         try await Task.sleep(for: .milliseconds(50))

@@ -223,7 +223,7 @@ struct AdaptiveGridTests {
 
     @Test func bodyRendersWithCustomSpacing() {
         let items = [Item(id: 1, name: "Solo")]
-        let sut = AdaptiveGrid(items, spacing: 32, minColumnWidth: 120) { item in
+        let sut = AdaptiveGrid(items, spacing: 32, minColumnWidth: 120) { _ in
             RoundedRectangle(cornerRadius: 8).frame(height: 80)
         }
         _ = sut.body

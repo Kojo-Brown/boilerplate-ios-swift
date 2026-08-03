@@ -14,7 +14,7 @@ final class TextRecognitionViewModelXCTests: XCTestCase {
 
     private func makeViewModel(
         recognitionResult: RecognitionResult = RecognitionResult(fullText: "", blocks: []),
-        recognitionError: Error? = nil
+        recognitionError: (any Error & Sendable)? = nil
     ) -> TextRecognitionViewModel {
         var mock = MockTextRecognitionService()
         mock.stubbedResult = recognitionResult

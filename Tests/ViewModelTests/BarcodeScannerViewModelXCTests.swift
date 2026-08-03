@@ -15,7 +15,7 @@ final class BarcodeScannerViewModelXCTests: XCTestCase {
 
     private func makeViewModel(
         scannerResult: ScanResult = ScanResult(barcodes: []),
-        scannerError: Error? = nil
+        scannerError: (any Error & Sendable)? = nil
     ) -> BarcodeScannerViewModel {
         var mock = MockBarcodeScannerService()
         mock.stubbedResult = scannerResult
