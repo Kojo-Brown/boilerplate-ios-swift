@@ -92,7 +92,10 @@ struct TextRecognitionView: View {
 
     private func header(result: RecognitionResult) -> some View {
         HStack {
-            Label("\(result.blocks.count) block\(result.blocks.count == 1 ? "" : "s") detected", systemImage: "text.viewfinder")
+            Label(
+                "\(result.blocks.count) block\(result.blocks.count == 1 ? "" : "s") detected",
+                systemImage: "text.viewfinder"
+            )
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()

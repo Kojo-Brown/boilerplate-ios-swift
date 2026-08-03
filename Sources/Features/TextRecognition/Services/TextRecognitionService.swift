@@ -32,7 +32,16 @@ protocol TextRecognizing: Sendable {
 /// `TextRecognizer` is thread-safe; one instance is created at init and reused.
 /// Block frames from the image are normalized to 0–1 before storage so the UI
 /// can overlay them on any preview layer size without knowing the original resolution.
-final class LiveTextRecognitionService: TextRecognizing {
+///
+/// `@unchecked Sendable` is needed because `MLKTextRecognizer` is an Objective-C
+/// class that predates Swift concurrency and carries no `Sendable` annotation, so
+/// holding one in a `Sendable` type is an error. The narrow opt-out is deliberate:
+/// `@preconcurrency import MLKitTextRecognition` — which the compiler suggests —
+/// would downgrade *every* Sendable error from the whole ML Kit module to a
+/// warning, including ones worth hearing about. What is being asserted here is
+/// only that Google documents `MLKTextRecognizer` as safe to call from any
+/// thread, and that the single instance is immutable after `init`.
+final class LiveTextRecognitionService: TextRecognizing, @unchecked Sendable {
     private let recognizer: TextRecognizer
 
     init() {
@@ -41,7 +50,7 @@ final class LiveTextRecognitionService: TextRecognizing {
 
     func recognize(sampleBuffer: CMSampleBuffer) async throws -> RecognitionResult {
         let visionImage = VisionImage(buffer: sampleBuffer)
-        visionImage.orientation = imageOrientation(from: sampleBuffer)
+        visionImage.orientation = Self.imageOrientation(from: sampleBuffer)
 
         return try await withCheckedThrowingContinuation { continuation in
             recognizer.process(visionImage) { text, error in
@@ -88,7 +97,7 @@ final class LiveTextRecognitionService: TextRecognizing {
         )
     }
 
-    private func imageOrientation(from buffer: CMSampleBuffer) -> UIImage.Orientation {
+    private static func imageOrientation(from _: CMSampleBuffer) -> UIImage.Orientation {
         // Frames captured in portrait mode on back camera arrive rotated 90°.
         // MLKit expects the orientation hint so it can normalize bounding boxes.
         .right
@@ -108,7 +117,7 @@ struct MockTextRecognitionService: TextRecognizing {
             ),
         ]
     )
-    var stubbedError: Error?
+    var stubbedError: (any Error & Sendable)?
 
     func recognize(sampleBuffer _: CMSampleBuffer) async throws -> RecognitionResult {
         try await Task.sleep(for: .milliseconds(50))

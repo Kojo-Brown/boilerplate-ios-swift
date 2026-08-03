@@ -2,6 +2,7 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 import Observation
+import Security
 
 /// Manages state for Sign in with Apple and Google Sign-In flows.
 ///

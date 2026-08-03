@@ -70,16 +70,16 @@ struct BiometricAuthButton: View {
 #Preview("Face ID") {
     let mock = MockBiometricAuthService()
     mock.stubbedBiometricType = .faceID
-    let vm = BiometricAuthViewModel(service: mock)
-    return BiometricAuthButton(viewModel: vm)
+    let viewModel = BiometricAuthViewModel(service: mock)
+    return BiometricAuthButton(viewModel: viewModel)
         .padding()
 }
 
 #Preview("Touch ID") {
     let mock = MockBiometricAuthService()
     mock.stubbedBiometricType = .touchID
-    let vm = BiometricAuthViewModel(service: mock)
-    return BiometricAuthButton(viewModel: vm)
+    let viewModel = BiometricAuthViewModel(service: mock)
+    return BiometricAuthButton(viewModel: viewModel)
         .padding()
 }
 
@@ -87,7 +87,7 @@ struct BiometricAuthButton: View {
     let mock = MockBiometricAuthService()
     mock.stubbedIsAvailable = false
     mock.stubbedBiometricType = .none
-    let vm = BiometricAuthViewModel(service: mock)
-    return BiometricAuthButton(viewModel: vm)
+    let viewModel = BiometricAuthViewModel(service: mock)
+    return BiometricAuthButton(viewModel: viewModel)
         .padding()
 }

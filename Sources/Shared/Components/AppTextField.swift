@@ -18,14 +18,37 @@ import SwiftUI
 struct AppTextField: View {
     let label: String
     @Binding var text: String
-    var isSecure: Bool = false
-    var keyboardType: UIKeyboardType = .default
-    var textContentType: UITextContentType? = nil
-    var autocapitalization: TextInputAutocapitalization = .sentences
-    var autocorrectionDisabled: Bool = false
-    var errorMessage: String? = nil
+    let isSecure: Bool
+    let keyboardType: UIKeyboardType
+    let textContentType: UITextContentType?
+    let autocapitalization: TextInputAutocapitalization
+    let autocorrectionDisabled: Bool
+    let errorMessage: String?
 
     @FocusState private var isFocused: Bool
+
+    /// The label is unlabelled at the call site — `AppTextField("Email", text: $email)` —
+    /// which the synthesised memberwise initialiser cannot express, so it is spelled out
+    /// here. Every call site and the usage docs above already assumed this shape.
+    init(
+        _ label: String,
+        text: Binding<String>,
+        isSecure: Bool = false,
+        keyboardType: UIKeyboardType = .default,
+        textContentType: UITextContentType? = nil,
+        autocapitalization: TextInputAutocapitalization = .sentences,
+        autocorrectionDisabled: Bool = false,
+        errorMessage: String? = nil
+    ) {
+        self.label = label
+        _text = text
+        self.isSecure = isSecure
+        self.keyboardType = keyboardType
+        self.textContentType = textContentType
+        self.autocapitalization = autocapitalization
+        self.autocorrectionDisabled = autocorrectionDisabled
+        self.errorMessage = errorMessage
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

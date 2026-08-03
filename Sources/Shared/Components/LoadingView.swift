@@ -16,7 +16,7 @@ import SwiftUI
 /// The overlay dims the background, shows a spinner and an optional message,
 /// and blocks user interaction while visible.
 struct LoadingView: View {
-    var message: String? = nil
+    var message: String?
 
     var body: some View {
         ZStack {
@@ -48,7 +48,7 @@ struct LoadingView: View {
 /// Lightweight inline loading indicator for embedding inside list rows or
 /// partial-content areas, without a full-screen overlay.
 struct InlineLoadingView: View {
-    var message: String? = nil
+    var message: String?
 
     var body: some View {
         HStack(spacing: 12) {

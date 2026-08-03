@@ -78,14 +78,31 @@ struct LiveAuthService: AuthServiceProtocol {
 
 // MARK: - Mock for previews & tests
 
+/// `AuthServiceProtocol` is `Sendable`, so this double cannot hold bare mutable
+/// state. The knobs live behind a lock rather than under `@unchecked Sendable`,
+/// so a test that configures the mock from one task and exercises it from
+/// another is actually safe instead of only asserted to be.
 final class MockAuthService: AuthServiceProtocol {
-    var shouldSucceed = true
-    var delay: Duration = .milliseconds(100)
+    // `NSLock` rather than `Mutex`: the package deployment target is iOS 17 and
+    // `Synchronization.Mutex` needs iOS 18. `EventBus` guards its state the same way.
+    private let lock = NSLock()
+    private var _shouldSucceed = true
+    private var _delay: Duration = .milliseconds(100)
 
-    func login(email: String, password: String) async throws -> Bool {
+    var shouldSucceed: Bool {
+        get { lock.withLock { _shouldSucceed } }
+        set { lock.withLock { _shouldSucceed = newValue } }
+    }
+
+    var delay: Duration {
+        get { lock.withLock { _delay } }
+        set { lock.withLock { _delay = newValue } }
+    }
+
+    func login(email _: String, password _: String) async throws -> Bool {
         try await Task.sleep(for: delay)
-        if shouldSucceed { return true }
-        throw AuthError.invalidCredentials
+        guard shouldSucceed else { throw AuthError.invalidCredentials }
+        return true
     }
 }
 

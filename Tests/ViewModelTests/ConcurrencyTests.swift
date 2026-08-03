@@ -74,66 +74,66 @@ struct PollingStreamTests {
 struct HomeViewModelConcurrencyTests {
     @Test("startLiveUpdates appends items over time")
     func startLiveUpdatesAppendsItems() async throws {
-        let vm = HomeViewModel()
-        await vm.onAppear()
-        let baseline = vm.items.count
+        let viewModel = HomeViewModel()
+        await viewModel.onAppear()
+        let baseline = viewModel.items.count
 
-        vm.startLiveUpdates(interval: .milliseconds(20))
+        viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(120))
 
-        #expect(vm.items.count > baseline)
+        #expect(viewModel.items.count > baseline)
     }
 
     @Test("stopLiveUpdates halts item growth")
     func stopLiveUpdatesHaltsGrowth() async throws {
-        let vm = HomeViewModel()
-        await vm.onAppear()
+        let viewModel = HomeViewModel()
+        await viewModel.onAppear()
 
-        vm.startLiveUpdates(interval: .milliseconds(20))
+        viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(100))
 
-        vm.stopLiveUpdates()
+        viewModel.stopLiveUpdates()
 
         // Allow any in-flight yield to settle
         try await Task.sleep(for: .milliseconds(30))
-        let countAfterStop = vm.items.count
+        let countAfterStop = viewModel.items.count
 
         // Wait again — count must not grow further
         try await Task.sleep(for: .milliseconds(100))
-        #expect(vm.items.count == countAfterStop)
+        #expect(viewModel.items.count == countAfterStop)
     }
 
     @Test("onDisappear cancels live updates")
     func onDisappearCancelsLiveUpdates() async throws {
-        let vm = HomeViewModel()
-        await vm.onAppear()
+        let viewModel = HomeViewModel()
+        await viewModel.onAppear()
 
-        vm.startLiveUpdates(interval: .milliseconds(20))
+        viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(60))
-        vm.onDisappear()
+        viewModel.onDisappear()
 
         try await Task.sleep(for: .milliseconds(30))
-        let countAfterDisappear = vm.items.count
+        let countAfterDisappear = viewModel.items.count
         try await Task.sleep(for: .milliseconds(100))
 
-        #expect(vm.items.count == countAfterDisappear)
+        #expect(viewModel.items.count == countAfterDisappear)
     }
 
     @Test("startLiveUpdates cancels previous task before starting new one")
     func startLiveUpdatesCancelsPreviousTask() async throws {
-        let vm = HomeViewModel()
-        await vm.onAppear()
+        let viewModel = HomeViewModel()
+        await viewModel.onAppear()
 
-        vm.startLiveUpdates(interval: .milliseconds(20))
+        viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(50))
-        let countMidway = vm.items.count
+        let countMidway = viewModel.items.count
 
         // Re-calling startLiveUpdates should cancel the old task and start fresh
-        vm.startLiveUpdates(interval: .milliseconds(20))
+        viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(50))
 
-        #expect(vm.items.count > countMidway)
+        #expect(viewModel.items.count > countMidway)
 
-        vm.stopLiveUpdates()
+        viewModel.stopLiveUpdates()
     }
 }

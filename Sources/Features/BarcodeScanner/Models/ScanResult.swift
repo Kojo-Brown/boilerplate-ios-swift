@@ -3,7 +3,7 @@ import Foundation
 
 /// The symbology (encoding format) of a detected barcode.
 enum BarcodeSymbology: String, Sendable {
-    case qr = "QR Code"
+    case qrCode = "QR Code"
     case aztec = "Aztec"
     case code128 = "Code 128"
     case code39 = "Code 39"

@@ -47,8 +47,19 @@ jobs:
           fi
           swiftlint version
 
+      # `github-actions-logging` renders inline annotations on the PR diff, but it
+      # writes only the message to the raw log — the file and line survive as
+      # annotation metadata, which is unreadable to anything reading the log. So on
+      # failure the violations are printed again through the `xcode` reporter,
+      # which is `path:line:col: error: message (rule_id)`. Costs a second, and
+      # only when the job is already red.
       - name: swiftlint --strict
-        run: swiftlint lint --strict --reporter github-actions-logging
+        run: |
+          if ! swiftlint lint --strict --reporter github-actions-logging; then
+            echo '=== full violation list (path:line:col) ==='
+            swiftlint lint --strict --reporter xcode || true
+            exit 1
+          fi
 
   build-and-test:
     name: Build and test on the iOS Simulator
@@ -104,10 +115,19 @@ jobs:
       # Pin to a concrete simulator UDID. A `name=iPhone 16` destination silently
       # resolves to whatever the image happens to ship, and fails opaquely when
       # that model is dropped from a runner image.
+      #
+      # The runner also carries simulator runtimes newer than the selected Xcode
+      # can drive — it has iOS 26.x while Xcode 16.4 builds against the iOS 18.5
+      # SDK. Taking the newest runtime unconditionally pairs an 18.5 SDK with a
+      # 26.2 device, which xcodebuild accepts for building and then fails on when
+      # it tries to run the tests. So candidates are capped at the SDK's major
+      # version, and the newest runtime at or below it wins.
       - name: Choose an iOS Simulator
         run: |
           xcrun simctl list devices available
-          udid=$(xcrun simctl list devices available --json | jq -r '
+          sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
+          echo "iphonesimulator SDK major version: $sdk_major"
+          udid=$(xcrun simctl list devices available --json | jq -r --argjson sdk "$sdk_major" '
             [ .devices
               | to_entries[]
               | select(.key | test("SimRuntime\\.iOS-"))
@@ -117,7 +137,8 @@ jobs:
               | { version: [($v.major | tonumber), ($v.minor | tonumber)],
                   name: .name,
                   udid: .udid }
-            ] as $all
+            ]
+            | map(select(.version[0] <= $sdk)) as $all
             | if ($all | length) == 0 then empty else
                 ($all | map(.version) | max) as $newest
                 | ($all | map(select(.version == $newest))) as $latest

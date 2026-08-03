@@ -1,6 +1,7 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import Security
 
 /// Bridges `ASAuthorizationController`'s callback-based API into async/await.
 ///
