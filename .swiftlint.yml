@@ -1,0 +1,140 @@
+# SwiftLint configuration for boilerplate-ios-swift.
+#
+# Phase 1 marked "SwiftLint + SwiftFormat config" done, but no config file had
+# ever been committed, so `swiftlint --strict` had nothing to run against. This
+# is that file.
+#
+# `--strict` promotes every warning to an error, so anything left enabled here
+# has to be genuinely clean in the tree. The rule set is SwiftLint's defaults
+# plus the opt-in rules that encode the conventions in CLAUDE.md; every
+# deviation below is a deliberate configuration choice with a reason, not a rule
+# switched off to make the gate pass.
+
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - .swiftpm
+  - fastlane
+
+# MARK: - Opt-in rules
+#
+# These are off by default in SwiftLint. Each one here maps to a convention
+# CLAUDE.md already states, so the linter enforces what the docs promise.
+
+opt_in_rules:
+  # "Value types by default" / general hygiene
+  - empty_count
+  - empty_string
+  - explicit_init
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - contains_over_first_not_nil
+  - flatmap_over_map_reduce
+  - redundant_nil_coalescing
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  # Correctness
+  - overridden_super_call
+  - prohibited_super_call
+  - unavailable_function
+  - array_init
+  - discouraged_optional_boolean
+  # Readability
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - fatal_error_message
+  - joined_default_parameter
+  - literal_expression_end_indentation
+  - multiline_parameters
+  - operator_usage_whitespace
+  - sorted_first_last
+  - vertical_parameter_alignment_on_call
+  - yoda_condition
+  # Documentation on the public-facing surface
+  - orphaned_doc_comment
+
+# MARK: - Disabled default rules
+
+disabled_rules:
+  # SwiftUI view bodies are one expression per subview and read top-to-bottom;
+  # `.sheet {} .alert {}` and `Button(action:) {}` chains are the idiomatic form
+  # Apple's own samples use. Rewriting them into named closures to satisfy this
+  # rule makes the view hierarchy harder to follow, not easier.
+  - multiple_closures_with_trailing_closure
+
+# MARK: - Rule configuration
+
+line_length:
+  warning: 120
+  error: 160
+  ignores_urls: true
+  ignores_comments: false
+  ignores_function_declarations: false
+
+# SwiftUI `body` properties and `#Preview` blocks are declarative trees, not
+# procedural logic: length there is a description of the UI, not complexity to
+# be refactored away. The ceiling is raised rather than removed so a genuinely
+# runaway function still trips.
+function_body_length:
+  warning: 80
+  error: 120
+
+type_body_length:
+  warning: 300
+  error: 400
+
+file_length:
+  warning: 500
+  error: 700
+  ignore_comment_only_lines: true
+
+# Swift Testing suites and XCTest cases nest a type per scenario, which is the
+# documented way to group them; three levels is `Suite > Suite > test`.
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 3
+
+identifier_name:
+  min_length:
+    warning: 3
+    error: 2
+  excluded:
+    # Conventional short names that are clearer than any expansion.
+    - id
+    - to
+    - up
+    - x
+    - y
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 50
+    error: 60
+
+cyclomatic_complexity:
+  warning: 12
+  error: 20
+
+large_tuple:
+  warning: 2
+  error: 3
+
+# `Task { ... }` and `AsyncStream { ... }` bodies carry the concurrency logic
+# this repo exists to demonstrate; the default 20-line ceiling would force it
+# into helpers that only exist to satisfy the linter.
+closure_body_length:
+  warning: 40
+  error: 60
+
+trailing_comma:
+  mandatory_comma: true
+
+reporter: "xcode"
