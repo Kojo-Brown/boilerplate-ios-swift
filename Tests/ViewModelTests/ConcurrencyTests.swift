@@ -51,11 +51,11 @@ struct PollingStreamTests {
 
     @Test("transient fetch errors keep stream alive")
     func transientErrorsKeepStreamAlive() async throws {
-        var callCount = 0
+        let callCount = CallCounter()
         let stream = PollingStream.make(interval: .milliseconds(10)) { () async throws -> Int in
-            callCount += 1
-            if callCount == 1 { throw URLError(.notConnectedToInternet) }
-            return callCount
+            let call = callCount.next()
+            if call == 1 { throw URLError(.notConnectedToInternet) }
+            return call
         }
 
         // Second call should succeed after the error on call 1
@@ -136,5 +136,26 @@ struct HomeViewModelConcurrencyTests {
         #expect(viewModel.items.count > countMidway)
 
         viewModel.stopLiveUpdates()
+    }
+}
+
+// MARK: - Test helper
+
+/// Lock-protected call counter.
+///
+/// `PollingStream.make` takes a `@Sendable` closure that runs on the cooperative
+/// pool, so a captured `var` cannot be mutated from inside it — that is what
+/// "mutation of captured var 'callCount' in concurrently-executing code" was
+/// reporting. `next()` increments and returns in one locked step so a caller can
+/// never read a count another call has already moved past.
+private final class CallCounter: @unchecked Sendable {
+    private var count = 0
+    private let lock = NSLock()
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
     }
 }
