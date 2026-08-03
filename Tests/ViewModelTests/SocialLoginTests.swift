@@ -1,3 +1,4 @@
+import Foundation
 import AuthenticationServices
 import Testing
 @testable import BoilerplateiOSSwift

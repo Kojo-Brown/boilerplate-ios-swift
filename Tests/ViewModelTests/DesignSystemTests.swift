@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import Testing
 @testable import BoilerplateiOSSwift
@@ -171,7 +172,7 @@ struct LoadingViewTests {
 
     @Test func emptyStringMessageIsPreserved() {
         let sut = LoadingView(message: "")
-        #expect(sut.message.isEmpty)
+        #expect(sut.message?.isEmpty == true)
     }
 
     // MARK: - Inline variant
