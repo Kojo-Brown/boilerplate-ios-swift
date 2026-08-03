@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Full-screen camera view with live MLKit text recognition overlay.
+/// Full-screen camera view with live Vision text recognition overlay.
 ///
 /// Shows the camera feed, draws bounding boxes over each recognized text block,
 /// and displays the full recognized string in a scrollable panel at the bottom.
@@ -92,7 +92,10 @@ struct TextRecognitionView: View {
 
     private func header(result: RecognitionResult) -> some View {
         HStack {
-            Label("\(result.blocks.count) block\(result.blocks.count == 1 ? "" : "s") detected", systemImage: "text.viewfinder")
+            Label(
+                "\(result.blocks.count) block\(result.blocks.count == 1 ? "" : "s") detected",
+                systemImage: "text.viewfinder"
+            )
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()

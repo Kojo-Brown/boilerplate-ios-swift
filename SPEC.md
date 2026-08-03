@@ -64,7 +64,9 @@ onto Apple's Vision framework, which this repo already uses for barcode scanning
 
 ## Phase 4 — Auth & ML
 - [x] Sign in with Apple + Google Sign-In
-- [x] MLKit text recognition with camera integration
+- [x] Text recognition with camera integration — implemented on ML Kit, then moved to
+  Apple's Vision framework in PR #21: ML Kit ships no arm64 simulator slice, so it could
+  not link on any Apple Silicon Mac or CI runner
 - [x] Vision framework: barcode + QR scanning overlay
 - [x] Face ID / Touch ID biometric auth wrapper
 

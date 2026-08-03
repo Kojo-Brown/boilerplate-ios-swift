@@ -104,26 +104,29 @@ struct EmptyResponse: Decodable, Sendable {}
 extension JSONDecoder {
     /// Standard decoder used by all API responses.
     ///
-    /// All `Codable` models define explicit `CodingKeys` enums for precise
-    /// snake_case ↔ camelCase mapping. `.convertFromSnakeCase` acts as a
-    /// fallback for any type that does not define its own `CodingKeys`.
+    /// Deliberately does **not** set `keyDecodingStrategy`. Every `Codable` model in
+    /// this package declares an explicit `CodingKeys` enum, and a key strategy is not
+    /// the fallback it looks like: `.convertFromSnakeCase` rewrites the *incoming JSON
+    /// key* before it is matched against `CodingKeys`, so `"avatar_url"` arrived as
+    /// `avatarUrl` and matched no key at all. Optional properties then decoded as nil
+    /// (`User.avatarURL`, `ResponseMeta.requestID`) and non-optional ones threw
+    /// `keyNotFound` (`TokenPair.accessToken`) — the two combined cancel out.
     static let apiDecoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
-        return d
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }()
 }
 
 extension JSONEncoder {
     /// Standard encoder used for all API request bodies.
     ///
-    /// All `Encodable` models define explicit `CodingKeys` enums. `.convertToSnakeCase`
-    /// acts as a fallback for any type that does not define its own `CodingKeys`.
+    /// Symmetrically to `apiDecoder`, no `keyEncodingStrategy`: the explicit
+    /// `CodingKeys` already emit snake_case, and layering a strategy on top would
+    /// re-transform keys that are already in their wire form.
     static let apiEncoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        e.dateEncodingStrategy = .iso8601
-        return e
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }()
 }

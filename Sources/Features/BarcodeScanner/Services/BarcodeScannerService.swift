@@ -18,7 +18,7 @@ enum BarcodeScanError: Error, LocalizedError {
 
 /// Abstracts the barcode recognizer so tests can inject a predictable mock.
 protocol BarcodeScanning: Sendable {
-    func scan(sampleBuffer: CMSampleBuffer) async throws -> ScanResult
+    func scan(frame: CapturedFrame) async throws -> ScanResult
 }
 
 // MARK: - Live implementation
@@ -35,8 +35,8 @@ final class LiveBarcodeScannerService: BarcodeScanning {
         .i2of5, .itf14, .microQR, .pdf417, .upce,
     ]
 
-    func scan(sampleBuffer: CMSampleBuffer) async throws -> ScanResult {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+    func scan(frame: CapturedFrame) async throws -> ScanResult {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
             return ScanResult(barcodes: [])
         }
 
@@ -82,7 +82,7 @@ final class LiveBarcodeScannerService: BarcodeScanning {
 
     private static func mapSymbology(_ symbology: VNBarcodeSymbology) -> BarcodeSymbology {
         switch symbology {
-        case .qr: return .qr
+        case .qr: return .qrCode
         case .aztec: return .aztec
         case .code128: return .code128
         case .code39, .code39Checksum, .code39FullASCII: return .code39
@@ -104,13 +104,13 @@ struct MockBarcodeScannerService: BarcodeScanning {
     var stubbedResult: ScanResult = ScanResult(barcodes: [
         DetectedBarcode(
             payload: "https://example.com",
-            symbology: .qr,
+            symbology: .qrCode,
             normalizedFrame: CGRect(x: 0.2, y: 0.25, width: 0.6, height: 0.5)
         ),
     ])
-    var stubbedError: Error?
+    var stubbedError: (any Error & Sendable)?
 
-    func scan(sampleBuffer _: CMSampleBuffer) async throws -> ScanResult {
+    func scan(frame _: CapturedFrame) async throws -> ScanResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult

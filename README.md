@@ -1,6 +1,6 @@
 # boilerplate-ios-swift
 
-> Swift 6 · SwiftUI · SwiftData · MLKit · Observation · Async/Await
+> Swift 6 · SwiftUI · SwiftData · Vision · Observation · Async/Await
 
 Modern iOS app starter with clean architecture and ML features.
 
@@ -14,7 +14,7 @@ Modern iOS app starter with clean architecture and ML features.
 | Persistence | SwiftData |
 | Network | URLSession (async/await) |
 | Auth | Sign in with Apple + Google |
-| ML | MLKit text recognition + Vision |
+| ML | Vision (text recognition + barcode scanning) |
 | Testing | XCTest + Swift Testing |
 
 ## Quick Start
@@ -30,10 +30,16 @@ Modern iOS app starter with clean architecture and ML features.
 
 `Package.resolved` is tracked; resolve from it rather than re-resolving ranges.
 
-ML Kit has no first-party Swift Package — Google publishes it for CocoaPods
-only. Text recognition therefore resolves through
-[`d-date/google-mlkit-swiftpm`](https://github.com/d-date/google-mlkit-swiftpm),
-a community mirror of Google's xcframeworks, pinned to an exact version.
+The only third-party dependency is `GoogleSignIn-iOS`. On-device ML uses
+Apple's Vision framework, which ships with the SDK.
+
+Text recognition used to run on Google's ML Kit, reached through a community
+mirror of Google's xcframeworks. That is no longer viable: ML Kit for iOS ships
+no `arm64` slice for the simulator, so the package could not link on an Apple
+Silicon Mac — which is every current Mac and every current CI runner. Building
+the package `x86_64` under Rosetta links and then aborts at launch. Vision does
+the same job with no dependency, and additionally reports a per-observation
+confidence that ML Kit's iOS API does not expose.
 
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

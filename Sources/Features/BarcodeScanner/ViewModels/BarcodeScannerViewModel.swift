@@ -107,7 +107,7 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
         frameTask = Task { [weak self] in
             var lastScannedAt: ContinuousClock.Instant?
 
-            for await buffer in stream {
+            for await frame in stream {
                 guard !Task.isCancelled else { break }
 
                 let now = ContinuousClock.now
@@ -115,7 +115,7 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
                 lastScannedAt = now
 
                 do {
-                    let result = try await service.scan(sampleBuffer: buffer)
+                    let result = try await service.scan(frame: frame)
                     guard !Task.isCancelled else { break }
                     if !result.isEmpty {
                         self?.scanResult = result

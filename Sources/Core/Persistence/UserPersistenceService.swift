@@ -31,20 +31,28 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
         try context.save()
     }
 
+    /// Returns the most recently created stored user, or `nil` when the store is empty.
+    ///
+    /// The sort is done in memory rather than by the store. `FetchDescriptor(sortBy:)`
+    /// with a `SortDescriptor` over an **optional** key path — `createdAt` is `Date?` —
+    /// traps inside SwiftData while executing the fetch (`EXC_BREAKPOINT`, taking the
+    /// whole test process with it, not just the failing test). Making `createdAt`
+    /// non-optional would fix the sort by breaking the model: the API genuinely may
+    /// omit the field.
+    ///
+    /// Sorting here is not the compromise it looks like. This store holds the signed-in
+    /// user, so the fetch is over a handful of rows at most, and `nil` has to be ordered
+    /// explicitly anyway — treating it as oldest, which the database sort could not
+    /// express. `MockUserPersistenceService` already ordered it exactly this way; the
+    /// two implementations now agree, where before only the mock was reachable.
     func fetchCurrentUser() throws -> User? {
-        let descriptor = FetchDescriptor<UserEntity>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor).first?.toDomainUser()
+        try context.fetch(FetchDescriptor<UserEntity>())
+            .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }?
+            .toDomainUser()
     }
 
     func update(user: User) throws {
-        let id = user.id
-        var descriptor = FetchDescriptor<UserEntity>(
-            predicate: #Predicate { $0.id == id }
-        )
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else {
+        guard let entity = try entity(withID: user.id) else {
             throw PersistenceError.userNotFound
         }
         entity.name = user.name
@@ -54,16 +62,30 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
     }
 
     func delete(userId: UUID) throws {
-        let id = userId
-        var descriptor = FetchDescriptor<UserEntity>(
-            predicate: #Predicate { $0.id == id }
-        )
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else {
+        guard let entity = try entity(withID: userId) else {
             throw PersistenceError.userNotFound
         }
         context.delete(entity)
         try context.save()
+    }
+
+    /// Looks up one entity by identity.
+    ///
+    /// This reads as the job of `FetchDescriptor(predicate: #Predicate { $0.id == id })`,
+    /// and that is what it used to be. Executing that fetch traps inside SwiftData
+    /// (`EXC_BREAKPOINT`) on this model, in the same frame that a sort over an optional
+    /// key path does — see `fetchCurrentUser()`. `UserEntity.id` is a `UUID`, and
+    /// SwiftData does not reliably translate a `UUID` comparison in a `#Predicate` into
+    /// a store query. Since it traps rather than throwing, one call takes the whole
+    /// process with it.
+    ///
+    /// The same reasoning as `fetchCurrentUser()` applies: this store holds the
+    /// signed-in user, so "fetch all and match" is over a handful of rows. On a model
+    /// with real row counts this would be the wrong shape, and the fix would be to give
+    /// the entity a `String` identifier the predicate can compare.
+    private func entity(withID id: UUID) throws -> UserEntity? {
+        try context.fetch(FetchDescriptor<UserEntity>())
+            .first { $0.id == id }
     }
 
     func deleteAll() throws {
@@ -97,8 +119,7 @@ final class MockUserPersistenceService: UserPersistenceService {
         fetchCallCount += 1
         if shouldThrow { throw stubbedError }
         return storage.values
-            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
-            .first
+            .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
     func update(user: User) throws {

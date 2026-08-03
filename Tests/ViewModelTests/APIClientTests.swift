@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import BoilerplateiOSSwift
 
@@ -126,18 +127,18 @@ struct APIClientTests {
         let callCount = AtomicCounter()
 
         // Start two concurrent refresh calls; only one performer should fire.
-        async let r1 = store.refreshIfNeeded { _ in
+        async let firstRefresh = store.refreshIfNeeded { _ in
             callCount.increment()
             try await Task.sleep(for: .milliseconds(50))
             return TokenPair(accessToken: "new", refreshToken: "rt2")
         }
-        async let r2 = store.refreshIfNeeded { _ in
+        async let secondRefresh = store.refreshIfNeeded { _ in
             callCount.increment()
             return TokenPair(accessToken: "new2", refreshToken: "rt3")
         }
 
-        let token1 = try await r1
-        let token2 = try await r2
+        let token1 = try await firstRefresh
+        let token2 = try await secondRefresh
 
         #expect(!token1.isEmpty)
         #expect(!token2.isEmpty)

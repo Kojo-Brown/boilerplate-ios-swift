@@ -1,8 +1,6 @@
 import CoreMedia
 import Foundation
-import MLKitTextRecognition
-import MLKitVision
-import UIKit
+import Vision
 
 // MARK: - Errors
 
@@ -22,82 +20,103 @@ enum TextRecognitionError: Error, LocalizedError {
 
 /// Abstracts the text recognizer so tests can inject a predictable mock.
 protocol TextRecognizing: Sendable {
-    func recognize(sampleBuffer: CMSampleBuffer) async throws -> RecognitionResult
+    func recognize(frame: CapturedFrame) async throws -> RecognitionResult
 }
 
 // MARK: - Live implementation
 
-/// Wraps `MLKitTextRecognition`'s callback API in async/await.
+/// Wraps `VNRecognizeTextRequest` in async/await.
 ///
-/// `TextRecognizer` is thread-safe; one instance is created at init and reused.
-/// Block frames from the image are normalized to 0–1 before storage so the UI
-/// can overlay them on any preview layer size without knowing the original resolution.
-final class LiveTextRecognitionService: TextRecognizing {
-    private let recognizer: TextRecognizer
+/// This used to call Google's ML Kit. It cannot: ML Kit for iOS ships no `arm64`
+/// slice for the simulator — the mirror that repackages it states plainly that it
+/// builds "`arm64` for iphoneos and `x86_64` for iphonesimulator only" — so the
+/// test bundle failed to link on every Apple Silicon Mac and every current CI
+/// runner. Building the whole package `x86_64` under Rosetta instead links, and
+/// then aborts on launch. Neither is a boilerplate anyone can run.
+///
+/// Vision is the framework this repo already uses for barcode scanning, needs no
+/// dependency at all, and performs text recognition on-device. It also reports a
+/// per-observation confidence, which ML Kit's iOS API does not vend — so
+/// `RecognizedTextBlock.confidence` carries a real value here rather than a
+/// placeholder.
+///
+/// Bounding boxes arrive normalized with a bottom-left origin; `flipBoundingBox`
+/// converts them to the top-left origin the SwiftUI overlay draws in, exactly as
+/// `LiveBarcodeScannerService` does.
+struct LiveTextRecognitionService: TextRecognizing {
+    /// `.accurate` trades latency for quality. The frame loop in
+    /// `TextRecognitionViewModel` already throttles to ~2 fps, so the extra time
+    /// per pass is absorbed there rather than dropping frames.
+    var recognitionLevel: VNRequestTextRecognitionLevel = .accurate
 
-    init() {
-        recognizer = TextRecognizer.textRecognizer(options: TextRecognizerOptions())
-    }
+    /// Language correction fixes OCR confusions (`rn` → `m`) using a language
+    /// model. Turn it off for content that is not prose — serial numbers, codes.
+    var usesLanguageCorrection = true
 
-    func recognize(sampleBuffer: CMSampleBuffer) async throws -> RecognitionResult {
-        let visionImage = VisionImage(buffer: sampleBuffer)
-        visionImage.orientation = imageOrientation(from: sampleBuffer)
+    func recognize(frame: CapturedFrame) async throws -> RecognitionResult {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
+            throw TextRecognitionError.noResult
+        }
 
         return try await withCheckedThrowingContinuation { continuation in
-            recognizer.process(visionImage) { text, error in
+            let request = VNRecognizeTextRequest { request, error in
                 if let error {
-                    continuation.resume(throwing: TextRecognitionError.processingFailed(error.localizedDescription))
+                    continuation.resume(
+                        throwing: TextRecognitionError.processingFailed(error.localizedDescription)
+                    )
                     return
                 }
-                guard let text else {
-                    continuation.resume(throwing: TextRecognitionError.noResult)
-                    return
-                }
-                continuation.resume(returning: Self.map(text, buffer: sampleBuffer))
+                let observations = request.results as? [VNRecognizedTextObservation] ?? []
+                continuation.resume(returning: Self.map(observations))
+            }
+            request.recognitionLevel = recognitionLevel
+            request.usesLanguageCorrection = usesLanguageCorrection
+
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(
+                    throwing: TextRecognitionError.processingFailed(error.localizedDescription)
+                )
             }
         }
     }
 
     // MARK: - Private helpers
 
-    private static func map(_ text: Text, buffer: CMSampleBuffer) -> RecognitionResult {
-        let imageSize = imageSize(from: buffer)
-        let blocks = text.blocks.map { block -> RecognizedTextBlock in
-            let normalized = normalize(rect: block.frame, imageSize: imageSize)
-            let confidence = block.lines.first?.elements.first?.confidence ?? 1.0
-            return RecognizedTextBlock(text: block.text, normalizedFrame: normalized, confidence: confidence)
+    private static func map(_ observations: [VNRecognizedTextObservation]) -> RecognitionResult {
+        let blocks = observations.compactMap { observation -> RecognizedTextBlock? in
+            // `topCandidates(1)` is the highest-confidence reading of this
+            // observation. An observation with no candidate at all is a region
+            // Vision located but could not read, which is not a block of text.
+            guard let candidate = observation.topCandidates(1).first else { return nil }
+            return RecognizedTextBlock(
+                text: candidate.string,
+                normalizedFrame: Self.flipBoundingBox(observation.boundingBox),
+                confidence: candidate.confidence
+            )
         }
-        return RecognitionResult(fullText: text.text, blocks: blocks)
-    }
-
-    private static func normalize(rect: CGRect, imageSize: CGSize) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0 else { return rect }
-        return CGRect(
-            x: rect.minX / imageSize.width,
-            y: rect.minY / imageSize.height,
-            width: rect.width / imageSize.width,
-            height: rect.height / imageSize.height
+        return RecognitionResult(
+            fullText: blocks.map(\.text).joined(separator: "\n"),
+            blocks: blocks
         )
     }
 
-    private static func imageSize(from buffer: CMSampleBuffer) -> CGSize {
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else { return .zero }
-        return CGSize(
-            width: CVPixelBufferGetWidth(imageBuffer),
-            height: CVPixelBufferGetHeight(imageBuffer)
+    /// Vision uses a bottom-left origin; flip to top-left for UIKit/SwiftUI overlays.
+    private static func flipBoundingBox(_ box: CGRect) -> CGRect {
+        CGRect(
+            x: box.minX,
+            y: 1.0 - box.maxY,
+            width: box.width,
+            height: box.height
         )
-    }
-
-    private func imageOrientation(from buffer: CMSampleBuffer) -> UIImage.Orientation {
-        // Frames captured in portrait mode on back camera arrive rotated 90°.
-        // MLKit expects the orientation hint so it can normalize bounding boxes.
-        .right
     }
 }
 
 // MARK: - Mock implementation
 
-/// Test double that returns a predetermined result without MLKit or camera hardware.
+/// Test double that returns a predetermined result without Vision or camera hardware.
 struct MockTextRecognitionService: TextRecognizing {
     var stubbedResult: RecognitionResult = RecognitionResult(
         fullText: "Hello World",
@@ -108,9 +127,9 @@ struct MockTextRecognitionService: TextRecognizing {
             ),
         ]
     )
-    var stubbedError: Error?
+    var stubbedError: (any Error & Sendable)?
 
-    func recognize(sampleBuffer _: CMSampleBuffer) async throws -> RecognitionResult {
+    func recognize(frame _: CapturedFrame) async throws -> RecognitionResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult

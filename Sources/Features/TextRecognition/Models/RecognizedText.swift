@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// A single block of text recognized by MLKit, with its bounding box in image coordinates.
+/// A single block of text recognized by Vision, with its bounding box in image coordinates.
 struct RecognizedTextBlock: Identifiable, Sendable {
     let id: UUID
     let text: String

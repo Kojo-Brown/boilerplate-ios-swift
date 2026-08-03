@@ -61,9 +61,8 @@ struct KeychainWrapper: KeychainStoring {
     // MARK: - Write
 
     func set(_ value: String, forKey key: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw KeychainError.unexpectedData
-        }
+        // `String.data(using: .utf8)` cannot fail; `Data(_:)` says so in the type.
+        let data = Data(value.utf8)
 
         let attributes: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,

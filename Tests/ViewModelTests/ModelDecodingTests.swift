@@ -13,7 +13,7 @@ private let encoder = JSONEncoder.apiEncoder
 struct UserCodingKeysTests {
 
     @Test func decodesFromSnakeCaseJSON() throws {
-        let json = """
+        let json = Data("""
         {
             "id": "00000000-0000-0000-0000-000000000001",
             "email": "alice@example.com",
@@ -22,7 +22,7 @@ struct UserCodingKeysTests {
             "created_at": "2024-01-15T10:00:00Z",
             "updated_at": "2024-06-01T12:30:00Z"
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let user = try decoder.decode(User.self, from: json)
 
@@ -35,13 +35,13 @@ struct UserCodingKeysTests {
     }
 
     @Test func decodesWithOptionalFieldsAbsent() throws {
-        let json = """
+        let json = Data("""
         {
             "id": "00000000-0000-0000-0000-000000000002",
             "email": "bob@example.com",
             "name": "Bob"
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let user = try decoder.decode(User.self, from: json)
 
@@ -60,7 +60,7 @@ struct UserCodingKeysTests {
         )
 
         let data = try encoder.encode(user)
-        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let dict = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(dict["email"] as? String == "carol@example.com")
         #expect(dict["avatar_url"] as? String == "https://example.com/carol.png")
@@ -88,14 +88,14 @@ struct AuthModelCodingKeysTests {
     @Test func loginRequestEncodesToSnakeCase() throws {
         let request = LoginRequest(email: "user@example.com", password: "secret")
         let data = try encoder.encode(request)
-        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let dict = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(dict["email"] as? String == "user@example.com")
         #expect(dict["password"] as? String == "secret")
     }
 
     @Test func loginResponseDecodesFromSnakeCase() throws {
-        let json = """
+        let json = Data("""
         {
             "access_token": "eyJhbGc.payload.sig",
             "refresh_token": "rt_abc123",
@@ -105,7 +105,7 @@ struct AuthModelCodingKeysTests {
                 "name": "Test User"
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let response = try decoder.decode(LoginResponse.self, from: json)
 
@@ -117,7 +117,7 @@ struct AuthModelCodingKeysTests {
     @Test func updateProfileRequestEncodesName() throws {
         let request = UpdateProfileRequest(name: "Updated Name")
         let data = try encoder.encode(request)
-        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let dict = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(dict["name"] as? String == "Updated Name")
     }
@@ -129,12 +129,12 @@ struct AuthModelCodingKeysTests {
 struct TokenPairCodingKeysTests {
 
     @Test func tokenPairDecodesFromSnakeCase() throws {
-        let json = """
+        let json = Data("""
         {
             "access_token": "acc_tok",
             "refresh_token": "ref_tok"
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let pair = try decoder.decode(TokenPair.self, from: json)
 
@@ -145,7 +145,7 @@ struct TokenPairCodingKeysTests {
     @Test func tokenRefreshRequestEncodesToSnakeCase() throws {
         let request = TokenRefreshRequest(refreshToken: "rt_xyz")
         let data = try encoder.encode(request)
-        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let dict = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(dict["refresh_token"] as? String == "rt_xyz")
         #expect(dict["refreshToken"] == nil)
@@ -163,12 +163,12 @@ struct APIResponseCodingKeysTests {
     }
 
     @Test func decodesSuccessEnvelope() throws {
-        let json = """
+        let json = Data("""
         {
             "data": { "id": 42, "label": "hello" },
             "meta": { "request_id": "req-001", "version": "1.0" }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let response = try decoder.decode(APIResponse<Item>.self, from: json)
 
@@ -180,7 +180,7 @@ struct APIResponseCodingKeysTests {
     }
 
     @Test func decodesErrorEnvelope() throws {
-        let json = """
+        let json = Data("""
         {
             "error": {
                 "code": "not_found",
@@ -188,7 +188,7 @@ struct APIResponseCodingKeysTests {
                 "details": { "field": "id" }
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let response = try decoder.decode(APIResponse<Item>.self, from: json)
 
@@ -200,9 +200,9 @@ struct APIResponseCodingKeysTests {
     }
 
     @Test func responseMetaDecodesRequestID() throws {
-        let json = """
+        let json = Data("""
         { "request_id": "abc-123", "version": "2.0" }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let meta = try decoder.decode(ResponseMeta.self, from: json)
 
@@ -211,7 +211,7 @@ struct APIResponseCodingKeysTests {
     }
 
     @Test func responseMetaHandlesMissingFields() throws {
-        let json = "{}".data(using: .utf8)!
+        let json = Data("{}".utf8)
         let meta = try decoder.decode(ResponseMeta.self, from: json)
 
         #expect(meta.requestID == nil)
@@ -229,7 +229,7 @@ struct PaginationCodingKeysTests {
     }
 
     @Test func pageDecodesItemsAndInfo() throws {
-        let json = """
+        let json = Data("""
         {
             "items": [{ "id": 1 }, { "id": 2 }],
             "pagination": {
@@ -239,7 +239,7 @@ struct PaginationCodingKeysTests {
                 "total_pages": 3
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let page = try decoder.decode(Page<Item>.self, from: json)
 
@@ -261,7 +261,7 @@ struct PaginationCodingKeysTests {
     }
 
     @Test func cursorPageDecodesItemsAndCursor() throws {
-        let json = """
+        let json = Data("""
         {
             "items": [{ "id": 10 }, { "id": 11 }],
             "cursor": {
@@ -270,7 +270,7 @@ struct PaginationCodingKeysTests {
                 "has_more": true
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let page = try decoder.decode(CursorPage<Item>.self, from: json)
 
@@ -281,13 +281,13 @@ struct PaginationCodingKeysTests {
     }
 
     @Test func cursorInfoDecodesEndOfList() throws {
-        let json = """
+        let json = Data("""
         {
             "next_cursor": null,
             "prev_cursor": "cursor_xyz",
             "has_more": false
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let cursor = try decoder.decode(CursorInfo.self, from: json)
 

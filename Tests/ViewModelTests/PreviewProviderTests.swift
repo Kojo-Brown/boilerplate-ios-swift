@@ -173,8 +173,8 @@ struct AuthPreviewProviderTests {
     func biometricButtonFaceIDPreviewRenders() {
         let mock = MockBiometricAuthService()
         mock.stubbedBiometricType = .faceID
-        let vm = BiometricAuthViewModel(service: mock)
-        let view = BiometricAuthButton(viewModel: vm)
+        let viewModel = BiometricAuthViewModel(service: mock)
+        let view = BiometricAuthButton(viewModel: viewModel)
         _ = view.body
     }
 
@@ -182,8 +182,8 @@ struct AuthPreviewProviderTests {
     func biometricButtonTouchIDPreviewRenders() {
         let mock = MockBiometricAuthService()
         mock.stubbedBiometricType = .touchID
-        let vm = BiometricAuthViewModel(service: mock)
-        let view = BiometricAuthButton(viewModel: vm)
+        let viewModel = BiometricAuthViewModel(service: mock)
+        let view = BiometricAuthButton(viewModel: viewModel)
         _ = view.body
     }
 
@@ -192,8 +192,8 @@ struct AuthPreviewProviderTests {
         let mock = MockBiometricAuthService()
         mock.stubbedIsAvailable = false
         mock.stubbedBiometricType = .none
-        let vm = BiometricAuthViewModel(service: mock)
-        let view = BiometricAuthButton(viewModel: vm)
+        let viewModel = BiometricAuthViewModel(service: mock)
+        let view = BiometricAuthButton(viewModel: viewModel)
         _ = view.body
     }
 

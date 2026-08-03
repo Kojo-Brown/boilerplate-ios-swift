@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// Manages state and business logic for the login screen.
 @Observable
@@ -78,14 +79,38 @@ struct LiveAuthService: AuthServiceProtocol {
 
 // MARK: - Mock for previews & tests
 
+/// `AuthServiceProtocol` is `Sendable`, so this double cannot hold bare mutable
+/// state. The knobs live behind a lock rather than under `@unchecked Sendable`,
+/// so a test that configures the mock from one task and exercises it from
+/// another is actually safe instead of only asserted to be.
 final class MockAuthService: AuthServiceProtocol {
-    var shouldSucceed = true
-    var delay: Duration = .milliseconds(100)
+    private struct State: Sendable {
+        var shouldSucceed = true
+        var delay: Duration = .milliseconds(100)
+    }
 
-    func login(email: String, password: String) async throws -> Bool {
+    // The state lives *inside* the lock rather than beside it, so the class has no
+    // mutable stored property for Swift 6 to reject — a plain `NSLock` next to
+    // `private var` still trips the check, because the compiler cannot see that the
+    // lock guards them. `OSAllocatedUnfairLock` is `Sendable` whenever its state is,
+    // and is iOS 16+, so it fits this package's iOS 17 floor where
+    // `Synchronization.Mutex` (iOS 18) would not.
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    var shouldSucceed: Bool {
+        get { state.withLock { $0.shouldSucceed } }
+        set { state.withLock { $0.shouldSucceed = newValue } }
+    }
+
+    var delay: Duration {
+        get { state.withLock { $0.delay } }
+        set { state.withLock { $0.delay = newValue } }
+    }
+
+    func login(email _: String, password _: String) async throws -> Bool {
         try await Task.sleep(for: delay)
-        if shouldSucceed { return true }
-        throw AuthError.invalidCredentials
+        guard shouldSucceed else { throw AuthError.invalidCredentials }
+        return true
     }
 }
 

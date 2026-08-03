@@ -1,0 +1,258 @@
+name: Gates
+
+# Phase 0 item 2: the build, SwiftLint (strict) and the test suite.
+#
+# CLAUDE.md asks for these to be run locally. They cannot be: the scheduled
+# agent runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do not exist
+# and Xcode cannot be installed. This workflow is therefore the gate itself, not
+# a copy of a local run — the same conclusion `dependency-resolution.yml` reached
+# for item 1.
+#
+# Dependency resolution stays in its own workflow on purpose, so a package that
+# has disappeared upstream reports as a resolution failure rather than as a wall
+# of "no such module" errors here.
+#
+# Promoting `workflow-templates/ios-ci.yml` and folding this in is Phase 0 item
+# 3 and is deliberately not done here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: SwiftLint (strict)
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # SwiftLint is syntactic — it needs no toolchain, no resolved packages and
+      # no simulator, so it runs as its own job and reports even when the build
+      # is broken.
+      - name: Install SwiftLint
+        run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then
+            brew install swiftlint
+          fi
+          swiftlint version
+
+      # `github-actions-logging` renders inline annotations on the PR diff, but it
+      # writes only the message to the raw log — the file and line survive as
+      # annotation metadata, which is unreadable to anything reading the log. So on
+      # failure the violations are printed again through the `xcode` reporter,
+      # which is `path:line:col: error: message (rule_id)`. Costs a second, and
+      # only when the job is already red.
+      - name: swiftlint --strict
+        run: |
+          if ! swiftlint lint --strict --reporter github-actions-logging; then
+            echo '=== full violation list (path:line:col) ==='
+            swiftlint lint --strict --reporter xcode || true
+            exit 1
+          fi
+
+  build-and-test:
+    name: Build and test on the iOS Simulator
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # CLAUDE.md pins the project to Swift 6 / Xcode 16. Pick the newest Xcode
+      # 16 present rather than a hardcoded point release, whose path changes as
+      # the runner image is updated.
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      - name: Print tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: swift package resolve
+
+      # This is an SPM package, not an `.xcodeproj`. CLAUDE.md's `-scheme App`
+      # does not name anything here, and the old template's
+      # `-scheme boilerplate-ios-swift` was equally invented. xcodebuild
+      # synthesises one scheme per product plus a `<package>-Package` scheme
+      # that is the only one carrying the test target, so pick that by name
+      # instead of guessing.
+      - name: Discover the scheme
+        run: |
+          xcodebuild -list
+          scheme=$(xcodebuild -list -json | jq -r '
+            [ (.workspace.schemes // .project.schemes // [])[] ] as $schemes
+            | ( ($schemes | map(select(endswith("-Package"))) | first)
+                // ($schemes | first)
+                // empty )
+          ')
+          if [ -z "$scheme" ]; then
+            echo "::error::xcodebuild reported no schemes for this package."
+            exit 1
+          fi
+          echo "Using scheme: $scheme"
+          echo "SCHEME=$scheme" >> "$GITHUB_ENV"
+
+      # Pin to a concrete simulator UDID. A `name=iPhone 16` destination silently
+      # resolves to whatever the image happens to ship, and fails opaquely when
+      # that model is dropped from a runner image.
+      #
+      # The runner also carries simulator runtimes newer than the selected Xcode
+      # can drive — it has iOS 26.x while Xcode 16.4 builds against the iOS 18.5
+      # SDK. Taking the newest runtime unconditionally pairs an 18.5 SDK with a
+      # 26.2 device, which xcodebuild accepts for building and then fails on when
+      # it tries to run the tests. So candidates are capped at the SDK's major
+      # version, and the newest runtime at or below it wins.
+      - name: Choose an iOS Simulator
+        run: |
+          xcrun simctl list devices available
+          sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
+          echo "iphonesimulator SDK major version: $sdk_major"
+          udid=$(xcrun simctl list devices available --json | jq -r --argjson sdk "$sdk_major" '
+            [ .devices
+              | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
+              | .value[]
+              | select(.isAvailable and (.name | startswith("iPhone")))
+              | { version: [($v.major | tonumber), ($v.minor | tonumber)],
+                  name: .name,
+                  udid: .udid }
+            ]
+            | map(select(.version[0] <= $sdk)) as $all
+            | if ($all | length) == 0 then empty else
+                ($all | map(.version) | max) as $newest
+                | ($all | map(select(.version == $newest))) as $latest
+                | ( ($latest | map(select(.name == "iPhone 16")) | first)
+                    // ($latest | first) ).udid
+              end
+          ')
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator available on this runner image."
+            exit 1
+          fi
+          echo "Using simulator $udid ($(xcrun simctl list devices | grep "$udid" | head -1 | xargs))"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: Build for the iOS Simulator
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build.log
+
+      # `-test-timeouts-enabled` makes a test that never returns fail by name
+      # instead of wedging the runner. Without it the first hang costs the full
+      # job timeout and reports as "cancelled", which says nothing about which
+      # test hung — and because a cancelled job skips its remaining steps, the
+      # logs that would have said so are never uploaded.
+      #
+      # The step timeout is the backstop for a hang that the allowance cannot
+      # see (a wedged simulator, a stuck xcodebuild). It is deliberately shorter
+      # than the job's, so the step fails while the job lives on to run the
+      # summary and upload the logs.
+      - name: Run the test suite
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 300 \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee test.log
+
+      # xcodebuild buries a handful of diagnostics in thousands of lines, most of
+      # it a single multi-kilobyte `swift-frontend` invocation it echoes on
+      # failure. Pull the lines that actually say what broke to the end of the
+      # log, where anyone reading a red run looks first.
+      - name: Summarise failures
+        if: failure()
+        run: |
+          for log in build.log test.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log — errors and failures"
+            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]|^ld: |Undefined symbol|building for .* but linking|does not contain|missing architecture|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
+              | grep -v '^[[:space:]]*/Applications/Xcode' \
+              | sort -u \
+              || echo "(no error lines matched; see the uploaded $log)"
+            echo "::endgroup::"
+            # A hang leaves no error line at all — the last thing the log says is
+            # the test that started and never finished, so print the tail too.
+            echo "::group::$log — last 40 lines"
+            tail -40 "$log"
+            echo "::endgroup::"
+          done
+
+      # When the test process dies rather than failing an assertion, xcodebuild
+      # reports every test that had not finished as "failing" and says nothing
+      # about why the process went away. The crash report does, and it is written
+      # to the host's DiagnosticReports directory — not into the .xcresult — so
+      # without this step it is discarded with the runner.
+      - name: Collect crash reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          found=0
+          for dir in ~/Library/Logs/DiagnosticReports "$HOME/Library/Logs/CoreSimulator/$SIMULATOR_UDID"; do
+            [ -d "$dir" ] || continue
+            for report in "$dir"/*.ips "$dir"/*.crash; do
+              case "$(basename "$report")" in
+                xctest*|ViewModelTests*|testmanagerd*) ;;
+                *) continue ;;
+              esac
+              found=1
+              echo "::group::$(basename "$report")"
+              # An .ips is a JSON header line followed by a JSON payload. Dumping
+              # raw bytes is useless: the register dump for one thread runs to
+              # tens of kilobytes and pushes out the two things that matter — the
+              # Swift runtime's fatal-error message, which the payload carries in
+              # `asi`, and the faulting thread's symbolicated frames.
+              python3 .github/scripts/summarise-crash-report.py "$report"
+              echo "::endgroup::"
+            done
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No xctest crash report found — the process did not crash, or the report went elsewhere."
+            ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null || true
+          fi
+
+      # Both logs, always: a red run is only useful if the compiler and test
+      # output survive it.
+      - name: Upload build and test logs
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gates-logs-${{ github.run_number }}
+          path: |
+            build.log
+            test.log
+            TestResults.xcresult
+          retention-days: 14

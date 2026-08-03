@@ -44,7 +44,7 @@ struct SettingsView: View {
                 Spacer()
                 if selection.wrappedValue == scheme {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(AppColors.accent)
                         .fontWeight(.semibold)
                 }
             }

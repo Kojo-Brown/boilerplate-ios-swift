@@ -171,7 +171,7 @@ struct LoadingViewTests {
 
     @Test func emptyStringMessageIsPreserved() {
         let sut = LoadingView(message: "")
-        #expect(sut.message == "")
+        #expect(sut.message?.isEmpty == true)
     }
 
     // MARK: - Inline variant

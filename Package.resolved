@@ -1,5 +1,5 @@
 {
-  "originHash" : "3c009705295debd758a10629b8baa52374371e123c769d77ed7efb1378fcfe67",
+  "originHash" : "05555b83de3b2d1eabba16cd8a2eea47802a67cf00a1a2ca777a85ec16955b8f",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -11,39 +11,12 @@
       }
     },
     {
-      "identity" : "google-mlkit-swiftpm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/d-date/google-mlkit-swiftpm",
-      "state" : {
-        "revision" : "7aefa43c5105f28b9a8f9a48f7a115524a101186",
-        "version" : "9.0.0"
-      }
-    },
-    {
-      "identity" : "googledatatransport",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/GoogleDataTransport.git",
-      "state" : {
-        "revision" : "617af071af9aa1d6a091d59a202910ac482128f9",
-        "version" : "10.1.0"
-      }
-    },
-    {
       "identity" : "googlesignin-ios",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/google/GoogleSignIn-iOS",
       "state" : {
         "revision" : "a7965d134c5d3567026c523e0a8a583f73b62b0d",
         "version" : "7.1.0"
-      }
-    },
-    {
-      "identity" : "googleutilities",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/GoogleUtilities.git",
-      "state" : {
-        "revision" : "60da361632d0de02786f709bdc0c4df340f7613e",
-        "version" : "8.1.0"
       }
     },
     {
@@ -62,24 +35,6 @@
       "state" : {
         "revision" : "5d7d66f647400952b1758b230e019b07c0b4b22a",
         "version" : "4.1.1"
-      }
-    },
-    {
-      "identity" : "nanopb",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/firebase/nanopb.git",
-      "state" : {
-        "revision" : "b7e1104502eca3a213b46303391ca4d3bc8ddec1",
-        "version" : "2.30910.0"
-      }
-    },
-    {
-      "identity" : "promises",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/promises.git",
-      "state" : {
-        "revision" : "540318ecedd63d883069ae7f1ed811a2df00b6ac",
-        "version" : "2.4.0"
       }
     }
   ],

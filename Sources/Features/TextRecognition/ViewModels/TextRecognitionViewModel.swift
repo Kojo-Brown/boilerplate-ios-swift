@@ -6,7 +6,7 @@ import UIKit
 /// Drives the text recognition screen: manages camera lifecycle, recognition throttling,
 /// and surfaces results for the overlay UI.
 ///
-/// Inject `recognitionService` in tests to avoid hardware and MLKit dependencies.
+/// Inject `recognitionService` in tests to avoid camera hardware and Vision.
 @Observable
 @MainActor
 final class TextRecognitionViewModel: ViewModelProtocol {
@@ -98,7 +98,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
 
     // MARK: - Private frame loop
 
-    /// Consumes the camera frame stream and throttles MLKit calls to ~2 fps to stay
+    /// Consumes the camera frame stream and throttles recognition to ~2 fps to stay
     /// within the recognizer's throughput without overwhelming the main actor.
     private func beginProcessingFrames() {
         frameProcessingTask?.cancel()
@@ -108,7 +108,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
         frameProcessingTask = Task { [weak self] in
             var lastRecognizedAt: ContinuousClock.Instant?
 
-            for await buffer in stream {
+            for await frame in stream {
                 guard !Task.isCancelled else { break }
 
                 let now = ContinuousClock.now
@@ -116,7 +116,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
                 lastRecognizedAt = now
 
                 do {
-                    let result = try await service.recognize(sampleBuffer: buffer)
+                    let result = try await service.recognize(frame: frame)
                     guard !Task.isCancelled else { break }
                     if !result.isEmpty {
                         self?.recognitionResult = result

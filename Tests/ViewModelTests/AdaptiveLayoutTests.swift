@@ -95,35 +95,35 @@ struct LayoutContextTests {
 
     @Test func equalContextsAreEqual() {
         let size = CGSize(width: 390, height: 844)
-        let a = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
-        let b = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
-        #expect(a == b)
+        let lhs = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
+        let rhs = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
+        #expect(lhs == rhs)
     }
 
     @Test func differentSizesAreUnequal() {
-        let a = LayoutContext(
+        let lhs = LayoutContext(
             horizontal: .compact, vertical: .regular,
             size: CGSize(width: 390, height: 844)
         )
-        let b = LayoutContext(
+        let rhs = LayoutContext(
             horizontal: .compact, vertical: .regular,
             size: CGSize(width: 430, height: 932)
         )
-        #expect(a != b)
+        #expect(lhs != rhs)
     }
 
     @Test func differentHorizontalSizeClassesAreUnequal() {
         let size = CGSize(width: 768, height: 1024)
-        let a = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
-        let b = LayoutContext(horizontal: .regular, vertical: .regular, size: size)
-        #expect(a != b)
+        let lhs = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
+        let rhs = LayoutContext(horizontal: .regular, vertical: .regular, size: size)
+        #expect(lhs != rhs)
     }
 
     @Test func differentVerticalSizeClassesAreUnequal() {
         let size = CGSize(width: 390, height: 844)
-        let a = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
-        let b = LayoutContext(horizontal: .compact, vertical: .compact, size: size)
-        #expect(a != b)
+        let lhs = LayoutContext(horizontal: .compact, vertical: .regular, size: size)
+        let rhs = LayoutContext(horizontal: .compact, vertical: .compact, size: size)
+        #expect(lhs != rhs)
     }
 }
 
@@ -223,7 +223,7 @@ struct AdaptiveGridTests {
 
     @Test func bodyRendersWithCustomSpacing() {
         let items = [Item(id: 1, name: "Solo")]
-        let sut = AdaptiveGrid(items, spacing: 32, minColumnWidth: 120) { item in
+        let sut = AdaptiveGrid(items, spacing: 32, minColumnWidth: 120) { _ in
             RoundedRectangle(cornerRadius: 8).frame(height: 80)
         }
         _ = sut.body
