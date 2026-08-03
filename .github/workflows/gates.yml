@@ -140,6 +140,9 @@ jobs:
         if: failure()
         run: xcrun simctl list devices available
 
+      # -quiet so the log carries diagnostics rather than a full echo of every
+      # clang and swiftc invocation. Without it a failing build buries its own
+      # error lines under thousands of lines of command text.
       - name: Build (iOS Simulator)
         run: |
           set -o pipefail
@@ -147,6 +150,7 @@ jobs:
             -scheme "$SCHEME" \
             -destination "id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
+            -quiet \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Run the XCTest suite
@@ -158,6 +162,7 @@ jobs:
             -derivedDataPath DerivedData \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
+            -quiet \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Test result summary
