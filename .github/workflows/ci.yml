@@ -143,12 +143,63 @@ jobs:
       # 26.2 device, which xcodebuild accepts for building and then fails on when
       # it tries to run the tests. So candidates are capped at the SDK's major
       # version, and the newest runtime at or below it wins.
+      #
+      # The backstop and the retry are defensive, not a fix for a diagnosed
+      # hang. What prompted them: on this branch's first run the step was still
+      # going several minutes into work that took 43s on the last green run of
+      # identical code, and that run was superseded before it finished, so
+      # whether it would have completed is unknown. Unbounded is the problem
+      # either way — the build and test steps each carry a step timeout
+      # precisely so a stall fails as a named step while the job survives to
+      # summarise and upload the logs, and this step was missed when those went
+      # in. Left as it was, a wedged CoreSimulator holds the runner for the
+      # job's full hour and then reports "cancelled", which names no command
+      # and, because a cancelled job skips its remaining steps, uploads none of
+      # the logs that would have.
+      #
+      # The retry restarts the service rather than re-asking a daemon that
+      # already failed to answer, and covers only the device-list query:
+      # nothing here can turn a failing build or a failing test into a pass.
       - name: Choose an iOS Simulator
+        timeout-minutes: 10
         run: |
-          xcrun simctl list devices available
           sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
           echo "iphonesimulator SDK major version: $sdk_major"
-          udid=$(xcrun simctl list devices available --json | jq -r --argjson sdk "$sdk_major" '
+
+          # macOS ships no coreutils `timeout`. perl is always present, its
+          # alarm survives the exec, and SIGALRM's default action kills the
+          # child — same effect, no dependency.
+          bounded() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+
+          devices=''
+          for attempt in 1 2 3; do
+            if devices=$(bounded 120 xcrun simctl list devices available --json); then
+              break
+            fi
+            devices=''
+            echo "::warning::simctl returned no device list (attempt $attempt); restarting CoreSimulator"
+            sudo pkill -9 -f CoreSimulatorService 2>/dev/null || true
+            bounded 60 xcrun simctl shutdown all || true
+            sleep 15
+          done
+          if [ -z "$devices" ]; then
+            echo "::error::simctl never returned a device list; CoreSimulator is wedged on this runner."
+            exit 1
+          fi
+
+          # Render the listing from the JSON already in hand rather than calling
+          # simctl a second time, so the log costs no extra chance to hang.
+          printf '%s' "$devices" | jq -r '
+            .devices
+            | to_entries[]
+            | select(.key | test("SimRuntime\\.iOS-"))
+            | .key as $runtime
+            | .value[]
+            | select(.isAvailable)
+            | "\($runtime)  \(.name)  \(.udid)"
+          ' || true
+
+          udid=$(printf '%s' "$devices" | jq -r --argjson sdk "$sdk_major" '
             [ .devices
               | to_entries[]
               | select(.key | test("SimRuntime\\.iOS-"))
@@ -171,7 +222,10 @@ jobs:
             echo "::error::No iPhone simulator available on this runner image."
             exit 1
           fi
-          echo "Using simulator $udid ($(xcrun simctl list devices | grep "$udid" | head -1 | xargs))"
+          name=$(printf '%s' "$devices" | jq -r --arg u "$udid" '
+            [ .devices[]?[]? | select(.udid == $u) | .name ] | first // "unknown"
+          ')
+          echo "Using simulator $name ($udid)"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
 
       - name: Build for the iOS Simulator
