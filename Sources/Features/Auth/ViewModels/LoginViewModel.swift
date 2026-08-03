@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// Manages state and business logic for the login screen.
 @Observable
@@ -83,20 +84,27 @@ struct LiveAuthService: AuthServiceProtocol {
 /// so a test that configures the mock from one task and exercises it from
 /// another is actually safe instead of only asserted to be.
 final class MockAuthService: AuthServiceProtocol {
-    // `NSLock` rather than `Mutex`: the package deployment target is iOS 17 and
-    // `Synchronization.Mutex` needs iOS 18. `EventBus` guards its state the same way.
-    private let lock = NSLock()
-    private var _shouldSucceed = true
-    private var _delay: Duration = .milliseconds(100)
+    private struct State: Sendable {
+        var shouldSucceed = true
+        var delay: Duration = .milliseconds(100)
+    }
+
+    // The state lives *inside* the lock rather than beside it, so the class has no
+    // mutable stored property for Swift 6 to reject — a plain `NSLock` next to
+    // `private var` still trips the check, because the compiler cannot see that the
+    // lock guards them. `OSAllocatedUnfairLock` is `Sendable` whenever its state is,
+    // and is iOS 16+, so it fits this package's iOS 17 floor where
+    // `Synchronization.Mutex` (iOS 18) would not.
+    private let state = OSAllocatedUnfairLock(initialState: State())
 
     var shouldSucceed: Bool {
-        get { lock.withLock { _shouldSucceed } }
-        set { lock.withLock { _shouldSucceed = newValue } }
+        get { state.withLock { $0.shouldSucceed } }
+        set { state.withLock { $0.shouldSucceed = newValue } }
     }
 
     var delay: Duration {
-        get { lock.withLock { _delay } }
-        set { lock.withLock { _delay = newValue } }
+        get { state.withLock { $0.delay } }
+        set { state.withLock { $0.delay = newValue } }
     }
 
     func login(email _: String, password _: String) async throws -> Bool {

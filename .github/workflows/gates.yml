@@ -175,6 +175,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee test.log
 
+      # xcodebuild buries a handful of diagnostics in thousands of lines, most of
+      # it a single multi-kilobyte `swift-frontend` invocation it echoes on
+      # failure. Pull the lines that actually say what broke to the end of the
+      # log, where anyone reading a red run looks first.
+      - name: Summarise failures
+        if: failure()
+        run: |
+          for log in build.log test.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log — errors and failures"
+            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]' "$log" \
+              | grep -v '^[[:space:]]*/Applications/Xcode' \
+              | sort -u \
+              || echo "(no error lines matched; see the uploaded $log)"
+            echo "::endgroup::"
+          done
+
       # Both logs, always: a red run is only useful if the compiler and test
       # output survive it.
       - name: Upload build and test logs

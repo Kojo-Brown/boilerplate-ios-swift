@@ -66,11 +66,14 @@ final class HomeViewModel: ViewModelProtocol {
         liveUpdateTask = Task {
             let stream = PollingStream.make(interval: interval) {
                 // Stub — Phase 3 replaces this with a typed URLSession call
-                [HomeItem(
-                    id: UUID(),
-                    title: "Live Update",
-                    subtitle: "Streamed via AsyncStream at \(Date().formatted(.dateTime.hour().minute().second()))"
-                )]
+                [
+                    HomeItem(
+                        id: UUID(),
+                        title: "Live Update",
+                        subtitle: "Streamed via AsyncStream at "
+                            + Date().formatted(.dateTime.hour().minute().second())
+                    ),
+                ]
             }
             for await batch in stream {
                 guard !Task.isCancelled else { break }
