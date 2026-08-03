@@ -230,10 +230,43 @@ jobs:
               esac
               found=1
               echo "::group::$(basename "$report")"
-              # An .ips is a JSON header line followed by the payload; the
-              # exception type and the faulting thread are what identify the bug.
-              head -c 20000 "$report"
-              echo
+              # An .ips is a JSON header line followed by a JSON payload. Dumping
+              # raw bytes is useless: the register dump for one thread runs to
+              # tens of kilobytes and pushes out the two things that matter — the
+              # Swift runtime's fatal-error message, which the payload carries in
+              # `asi`, and the faulting thread's symbolicated frames.
+              python3 - "$report" <<'PY'
+import json, sys
+
+with open(sys.argv[1]) as handle:
+    handle.readline()                      # header line
+    report = json.load(handle)
+
+print("exception :", json.dumps(report.get("exception", {})))
+print("termination:", json.dumps(report.get("termination", {})))
+
+# `asi` maps a thread id to the runtime messages it logged before trapping.
+# For a Swift precondition failure this is the actual error text.
+for thread, messages in (report.get("asi") or {}).items():
+    for message in messages:
+        print(f"asi[{thread}]: {message}")
+if not report.get("asi"):
+    print("asi       : (none recorded)")
+
+images = report.get("usedImages", [])
+threads = report.get("threads", [])
+index = report.get("faultingThread", 0)
+if index < len(threads):
+    print(f"\nfaulting thread {index}:")
+    for position, frame in enumerate(threads[index].get("frames", [])[:25]):
+        image = images[frame["imageIndex"]].get("name", "?") \
+            if frame.get("imageIndex", -1) < len(images) else "?"
+        symbol = frame.get("symbol", f"+{frame.get('imageOffset')}")
+        where = ""
+        if frame.get("sourceFile"):
+            where = f"  ({frame['sourceFile']}:{frame.get('sourceLine')})"
+        print(f"  {position:2}  {image:<24} {symbol}{where}")
+PY
               echo "::endgroup::"
             done
           done
