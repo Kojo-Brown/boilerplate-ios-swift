@@ -274,7 +274,7 @@ struct AdaptiveContainerTests {
 @MainActor
 struct LayoutContextEnvironmentTests {
     @Test func defaultEnvironmentLayoutContextIsCompact() {
-        var env = EnvironmentValues()
+        let env = EnvironmentValues()
         let ctx = env.layoutContext
         #expect(ctx.isCompact)
         #expect(!ctx.isRegular)

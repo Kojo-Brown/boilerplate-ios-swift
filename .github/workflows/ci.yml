@@ -239,6 +239,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build.log
 
+      # Phase 0 item 4. `xcodebuild` exits 0 with any number of warnings, so
+      # until now "builds with no warnings" was unmeasured — the diagnostics were
+      # printed into a 5,000-line log nobody reads and the job went green.
+      #
+      # This runs before the test step on purpose. It is a property of the
+      # compile that has already happened, so there is nothing to gain by
+      # spending 25 minutes on the simulator first, and a red build log is the
+      # thing to fix either way.
+      #
+      # Passing `-warnings-as-errors` to xcodebuild was the other option and was
+      # rejected: command-line build settings apply to every target in the
+      # synthesised project, including `GoogleSignIn-iOS`, so a warning in a
+      # dependency this repo does not control would fail the build with no fix
+      # available. `.unsafeFlags` in Package.swift scopes correctly but makes the
+      # package unusable as a dependency of any other package. Reading the log
+      # scopes to this checkout exactly and costs nothing at build time.
+      - name: Assert the build emitted no warnings
+        run: python3 .github/scripts/assert-no-warnings.py build.log "$GITHUB_WORKSPACE"
+
       # `-test-timeouts-enabled` makes a test that never returns fail by name
       # instead of wedging the runner. Without it the first hang costs the full
       # job timeout and reports as "cancelled", which says nothing about which

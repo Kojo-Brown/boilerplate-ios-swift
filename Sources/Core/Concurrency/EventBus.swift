@@ -36,7 +36,9 @@ final class EventBus: @unchecked Sendable {
             lock.withLock { continuations[id] = continuation }
             continuation.onTermination = { [weak self] _ in
                 guard let self else { return }
-                lock.withLock { continuations.removeValue(forKey: id) }
+                // `removeValue` returns the entry it removed, which makes
+                // `withLock` generic result non-Void; discard it explicitly.
+                lock.withLock { _ = continuations.removeValue(forKey: id) }
             }
         }
     }
