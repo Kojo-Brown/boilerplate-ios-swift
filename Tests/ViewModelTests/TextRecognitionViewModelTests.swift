@@ -76,8 +76,8 @@ struct TextRecognitionViewModelTests {
     }
 
     @Test func recognizedTextBlockStoresText() {
-        let block = RecognizedTextBlock(text: "Hello MLKit", normalizedFrame: .zero, confidence: 0.95)
-        #expect(block.text == "Hello MLKit")
+        let block = RecognizedTextBlock(text: "Hello Vision", normalizedFrame: .zero, confidence: 0.95)
+        #expect(block.text == "Hello Vision")
         #expect(block.confidence == 0.95)
     }
 

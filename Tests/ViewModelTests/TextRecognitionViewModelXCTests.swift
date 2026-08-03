@@ -4,8 +4,8 @@ import XCTest
 
 /// XCTest suite for `TextRecognitionViewModel` with `@MainActor` isolation.
 ///
-/// `MockTextRecognitionService` is injected so tests do not require MLKit or camera
-/// hardware. Methods exercising the full camera + MLKit pipeline belong in
+/// `MockTextRecognitionService` is injected so tests do not require Vision or camera
+/// hardware. Methods exercising the full camera + Vision pipeline belong in
 /// integration tests; this suite verifies observable state-machine transitions.
 @MainActor
 final class TextRecognitionViewModelXCTests: XCTestCase {
@@ -128,8 +128,8 @@ final class TextRecognitionViewModelXCTests: XCTestCase {
     }
 
     func testRecognizedTextBlockStoresText() {
-        let block = RecognizedTextBlock(text: "Hello MLKit", normalizedFrame: .zero)
-        XCTAssertEqual(block.text, "Hello MLKit")
+        let block = RecognizedTextBlock(text: "Hello Vision", normalizedFrame: .zero)
+        XCTAssertEqual(block.text, "Hello Vision")
     }
 
     func testRecognizedTextBlockStoresCustomConfidence() {

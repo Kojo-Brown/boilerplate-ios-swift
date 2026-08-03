@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Full-screen camera view with live MLKit text recognition overlay.
+/// Full-screen camera view with live Vision text recognition overlay.
 ///
 /// Shows the camera feed, draws bounding boxes over each recognized text block,
 /// and displays the full recognized string in a scrollable panel at the bottom.
