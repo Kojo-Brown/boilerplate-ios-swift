@@ -5,32 +5,41 @@ import SwiftData
 
 // MARK: - SwiftDataUserPersistenceService integration tests
 
-/// Serialized deliberately, and it is the only suite in this target that is.
+/// The container is held for the lifetime of each test, and that is the point.
 ///
-/// Swift Testing runs tests in parallel by default. Every test here builds its own
-/// in-memory `ModelContainer` over the same `Schema([UserEntity.self])`, so running
-/// them concurrently means several containers for one schema alive at once. SwiftData
-/// does not survive that: `context.fetch` traps (`EXC_BREAKPOINT` three frames inside
-/// SwiftData) with no predicate and no sort involved, and because a trap is not a
-/// throw it kills the whole test process rather than one test.
+/// `SwiftDataUserPersistenceService` stores only a `ModelContext`, and a context does
+/// not keep its `ModelContainer` alive — the container owns the context, not the other
+/// way round. This suite used to build the container inside a helper and return only
+/// `container.mainContext`, so the container was deallocated the moment the helper
+/// returned and every test ran against an orphaned context. SwiftData reports that by
+/// trapping (`EXC_BREAKPOINT`, no `asi` message) rather than throwing, which kills the
+/// whole test process instead of one test.
 ///
-/// `.serialized` removes the concurrency without weakening anything — every test keeps
-/// its own container, so they stay isolated from each other, they just no longer
-/// overlap. The alternative, one shared container for the suite, would trade this for
-/// tests that leak saved rows into each other.
+/// That is why *every* operation trapped — `fetch` and `insert` alike, at different
+/// addresses — and why only this suite ever crashed: it is the only one that builds a
+/// container. Holding it in a stored property fixes the lifetime. Swift Testing makes
+/// a fresh instance of the suite for each test, so this is still one container per
+/// test and the isolation between tests is unchanged.
+///
+/// `.serialized` is retained for now but is **not** known to be needed: it was added
+/// on the theory that concurrent containers were the cause, and it did not stop the
+/// crash. Removing it is the next thing to try once this suite is green — one variable
+/// at a time, since CI is the only oracle here.
 @Suite(.serialized)
 @MainActor
 struct UserPersistenceTests {
 
-    private func makeService() throws -> SwiftDataUserPersistenceService {
-        let container = try PersistenceController.makeInMemoryContainer()
-        return SwiftDataUserPersistenceService(context: container.mainContext)
+    private let container: ModelContainer
+    private let service: SwiftDataUserPersistenceService
+
+    init() throws {
+        container = try PersistenceController.makeInMemoryContainer()
+        service = SwiftDataUserPersistenceService(context: container.mainContext)
     }
 
     // MARK: - save / fetchCurrentUser
 
     @Test func saveAndFetchReturnsUser() throws {
-        let service = try makeService()
         let user = User(email: "save@test.com", name: "Save Test")
         try service.save(user: user)
         let fetched = try service.fetchCurrentUser()
@@ -40,14 +49,12 @@ struct UserPersistenceTests {
     }
 
     @Test func fetchCurrentUserReturnsNilWhenEmpty() throws {
-        let service = try makeService()
         #expect(try service.fetchCurrentUser() == nil)
     }
 
     // MARK: - update
 
     @Test func updateChangesName() throws {
-        let service = try makeService()
         let user = User(email: "update@test.com", name: "Before")
         try service.save(user: user)
         let modified = User(id: user.id, email: user.email, name: "After")
@@ -57,7 +64,6 @@ struct UserPersistenceTests {
     }
 
     @Test func updateThrowsForMissingUser() throws {
-        let service = try makeService()
         let ghost = User(email: "ghost@test.com", name: "Ghost")
         var caught: PersistenceError?
         do {
@@ -71,7 +77,6 @@ struct UserPersistenceTests {
     // MARK: - delete
 
     @Test func deleteRemovesUser() throws {
-        let service = try makeService()
         let user = User(email: "delete@test.com", name: "Delete Me")
         try service.save(user: user)
         try service.delete(userId: user.id)
@@ -79,7 +84,6 @@ struct UserPersistenceTests {
     }
 
     @Test func deleteThrowsForMissingUser() throws {
-        let service = try makeService()
         var caught: PersistenceError?
         do {
             try service.delete(userId: UUID())
@@ -92,7 +96,6 @@ struct UserPersistenceTests {
     // MARK: - deleteAll
 
     @Test func deleteAllClearsAllUsers() throws {
-        let service = try makeService()
         try service.save(user: User(email: "a@test.com", name: "A"))
         try service.save(user: User(email: "b@test.com", name: "B"))
         try service.deleteAll()
