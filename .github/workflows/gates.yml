@@ -185,7 +185,7 @@ jobs:
           for log in build.log test.log; do
             [ -f "$log" ] || continue
             echo "::group::$log — errors and failures"
-            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]' "$log" \
+            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]|^ld: |Undefined symbol|building for .* but linking|does not contain|missing architecture' "$log" \
               | grep -v '^[[:space:]]*/Applications/Xcode' \
               | sort -u \
               || echo "(no error lines matched; see the uploaded $log)"
