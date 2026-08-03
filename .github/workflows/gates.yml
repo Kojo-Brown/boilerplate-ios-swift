@@ -151,30 +151,41 @@ jobs:
       # a dependency. Selecting the x86_64 simulator uses the slice Google actually
       # publishes. The alternative is dropping ML Kit for Apple's Vision framework,
       # which is a product decision and not this item's to make.
-      # -quiet so the log carries diagnostics rather than a full echo of every
-      # clang and swiftc invocation. Without it a failing build buries its own
-      # error lines under thousands of lines of command text.
+      # -quiet, plus redirecting to a file and grepping on failure. xcodebuild
+      # echoes every failing clang/swiftc invocation in full — single lines of
+      # several thousand characters — which buried the actual error text so
+      # deeply that the first failures were unreadable from the job log.
       - name: Build (iOS Simulator)
         run: |
-          set -o pipefail
-          xcodebuild build-for-testing \
+          set -uo pipefail
+          if ! xcodebuild build-for-testing \
             -scheme "$SCHEME" \
             -destination "platform=iOS Simulator,arch=x86_64,id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
             -quiet \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1; then
+            echo "::group::Diagnostics"
+            grep -E "error:|warning:|\*\* .+ \*\*" build.log || tail -40 build.log
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Run the XCTest suite
         run: |
-          set -o pipefail
-          xcodebuild test-without-building \
+          set -uo pipefail
+          if ! xcodebuild test-without-building \
             -scheme "$SCHEME" \
             -destination "platform=iOS Simulator,arch=x86_64,id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
             -quiet \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO > test.log 2>&1; then
+            echo "::group::Failures"
+            grep -E "error:|failed|XCTAssert|\*\* .+ \*\*" test.log || tail -60 test.log
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Test result summary
         if: always()

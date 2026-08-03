@@ -73,8 +73,12 @@ final class LiveTextRecognitionService: TextRecognizing, @unchecked Sendable {
         let imageSize = imageSize(from: buffer)
         let blocks = text.blocks.map { block -> RecognizedTextBlock in
             let normalized = normalize(rect: block.frame, imageSize: imageSize)
-            let confidence = block.lines.first?.elements.first?.confidence ?? 1.0
-            return RecognizedTextBlock(text: block.text, normalizedFrame: normalized, confidence: confidence)
+            // ML Kit for iOS exposes no per-element confidence: `TextElement` has
+            // `text`, `frame`, `cornerPoints` and `recognizedLanguages` and nothing
+            // else, so the previous `elements.first?.confidence` did not compile.
+            // Blocks keep `RecognizedTextBlock`'s 1.0 default rather than carry a
+            // number invented here — a fabricated score is worse than no score.
+            return RecognizedTextBlock(text: block.text, normalizedFrame: normalized)
         }
         return RecognitionResult(fullText: text.text, blocks: blocks)
     }

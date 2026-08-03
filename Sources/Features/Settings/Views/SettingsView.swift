@@ -38,7 +38,11 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func appearancePicker(selection: Binding<AppColorScheme>) -> some View {
-        ForEach(AppColorScheme.allCases) { scheme in
+        // `id:` is explicit on purpose. Without it the compiler resolved this to
+        // SwiftUI's `ForEach(_ data: Binding<C>, ...)` overload and typed `scheme`
+        // as `Binding<C.Element>`, which is what "cannot assign value of type
+        // 'Binding<C.Element>' to type 'AppColorScheme'" was reporting.
+        ForEach(AppColorScheme.allCases, id: \.self) { scheme in
             HStack {
                 Label(scheme.label, systemImage: scheme.systemImage)
                 Spacer()
