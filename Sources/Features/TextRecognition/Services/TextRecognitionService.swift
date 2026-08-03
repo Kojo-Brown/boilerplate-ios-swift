@@ -32,7 +32,16 @@ protocol TextRecognizing: Sendable {
 /// `TextRecognizer` is thread-safe; one instance is created at init and reused.
 /// Block frames from the image are normalized to 0–1 before storage so the UI
 /// can overlay them on any preview layer size without knowing the original resolution.
-final class LiveTextRecognitionService: TextRecognizing {
+///
+/// `@unchecked Sendable` because MLKit is not audited for Swift concurrency:
+/// `MLKTextRecognizer` is an Objective-C class with no `Sendable` conformance,
+/// so holding one makes this type fail the checked conformance that
+/// `TextRecognizing` requires. Google documents `TextRecognizer` as thread-safe,
+/// and the single instance here is created at init and never reassigned, so the
+/// unchecked conformance is describing a real invariant rather than waiving one.
+/// `@preconcurrency import` would also silence it, but that downgrades *every*
+/// MLKit sendability error in this file, not just this one.
+final class LiveTextRecognitionService: TextRecognizing, @unchecked Sendable {
     private let recognizer: TextRecognizer
 
     init() {

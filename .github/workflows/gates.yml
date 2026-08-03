@@ -140,6 +140,17 @@ jobs:
         if: failure()
         run: xcrun simctl list devices available
 
+      # The destination pins arch=x86_64, and that is load-bearing rather than
+      # incidental. macos-15 runners are Apple Silicon, so this simulator resolves
+      # to two destinations — arm64 and x86_64 — and xcodebuild picks arm64 first.
+      # ML Kit ships no arm64 simulator slice: every one of its xcframeworks
+      # advertises exactly `ios-arm64` (device) and `ios-x86_64-simulator`, which
+      # is why the build emitted "missing architecture(s) required by this target
+      # (arm64)" for MLKitTextRecognition, MLKitVision, MLImage and MLKitCommon.
+      # Linking the test bundle for arm64 therefore cannot succeed while ML Kit is
+      # a dependency. Selecting the x86_64 simulator uses the slice Google actually
+      # publishes. The alternative is dropping ML Kit for Apple's Vision framework,
+      # which is a product decision and not this item's to make.
       # -quiet so the log carries diagnostics rather than a full echo of every
       # clang and swiftc invocation. Without it a failing build buries its own
       # error lines under thousands of lines of command text.
@@ -148,7 +159,7 @@ jobs:
           set -o pipefail
           xcodebuild build-for-testing \
             -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" \
+            -destination "platform=iOS Simulator,arch=x86_64,id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
             -quiet \
             CODE_SIGNING_ALLOWED=NO
@@ -158,7 +169,7 @@ jobs:
           set -o pipefail
           xcodebuild test-without-building \
             -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" \
+            -destination "platform=iOS Simulator,arch=x86_64,id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \

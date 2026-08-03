@@ -27,6 +27,30 @@ struct AppTextField: View {
 
     @FocusState private var isFocused: Bool
 
+    /// The label is the first argument and unlabelled, matching every call site
+    /// in this repo and the usage in the doc comment above. Without this
+    /// initialiser only the synthesised memberwise one exists, which spells the
+    /// first argument `label:` — so none of those 20 call sites compiled.
+    init(
+        _ label: String,
+        text: Binding<String>,
+        isSecure: Bool = false,
+        keyboardType: UIKeyboardType = .default,
+        textContentType: UITextContentType? = nil,
+        autocapitalization: TextInputAutocapitalization = .sentences,
+        autocorrectionDisabled: Bool = false,
+        errorMessage: String? = nil
+    ) {
+        self.label = label
+        _text = text
+        self.isSecure = isSecure
+        self.keyboardType = keyboardType
+        self.textContentType = textContentType
+        self.autocapitalization = autocapitalization
+        self.autocorrectionDisabled = autocorrectionDisabled
+        self.errorMessage = errorMessage
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)

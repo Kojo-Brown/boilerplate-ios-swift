@@ -78,7 +78,11 @@ struct LiveAuthService: AuthServiceProtocol {
 
 // MARK: - Mock for previews & tests
 
-final class MockAuthService: AuthServiceProtocol {
+/// `@unchecked Sendable` for the same reason as `MockAPIClient` and
+/// `MockBiometricAuthService`: `AuthServiceProtocol` requires `Sendable`, and a
+/// test double has to stay configurable between `let` bindings. Callers set
+/// `shouldSucceed`/`delay` during arrange, before any concurrent use.
+final class MockAuthService: AuthServiceProtocol, @unchecked Sendable {
     var shouldSucceed = true
     var delay: Duration = .milliseconds(100)
 
