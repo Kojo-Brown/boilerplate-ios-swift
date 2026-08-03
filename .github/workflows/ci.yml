@@ -1,19 +1,40 @@
-name: Gates
+name: CI
 
-# Phase 0 item 2: the build, SwiftLint (strict) and the test suite.
+# Phase 0 item 3: `workflow-templates/ios-ci.yml` promoted into `.github/`, with
+# `gates.yml` folded in. There is one CI workflow now, not a runnable one beside
+# a template pretending to be one.
 #
-# CLAUDE.md asks for these to be run locally. They cannot be: the scheduled
-# agent runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do not exist
-# and Xcode cannot be installed. This workflow is therefore the gate itself, not
-# a copy of a local run — the same conclusion `dependency-resolution.yml` reached
-# for item 1.
+# The template is not preserved verbatim, because it could never have run. It
+# named `-scheme boilerplate-ios-swift`, which does not exist — this is an SPM
+# package, and xcodebuild synthesises the scheme names. It hardcoded
+# `/Applications/Xcode_16.app`, a path the runner images do not carry. It pinned
+# `OS=18.0` on the destination, a simulator runtime that is no longer installed.
+# And its SwiftLint step printed "skipping" and exited 0 when swiftlint was
+# absent, which is a check that cannot fail. `gates.yml` had already solved all
+# four for real in item 2, so the promotion keeps those solutions and takes from
+# the template the one thing it had that `gates.yml` did not: reading the
+# coverage that the test run has been measuring and discarding.
+#
+# Two of the template's steps are deliberately dropped rather than carried over:
+#
+#   * The `.build` cache. `xcodebuild` builds into DerivedData and never reads
+#     `.build`, so the cache stored nothing the build could use. Caching
+#     DerivedData instead was considered and rejected — a warm cache lets a build
+#     pass against sources it did not compile.
+#
+#   * The Codecov upload. It carried `fail_ci_if_error: false` and no token, so
+#     it could only ever have been decorative. Coverage goes to the job summary
+#     and the artifact bundle instead, which needs no third-party service and no
+#     secret. Wiring up Codecov for real is a Phase 1 decision, not this item.
 #
 # Dependency resolution stays in its own workflow on purpose, so a package that
 # has disappeared upstream reports as a resolution failure rather than as a wall
 # of "no such module" errors here.
 #
-# Promoting `workflow-templates/ios-ci.yml` and folding this in is Phase 0 item
-# 3 and is deliberately not done here.
+# CLAUDE.md asks for these gates to be run locally. They cannot be: the scheduled
+# agent runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do not exist
+# and Xcode cannot be installed. This workflow is therefore the gate itself, not
+# a transcript of a local run.
 
 on:
   push:
@@ -189,6 +210,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee test.log
 
+      # Xcode 16 moved the .xcresult readers behind `--legacy` and made the bare
+      # form an error rather than a warning, but which point release did that
+      # varies, so try the current spelling and fall back rather than pinning to
+      # one of them. A failure to read the report is a hard failure: the
+      # template's `|| true` here meant a broken extraction printed nothing and
+      # still reported success, which is worse than not measuring at all.
+      - name: Export code coverage
+        run: |
+          if ! xcrun xccov view --report --json TestResults.xcresult > coverage.json 2> xccov.err; then
+            echo "xccov rejected the modern invocation, retrying with --legacy:"
+            cat xccov.err
+            xcrun xccov view --report --json --legacy TestResults.xcresult > coverage.json
+          fi
+          python3 .github/scripts/summarise-coverage.py coverage.json
+
       # xcodebuild buries a handful of diagnostics in thousands of lines, most of
       # it a single multi-kilobyte `swift-frontend` invocation it echoes on
       # failure. Pull the lines that actually say what broke to the end of the
@@ -250,9 +286,10 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: gates-logs-${{ github.run_number }}
+          name: ci-logs-${{ github.run_number }}
           path: |
             build.log
             test.log
+            coverage.json
             TestResults.xcresult
           retention-days: 14
