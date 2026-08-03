@@ -65,9 +65,9 @@ struct TextRecognitionViewModelTests {
     // MARK: - RecognizedTextBlock model
 
     @Test func recognizedTextBlockHasUniqueIDs() {
-        let a = RecognizedTextBlock(text: "A", normalizedFrame: .zero)
-        let b = RecognizedTextBlock(text: "B", normalizedFrame: .zero)
-        #expect(a.id != b.id)
+        let first = RecognizedTextBlock(text: "A", normalizedFrame: .zero)
+        let second = RecognizedTextBlock(text: "B", normalizedFrame: .zero)
+        #expect(first.id != second.id)
     }
 
     @Test func recognizedTextBlockDefaultConfidenceIsOne() {

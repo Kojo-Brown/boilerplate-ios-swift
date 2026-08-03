@@ -60,8 +60,18 @@ jobs:
       # specifies. `lint` (not `analyze`) is correct here: the rule set in
       # .swiftlint.yml deliberately contains no analyzer rules, so no compiler
       # log is needed and lint can run without waiting on the build job.
+      # The github-actions-logging reporter puts file and line into the PR
+      # annotations but not into the plain job log, which makes a failed run
+      # unreadable from the log alone. On failure, re-run with the xcode reporter
+      # so the log carries `path:line:col` too. Linting this package takes ~3s,
+      # so the second pass is cheaper than a round trip to find out where.
       - name: SwiftLint --strict
-        run: swiftlint lint --strict --no-cache --reporter github-actions-logging
+        run: |
+          if ! swiftlint lint --strict --no-cache --reporter github-actions-logging; then
+            echo "--- violations with file and line ---"
+            swiftlint lint --strict --no-cache --reporter xcode || true
+            exit 1
+          fi
 
   build-and-test:
     name: Build & Test (iOS Simulator)
@@ -73,7 +83,10 @@ jobs:
     timeout-minutes: 60
 
     env:
-      SCHEME: BoilerplateiOSSwift
+      # The scheme Xcode derives for a Package.swift is named after the *package*
+      # (`name:` in the manifest), not after the library product. `xcodebuild -list`
+      # on this package reports exactly one scheme, and this is it.
+      SCHEME: boilerplate-ios-swift
       SIMULATOR_NAME: iPhone 16
 
     steps:

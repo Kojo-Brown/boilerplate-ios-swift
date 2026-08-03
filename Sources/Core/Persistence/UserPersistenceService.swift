@@ -96,9 +96,10 @@ final class MockUserPersistenceService: UserPersistenceService {
     func fetchCurrentUser() throws -> User? {
         fetchCallCount += 1
         if shouldThrow { throw stubbedError }
+        // `max(by:)` rather than `sorted(by:).first` — same newest-first result
+        // without ordering the whole collection to read one element.
         return storage.values
-            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
-            .first
+            .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
     func update(user: User) throws {

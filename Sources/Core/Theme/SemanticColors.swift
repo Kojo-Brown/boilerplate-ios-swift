@@ -83,13 +83,13 @@ struct AppColors {
     /// Semantic success green — brighter in dark mode.
     static let success = Color(
         light: Color(red: 0.13, green: 0.69, blue: 0.40),
-        dark:  Color(red: 0.24, green: 0.84, blue: 0.55)
+        dark: Color(red: 0.24, green: 0.84, blue: 0.55)
     )
 
     /// Semantic warning amber — brighter in dark mode.
     static let warning = Color(
         light: Color(red: 0.95, green: 0.62, blue: 0.07),
-        dark:  Color(red: 1.00, green: 0.75, blue: 0.20)
+        dark: Color(red: 1.00, green: 0.75, blue: 0.20)
     )
 
     /// Semantic error red — matches `.red` but as a named token.
@@ -126,16 +126,16 @@ struct AppColors {
 private var colorGrid: some View {
     ScrollView {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: 12) {
-            swatch("Surface",            AppColors.surface)
-            swatch("Secondary Bg",       AppColors.secondaryBackground)
-            swatch("Elevated Surface",   AppColors.elevatedSurface)
-            swatch("Label",              AppColors.label)
-            swatch("Secondary Label",    AppColors.secondaryLabel)
-            swatch("Placeholder",        AppColors.placeholderLabel)
-            swatch("Accent",             AppColors.accent)
-            swatch("Success",            AppColors.success)
-            swatch("Warning",            AppColors.warning)
-            swatch("Destructive",        AppColors.destructive)
+            swatch("Surface", AppColors.surface)
+            swatch("Secondary Bg", AppColors.secondaryBackground)
+            swatch("Elevated Surface", AppColors.elevatedSurface)
+            swatch("Label", AppColors.label)
+            swatch("Secondary Label", AppColors.secondaryLabel)
+            swatch("Placeholder", AppColors.placeholderLabel)
+            swatch("Accent", AppColors.accent)
+            swatch("Success", AppColors.success)
+            swatch("Warning", AppColors.warning)
+            swatch("Destructive", AppColors.destructive)
         }
         .padding()
     }

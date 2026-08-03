@@ -92,13 +92,13 @@ final class BarcodeScannerViewModelXCTests: XCTestCase {
     }
 
     func testScanResultIsNotEmptyWithBarcodes() {
-        let barcode = DetectedBarcode(payload: "https://example.com", symbology: .qr, normalizedFrame: .zero)
+        let barcode = DetectedBarcode(payload: "https://example.com", symbology: .qrCode, normalizedFrame: .zero)
         let result = ScanResult(barcodes: [barcode])
         XCTAssertFalse(result.isEmpty)
     }
 
     func testScanResultPrimaryBarcodeIsFirstElement() {
-        let first = DetectedBarcode(payload: "first", symbology: .qr, normalizedFrame: .zero)
+        let first = DetectedBarcode(payload: "first", symbology: .qrCode, normalizedFrame: .zero)
         let second = DetectedBarcode(payload: "second", symbology: .code128, normalizedFrame: .zero)
         let result = ScanResult(barcodes: [first, second])
         XCTAssertEqual(result.primaryBarcode?.payload, "first")
@@ -112,9 +112,9 @@ final class BarcodeScannerViewModelXCTests: XCTestCase {
     // MARK: - DetectedBarcode model
 
     func testDetectedBarcodeHasUniqueIDs() {
-        let a = DetectedBarcode(payload: "A", symbology: .qr, normalizedFrame: .zero)
-        let b = DetectedBarcode(payload: "B", symbology: .qr, normalizedFrame: .zero)
-        XCTAssertNotEqual(a.id, b.id)
+        let first = DetectedBarcode(payload: "A", symbology: .qrCode, normalizedFrame: .zero)
+        let second = DetectedBarcode(payload: "B", symbology: .qrCode, normalizedFrame: .zero)
+        XCTAssertNotEqual(first.id, second.id)
     }
 
     func testDetectedBarcodeStoresPayload() {
@@ -129,14 +129,14 @@ final class BarcodeScannerViewModelXCTests: XCTestCase {
 
     func testDetectedBarcodeStoresNormalizedFrame() {
         let frame = CGRect(x: 0.1, y: 0.2, width: 0.4, height: 0.3)
-        let barcode = DetectedBarcode(payload: "test", symbology: .qr, normalizedFrame: frame)
+        let barcode = DetectedBarcode(payload: "test", symbology: .qrCode, normalizedFrame: frame)
         XCTAssertEqual(barcode.normalizedFrame, frame)
     }
 
     // MARK: - BarcodeSymbology raw values
 
     func testQRCodeRawValue() {
-        XCTAssertEqual(BarcodeSymbology.qr.rawValue, "QR Code")
+        XCTAssertEqual(BarcodeSymbology.qrCode.rawValue, "QR Code")
     }
 
     func testEAN13RawValue() {

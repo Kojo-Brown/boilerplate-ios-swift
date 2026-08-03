@@ -23,8 +23,8 @@ struct AppColorSchemeTests {
 
     @Test func idMatchesRawValue() {
         #expect(AppColorScheme.system.id == "system")
-        #expect(AppColorScheme.light.id  == "light")
-        #expect(AppColorScheme.dark.id   == "dark")
+        #expect(AppColorScheme.light.id == "light")
+        #expect(AppColorScheme.dark.id == "dark")
     }
 
     // MARK: - Labels

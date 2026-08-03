@@ -61,9 +61,11 @@ struct KeychainWrapper: KeychainStoring {
     // MARK: - Write
 
     func set(_ value: String, forKey key: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw KeychainError.unexpectedData
-        }
+        // `Data(_:)` over a String's UTF-8 view cannot fail — a Swift String is
+        // always valid Unicode — so there is no error branch to take here. The
+        // read path still throws `.unexpectedData`, where malformed bytes are
+        // genuinely possible.
+        let data = Data(value.utf8)
 
         let attributes: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,

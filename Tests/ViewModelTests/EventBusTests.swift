@@ -36,11 +36,11 @@ struct EventBusTests {
         try await Task.sleep(for: .milliseconds(10))
         bus.emit(.itemRefreshRequested)
 
-        let r1 = await task1.value
-        let r2 = await task2.value
+        let firstResult = await task1.value
+        let secondResult = await task2.value
 
-        #expect(r1 == .itemRefreshRequested)
-        #expect(r2 == .itemRefreshRequested)
+        #expect(firstResult == .itemRefreshRequested)
+        #expect(secondResult == .itemRefreshRequested)
     }
 
     @Test("associated values are preserved through the bus")

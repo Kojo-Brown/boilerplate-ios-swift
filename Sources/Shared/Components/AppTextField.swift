@@ -20,10 +20,10 @@ struct AppTextField: View {
     @Binding var text: String
     var isSecure: Bool = false
     var keyboardType: UIKeyboardType = .default
-    var textContentType: UITextContentType? = nil
+    var textContentType: UITextContentType?
     var autocapitalization: TextInputAutocapitalization = .sentences
     var autocorrectionDisabled: Bool = false
-    var errorMessage: String? = nil
+    var errorMessage: String?
 
     @FocusState private var isFocused: Bool
 

@@ -80,20 +80,30 @@ final class LiveBarcodeScannerService: BarcodeScanning {
         )
     }
 
+    /// Vision symbology → domain symbology. A table rather than a `switch`
+    /// because the mapping is pure data: every entry is a one-to-one rename with
+    /// no condition attached, and expressing it as control flow gave the function
+    /// a cyclomatic complexity of 11 for what is a dictionary lookup.
+    ///
+    /// The three Code 39 variants collapse to one case deliberately — callers
+    /// care that it is Code 39, not which checksum flavour Vision matched.
+    private static let symbologyMap: [VNBarcodeSymbology: BarcodeSymbology] = [
+        .qr: .qrCode,
+        .aztec: .aztec,
+        .code128: .code128,
+        .code39: .code39,
+        .code39Checksum: .code39,
+        .code39FullASCII: .code39,
+        .ean13: .ean13,
+        .ean8: .ean8,
+        .dataMatrix: .dataMatrix,
+        .pdf417: .pdf417,
+        .upce: .upce,
+        .itf14: .itf14,
+    ]
+
     private static func mapSymbology(_ symbology: VNBarcodeSymbology) -> BarcodeSymbology {
-        switch symbology {
-        case .qr: return .qr
-        case .aztec: return .aztec
-        case .code128: return .code128
-        case .code39, .code39Checksum, .code39FullASCII: return .code39
-        case .ean13: return .ean13
-        case .ean8: return .ean8
-        case .dataMatrix: return .dataMatrix
-        case .pdf417: return .pdf417
-        case .upce: return .upce
-        case .itf14: return .itf14
-        default: return .unknown
-        }
+        symbologyMap[symbology] ?? .unknown
     }
 }
 
@@ -104,7 +114,7 @@ struct MockBarcodeScannerService: BarcodeScanning {
     var stubbedResult: ScanResult = ScanResult(barcodes: [
         DetectedBarcode(
             payload: "https://example.com",
-            symbology: .qr,
+            symbology: .qrCode,
             normalizedFrame: CGRect(x: 0.2, y: 0.25, width: 0.6, height: 0.5)
         ),
     ])

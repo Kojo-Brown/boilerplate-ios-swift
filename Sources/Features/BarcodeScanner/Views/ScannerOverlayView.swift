@@ -67,23 +67,23 @@ struct ScannerOverlayView: View {
 
     private func cornerBrackets(at rect: CGRect) -> some View {
         let color = Color.white
-        let r: CGFloat = 8
+        let radius: CGFloat = 8
 
         return ZStack {
             // Top-left
-            cornerPath(origin: CGPoint(x: rect.minX, y: rect.minY), quadrant: .topLeft, r: r)
+            cornerPath(origin: CGPoint(x: rect.minX, y: rect.minY), quadrant: .topLeft, radius: radius)
                 .stroke(color, style: StrokeStyle(lineWidth: cornerWidth, lineCap: .round))
 
             // Top-right
-            cornerPath(origin: CGPoint(x: rect.maxX, y: rect.minY), quadrant: .topRight, r: r)
+            cornerPath(origin: CGPoint(x: rect.maxX, y: rect.minY), quadrant: .topRight, radius: radius)
                 .stroke(color, style: StrokeStyle(lineWidth: cornerWidth, lineCap: .round))
 
             // Bottom-left
-            cornerPath(origin: CGPoint(x: rect.minX, y: rect.maxY), quadrant: .bottomLeft, r: r)
+            cornerPath(origin: CGPoint(x: rect.minX, y: rect.maxY), quadrant: .bottomLeft, radius: radius)
                 .stroke(color, style: StrokeStyle(lineWidth: cornerWidth, lineCap: .round))
 
             // Bottom-right
-            cornerPath(origin: CGPoint(x: rect.maxX, y: rect.maxY), quadrant: .bottomRight, r: r)
+            cornerPath(origin: CGPoint(x: rect.maxX, y: rect.maxY), quadrant: .bottomRight, radius: radius)
                 .stroke(color, style: StrokeStyle(lineWidth: cornerWidth, lineCap: .round))
         }
     }
@@ -116,29 +116,29 @@ struct ScannerOverlayView: View {
         case topLeft, topRight, bottomLeft, bottomRight
     }
 
-    private func cornerPath(origin: CGPoint, quadrant: CornerQuadrant, r: CGFloat) -> Path {
+    private func cornerPath(origin: CGPoint, quadrant: CornerQuadrant, radius: CGFloat) -> Path {
         Path { path in
             let len = cornerLength
             switch quadrant {
             case .topLeft:
                 path.move(to: CGPoint(x: origin.x, y: origin.y + len))
-                path.addLine(to: CGPoint(x: origin.x, y: origin.y + r))
-                path.addQuadCurve(to: CGPoint(x: origin.x + r, y: origin.y), control: origin)
+                path.addLine(to: CGPoint(x: origin.x, y: origin.y + radius))
+                path.addQuadCurve(to: CGPoint(x: origin.x + radius, y: origin.y), control: origin)
                 path.addLine(to: CGPoint(x: origin.x + len, y: origin.y))
             case .topRight:
                 path.move(to: CGPoint(x: origin.x - len, y: origin.y))
-                path.addLine(to: CGPoint(x: origin.x - r, y: origin.y))
-                path.addQuadCurve(to: CGPoint(x: origin.x, y: origin.y + r), control: origin)
+                path.addLine(to: CGPoint(x: origin.x - radius, y: origin.y))
+                path.addQuadCurve(to: CGPoint(x: origin.x, y: origin.y + radius), control: origin)
                 path.addLine(to: CGPoint(x: origin.x, y: origin.y + len))
             case .bottomLeft:
                 path.move(to: CGPoint(x: origin.x, y: origin.y - len))
-                path.addLine(to: CGPoint(x: origin.x, y: origin.y - r))
-                path.addQuadCurve(to: CGPoint(x: origin.x + r, y: origin.y), control: origin)
+                path.addLine(to: CGPoint(x: origin.x, y: origin.y - radius))
+                path.addQuadCurve(to: CGPoint(x: origin.x + radius, y: origin.y), control: origin)
                 path.addLine(to: CGPoint(x: origin.x + len, y: origin.y))
             case .bottomRight:
                 path.move(to: CGPoint(x: origin.x - len, y: origin.y))
-                path.addLine(to: CGPoint(x: origin.x - r, y: origin.y))
-                path.addQuadCurve(to: CGPoint(x: origin.x, y: origin.y - r), control: origin)
+                path.addLine(to: CGPoint(x: origin.x - radius, y: origin.y))
+                path.addQuadCurve(to: CGPoint(x: origin.x, y: origin.y - radius), control: origin)
                 path.addLine(to: CGPoint(x: origin.x, y: origin.y - len))
             }
         }

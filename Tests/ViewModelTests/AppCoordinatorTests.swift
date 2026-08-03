@@ -17,14 +17,14 @@ struct AppCoordinatorTests {
         let coordinator = AppCoordinator()
         coordinator.push(.settings)
         coordinator.pop()
-        #expect(coordinator.path.count == 0)
+        #expect(coordinator.path.isEmpty)
     }
 
     @Test("pop is a no-op on an empty path")
     func popOnEmptyPathIsNoOp() {
         let coordinator = AppCoordinator()
         coordinator.pop()
-        #expect(coordinator.path.count == 0)
+        #expect(coordinator.path.isEmpty)
     }
 
     @Test("popToRoot clears all routes")
@@ -33,7 +33,7 @@ struct AppCoordinatorTests {
         coordinator.push(.settings)
         coordinator.push(.itemDetail(id: UUID(), title: "Test"))
         coordinator.popToRoot()
-        #expect(coordinator.path.count == 0)
+        #expect(coordinator.path.isEmpty)
     }
 
     @Test("replace rebuilds the stack with new routes")

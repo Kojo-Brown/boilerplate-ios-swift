@@ -23,8 +23,8 @@ struct PollingStreamTests {
 
         let collectTask = Task<[UUID], Never> {
             var values: [UUID] = []
-            for await v in stream {
-                values.append(v)
+            for await value in stream {
+                values.append(value)
                 if values.count == 3 { break }
             }
             return values

@@ -132,8 +132,15 @@ struct SocialAuthErrorTests {
     }
 
     @Test func errorsCompareByCase() {
-        #expect(SocialAuthError.userCancelled == SocialAuthError.userCancelled)
-        #expect(SocialAuthError.invalidCredential == SocialAuthError.invalidCredential)
+        // Bound to separate constants on purpose: comparing a literal to itself
+        // would pass even for an `==` that ignores its arguments. These compare
+        // two independently constructed values, which is what "by case" means.
+        let cancelled: SocialAuthError = .userCancelled
+        let alsoCancelled: SocialAuthError = .userCancelled
+        let invalid: SocialAuthError = .invalidCredential
+        let alsoInvalid: SocialAuthError = .invalidCredential
+        #expect(cancelled == alsoCancelled)
+        #expect(invalid == alsoInvalid)
         #expect(SocialAuthError.invalidCredential != SocialAuthError.userCancelled)
         #expect(SocialAuthError.notConfigured != SocialAuthError.tokenExchangeFailed)
     }
