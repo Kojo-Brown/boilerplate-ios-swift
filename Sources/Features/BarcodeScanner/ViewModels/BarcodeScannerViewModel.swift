@@ -101,31 +101,57 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
     /// keeps processing so a new scan after `clearResult()` picks up the next code.
     private func beginProcessingFrames() {
         frameTask?.cancel()
-        let stream = cameraService.makeFrameStream()
+        let camera = cameraService
         let service = scannerService
 
         frameTask = Task { [weak self] in
-            var lastScannedAt: ContinuousClock.Instant?
-
-            for await buffer in stream {
-                guard !Task.isCancelled else { break }
-
-                let now = ContinuousClock.now
-                if let last = lastScannedAt, (now - last) < .seconds(0.3) { continue }
-                lastScannedAt = now
-
-                do {
-                    let result = try await service.scan(sampleBuffer: buffer)
-                    guard !Task.isCancelled else { break }
-                    if !result.isEmpty {
-                        self?.scanResult = result
-                    }
-                } catch is CancellationError {
-                    break
-                } catch {
-                    // Per-frame failures are transient; ignore them
-                }
+            for await result in Self.scanResults(camera: camera, service: service) {
+                self?.scanResult = result
             }
+        }
+    }
+
+    /// Camera frames are consumed entirely off the main actor; only a `Sendable`
+    /// `ScanResult` crosses back to it.
+    ///
+    /// This is not only what strict concurrency requires — `CMSampleBuffer` is not
+    /// `Sendable`, so iterating the frame stream from this `@MainActor` type is an
+    /// error — it is also what the throttling comment above always claimed was
+    /// happening. Consuming frames on the main actor would put every Vision call
+    /// on it.
+    ///
+    /// The frame stream is created *inside* the nonisolated task rather than
+    /// passed in, so no `CMSampleBuffer` is ever reachable from main-actor code.
+    private nonisolated static func scanResults(
+        camera: CameraService,
+        service: any BarcodeScanning
+    ) -> AsyncStream<ScanResult> {
+        AsyncStream { continuation in
+            let task = Task {
+                var lastScannedAt: ContinuousClock.Instant?
+
+                for await buffer in camera.makeFrameStream() {
+                    guard !Task.isCancelled else { break }
+
+                    let now = ContinuousClock.now
+                    if let last = lastScannedAt, (now - last) < .seconds(0.3) { continue }
+                    lastScannedAt = now
+
+                    do {
+                        let result = try await service.scan(sampleBuffer: buffer)
+                        guard !Task.isCancelled else { break }
+                        if !result.isEmpty {
+                            continuation.yield(result)
+                        }
+                    } catch is CancellationError {
+                        break
+                    } catch {
+                        // Per-frame failures are transient; ignore them
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

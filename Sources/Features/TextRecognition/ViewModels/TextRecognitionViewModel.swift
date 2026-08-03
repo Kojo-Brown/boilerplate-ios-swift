@@ -102,31 +102,57 @@ final class TextRecognitionViewModel: ViewModelProtocol {
     /// within the recognizer's throughput without overwhelming the main actor.
     private func beginProcessingFrames() {
         frameProcessingTask?.cancel()
-        let stream = cameraService.makeFrameStream()
+        let camera = cameraService
         let service = recognitionService
 
         frameProcessingTask = Task { [weak self] in
-            var lastRecognizedAt: ContinuousClock.Instant?
-
-            for await buffer in stream {
-                guard !Task.isCancelled else { break }
-
-                let now = ContinuousClock.now
-                if let last = lastRecognizedAt, (now - last) < .seconds(0.5) { continue }
-                lastRecognizedAt = now
-
-                do {
-                    let result = try await service.recognize(sampleBuffer: buffer)
-                    guard !Task.isCancelled else { break }
-                    if !result.isEmpty {
-                        self?.recognitionResult = result
-                    }
-                } catch is CancellationError {
-                    break
-                } catch {
-                    // Per-frame failures are transient; surface only persistent camera errors
-                }
+            for await result in Self.recognitionResults(camera: camera, service: service) {
+                self?.recognitionResult = result
             }
+        }
+    }
+
+    /// Camera frames are consumed entirely off the main actor; only a `Sendable`
+    /// `RecognitionResult` crosses back to it.
+    ///
+    /// This is not only what strict concurrency requires — `CMSampleBuffer` is not
+    /// `Sendable`, so iterating the frame stream from this `@MainActor` type is an
+    /// error — it is also what the throttling comment above always claimed was
+    /// happening. Consuming frames on the main actor would put every MLKit call
+    /// on it.
+    ///
+    /// The frame stream is created *inside* the nonisolated task rather than
+    /// passed in, so no `CMSampleBuffer` is ever reachable from main-actor code.
+    private nonisolated static func recognitionResults(
+        camera: CameraService,
+        service: any TextRecognizing
+    ) -> AsyncStream<RecognitionResult> {
+        AsyncStream { continuation in
+            let task = Task {
+                var lastRecognizedAt: ContinuousClock.Instant?
+
+                for await buffer in camera.makeFrameStream() {
+                    guard !Task.isCancelled else { break }
+
+                    let now = ContinuousClock.now
+                    if let last = lastRecognizedAt, (now - last) < .seconds(0.5) { continue }
+                    lastRecognizedAt = now
+
+                    do {
+                        let result = try await service.recognize(sampleBuffer: buffer)
+                        guard !Task.isCancelled else { break }
+                        if !result.isEmpty {
+                            continuation.yield(result)
+                        }
+                    } catch is CancellationError {
+                        break
+                    } catch {
+                        // Per-frame failures are transient; surface only persistent camera errors
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }
