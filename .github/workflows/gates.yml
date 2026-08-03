@@ -211,6 +211,37 @@ jobs:
             echo "::endgroup::"
           done
 
+      # When the test process dies rather than failing an assertion, xcodebuild
+      # reports every test that had not finished as "failing" and says nothing
+      # about why the process went away. The crash report does, and it is written
+      # to the host's DiagnosticReports directory — not into the .xcresult — so
+      # without this step it is discarded with the runner.
+      - name: Collect crash reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          found=0
+          for dir in ~/Library/Logs/DiagnosticReports "$HOME/Library/Logs/CoreSimulator/$SIMULATOR_UDID"; do
+            [ -d "$dir" ] || continue
+            for report in "$dir"/*.ips "$dir"/*.crash; do
+              case "$(basename "$report")" in
+                xctest*|ViewModelTests*|testmanagerd*) ;;
+                *) continue ;;
+              esac
+              found=1
+              echo "::group::$(basename "$report")"
+              # An .ips is a JSON header line followed by the payload; the
+              # exception type and the faulting thread are what identify the bug.
+              head -c 20000 "$report"
+              echo
+              echo "::endgroup::"
+            done
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No xctest crash report found — the process did not crash, or the report went elsewhere."
+            ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null || true
+          fi
+
       # Both logs, always: a red run is only useful if the compiler and test
       # output survive it.
       - name: Upload build and test logs
