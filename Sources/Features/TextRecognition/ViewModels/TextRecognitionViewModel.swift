@@ -131,7 +131,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
             let task = Task {
                 var lastRecognizedAt: ContinuousClock.Instant?
 
-                for await buffer in camera.makeFrameStream() {
+                for await frame in camera.makeFrameStream() {
                     guard !Task.isCancelled else { break }
 
                     let now = ContinuousClock.now
@@ -139,7 +139,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
                     lastRecognizedAt = now
 
                     do {
-                        let result = try await service.recognize(sampleBuffer: buffer)
+                        let result = try await service.recognize(sampleBuffer: frame.buffer)
                         guard !Task.isCancelled else { break }
                         if !result.isEmpty {
                             continuation.yield(result)

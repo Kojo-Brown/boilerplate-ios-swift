@@ -1,6 +1,25 @@
 import AVFoundation
 import CoreMedia
 
+// MARK: - Frame transport
+
+/// A `CMSampleBuffer` in transit from the capture queue to a consumer.
+///
+/// `CMSampleBuffer` is a CoreMedia reference type that Apple has not audited for
+/// Swift concurrency, so it is not `Sendable` and cannot be handed to
+/// `AsyncStream.Continuation.yield`, which takes a `sending` element. Streaming
+/// raw buffers is what produced "sending 'sampleBuffer' risks causing data races".
+///
+/// The unchecked conformance is confined to this one type and rests on a real
+/// invariant rather than a wish: `AVCaptureVideoDataOutput` hands each buffer to
+/// its delegate exactly once, this code never mutates it, and ownership passes
+/// straight to the consumer. Naming the escape hatch keeps it reviewable — a
+/// retroactive `Sendable` conformance on `CMSampleBuffer` itself would silence
+/// the same class of error everywhere in the module, including where it is real.
+struct CapturedFrame: @unchecked Sendable {
+    let buffer: CMSampleBuffer
+}
+
 // MARK: - Errors
 
 enum CameraError: Error, LocalizedError {
@@ -30,7 +49,7 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "com.boilerplate.camera.session", qos: .userInitiated)
-    private var continuation: AsyncStream<CMSampleBuffer>.Continuation?
+    private var continuation: AsyncStream<CapturedFrame>.Continuation?
 
     // MARK: - Public
 
@@ -45,9 +64,9 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     // MARK: - Frame stream
 
-    /// Returns a new `AsyncStream` that yields each captured sample buffer.
+    /// Returns a new `AsyncStream` that yields each captured frame.
     /// Frames arrive at ~30 fps; downstream consumers should throttle as needed.
-    func makeFrameStream() -> AsyncStream<CMSampleBuffer> {
+    func makeFrameStream() -> AsyncStream<CapturedFrame> {
         AsyncStream { [weak self] continuation in
             self?.sessionQueue.async { self?.continuation = continuation }
             continuation.onTermination = { @Sendable [weak self] _ in
@@ -129,6 +148,6 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from _: AVCaptureConnection
     ) {
-        continuation?.yield(sampleBuffer)
+        continuation?.yield(CapturedFrame(buffer: sampleBuffer))
     }
 }
