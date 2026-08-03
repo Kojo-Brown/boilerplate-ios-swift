@@ -31,11 +31,24 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
         try context.save()
     }
 
+    /// Returns the most recently created stored user, or `nil` when the store is empty.
+    ///
+    /// The sort is done in memory rather than by the store. `FetchDescriptor(sortBy:)`
+    /// with a `SortDescriptor` over an **optional** key path — `createdAt` is `Date?` —
+    /// traps inside SwiftData while executing the fetch (`EXC_BREAKPOINT`, taking the
+    /// whole test process with it, not just the failing test). Making `createdAt`
+    /// non-optional would fix the sort by breaking the model: the API genuinely may
+    /// omit the field.
+    ///
+    /// Sorting here is not the compromise it looks like. This store holds the signed-in
+    /// user, so the fetch is over a handful of rows at most, and `nil` has to be ordered
+    /// explicitly anyway — treating it as oldest, which the database sort could not
+    /// express. `MockUserPersistenceService` already ordered it exactly this way; the
+    /// two implementations now agree, where before only the mock was reachable.
     func fetchCurrentUser() throws -> User? {
-        let descriptor = FetchDescriptor<UserEntity>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor).first?.toDomainUser()
+        try context.fetch(FetchDescriptor<UserEntity>())
+            .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }?
+            .toDomainUser()
     }
 
     func update(user: User) throws {
