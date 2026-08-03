@@ -38,17 +38,22 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func appearancePicker(selection: Binding<AppColorScheme>) -> some View {
-        // `id:` is explicit on purpose. Without it the compiler resolved this to
-        // SwiftUI's `ForEach(_ data: Binding<C>, ...)` overload and typed `scheme`
-        // as `Binding<C.Element>`, which is what "cannot assign value of type
-        // 'Binding<C.Element>' to type 'AppColorScheme'" was reporting.
+        // `id:` is explicit because `\.self` is unambiguous, but the errors this
+        // block produced were not about `ForEach` at all: one invalid expression
+        // inside the closure made the body fail to type-check as a `View`, which
+        // knocked out every value-based `ForEach` overload and left only the
+        // `Binding<C>` one. That is why the compiler reported "cannot convert
+        // '[AppColorScheme]' to 'Binding<C>'" on this line rather than pointing at
+        // the real culprit two lines down.
         ForEach(AppColorScheme.allCases, id: \.self) { scheme in
             HStack {
                 Label(scheme.label, systemImage: scheme.systemImage)
                 Spacer()
                 if selection.wrappedValue == scheme {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.accent)
+                        // `.accent` is not a `ShapeStyle`; SwiftUI offers
+                        // `Color.accentColor` and `.tint`, not `.accent`.
+                        .foregroundStyle(Color.accentColor)
                         .fontWeight(.semibold)
                 }
             }
