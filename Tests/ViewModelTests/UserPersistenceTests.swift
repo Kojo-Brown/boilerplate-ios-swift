@@ -5,6 +5,20 @@ import SwiftData
 
 // MARK: - SwiftDataUserPersistenceService integration tests
 
+/// Serialized deliberately, and it is the only suite in this target that is.
+///
+/// Swift Testing runs tests in parallel by default. Every test here builds its own
+/// in-memory `ModelContainer` over the same `Schema([UserEntity.self])`, so running
+/// them concurrently means several containers for one schema alive at once. SwiftData
+/// does not survive that: `context.fetch` traps (`EXC_BREAKPOINT` three frames inside
+/// SwiftData) with no predicate and no sort involved, and because a trap is not a
+/// throw it kills the whole test process rather than one test.
+///
+/// `.serialized` removes the concurrency without weakening anything — every test keeps
+/// its own container, so they stay isolated from each other, they just no longer
+/// overlap. The alternative, one shared container for the suite, would trade this for
+/// tests that leak saved rows into each other.
+@Suite(.serialized)
 @MainActor
 struct UserPersistenceTests {
 
