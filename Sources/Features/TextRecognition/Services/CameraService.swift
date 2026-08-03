@@ -65,10 +65,15 @@ final class CameraService: NSObject, @unchecked Sendable {
     /// Returns a new `AsyncStream` that yields each captured frame.
     /// Frames arrive at ~30 fps; downstream consumers should throttle as needed.
     func makeFrameStream() -> AsyncStream<CapturedFrame> {
+        // Each `sessionQueue.async` body needs its own `[weak self]`. Without
+        // one it reads the enclosing closure's weak binding, and a weak capture
+        // is a mutable box — two concurrently-executing closures sharing it is
+        // the race Swift 6 diagnoses. An explicit capture list copies the weak
+        // reference into the inner closure instead of sharing the box.
         AsyncStream { [weak self] continuation in
-            self?.sessionQueue.async { self?.continuation = continuation }
+            self?.sessionQueue.async { [weak self] in self?.continuation = continuation }
             continuation.onTermination = { @Sendable [weak self] _ in
-                self?.sessionQueue.async { self?.continuation = nil }
+                self?.sessionQueue.async { [weak self] in self?.continuation = nil }
             }
         }
     }

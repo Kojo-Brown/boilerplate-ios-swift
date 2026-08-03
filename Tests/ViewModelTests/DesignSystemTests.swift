@@ -15,14 +15,20 @@ struct AppButtonTests {
 
     // MARK: - Instantiation
 
+    // `AppButton("Tap me") { ... }` resolves to the `asyncAction:` init, whose
+    // closure is `@escaping @Sendable () async -> Void` and is wrapped in a
+    // detached `Task`. This test never runs the action, so the `capturedAction`
+    // flag it used to set was written and never read — its own trailing
+    // `_ = capturedAction // silence warning` said as much. Assigning to a
+    // captured `var` from a `@Sendable` closure is a data race under Swift 6,
+    // so the dead flag is gone and the action is empty, matching the sibling
+    // cases below. No assertion is lost: nothing ever checked it.
     @Test func defaultStyleIsPrimary() {
-        var capturedAction = false
-        let sut = AppButton("Tap me") { capturedAction = true }
+        let sut = AppButton("Tap me") {}
         #expect(sut.label == "Tap me")
         #expect(sut.style == .primary)
         #expect(!sut.isLoading)
         #expect(!sut.isDisabled)
-        _ = capturedAction // silence warning
     }
 
     @Test func primaryButtonInstantiates() {
