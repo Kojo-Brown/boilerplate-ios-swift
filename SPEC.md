@@ -5,7 +5,7 @@
 ## Phase 0 — Green Baseline (blocks all feature work)
 - [x] Confirm the Xcode project resolves all Swift Package dependencies at pinned versions — the graph could never have resolved: `google-mlkit/ml-kit-ios` does not exist and neither product it was asked for is real (PR #19)
 - [x] Get build, SwiftLint (strict), and the XCTest suite passing locally on a simulator — the package had never been compiled, linked or run; ML Kit could not link on any Apple silicon simulator so text recognition moved to Apple's Vision framework, and the test process was dying on an orphaned `ModelContext` (PR #21)
-- [ ] Promote `workflow-templates/ios-ci.yml` to `.github/workflows/` and confirm it runs green on a PR
+- [x] Promote `workflow-templates/ios-ci.yml` to `.github/workflows/` and confirm it runs green on a PR — the template could never have run (invented scheme, hardcoded Xcode path, a simulator runtime that is gone, and a lint step that exited 0 when swiftlint was absent), so `gates.yml` was folded in under the template's name instead of being replaced by it; coverage is read for the first time at 44.29% overall / 26.07% for the library (PR #22)
 - [ ] Confirm the project builds under Swift 6 strict concurrency with no warnings
 
 Item 1 complete as of PR #19 (2026-08-02). `dependency-resolution.yml` resolves
@@ -62,6 +62,47 @@ did not stop the crash; removing it is a one-line experiment. And no `#Predicate
 survives in the package, because `UserEntity.id` is a `UUID` and SwiftData traps
 comparing one; making predicates usable means changing the model's identifier
 type, which is a model change and its own item.
+
+Item 3 complete as of PR #22 (2026-08-03). There is one CI workflow now:
+`.github/workflows/ci.yml`, all four checks green. "Promote" could not mean
+"copy", because the template could never have run — it named a scheme that does
+not exist (this is an SPM package; xcodebuild synthesises the names), hardcoded
+`/Applications/Xcode_16.app`, pinned `OS=18.0` on the destination, and had a
+lint step that printed "skipping" and exited 0 when swiftlint was absent. Item 2
+had already solved all four for real, so `gates.yml` was folded in under the
+template's name rather than replaced by it.
+
+The one thing the template genuinely added was coverage.
+`-enableCodeCoverage YES` had been passed to every test run since item 2 and
+nothing ever read the result. It now reports **44.29% overall — and 26.07% for
+`BoilerplateiOSSwift` itself**, the first time that number has existed. No
+threshold is enforced: there was never one to lower, and a threshold invented
+alongside the first measurement only fits whatever today happens to be. The
+library figure is low enough to be worth its own item.
+
+Two template steps were dropped rather than carried: the `.build` cache, which
+cached nothing (`xcodebuild` builds into DerivedData), and the Codecov upload,
+which had `fail_ci_if_error: false` and no token and so could only be
+decorative. The template's `|| true` on the coverage read was deliberately not
+preserved.
+
+Simulator selection was also hardened, which was not planned work. The first run
+sat several minutes in a step that took 43s on the last green run; the push that
+followed superseded it, so whether it would have completed is unknown. Either
+way the step was the only long one without a `timeout-minutes` backstop, so an
+unresponsive CoreSimulator would have held the runner for the job's full hour and
+then reported "cancelled" — naming no command and skipping the log upload that
+would have. `simctl` is now bounded by perl's alarm and retried with a service
+restart between attempts; dropping two redundant `simctl` calls took the step
+from 43s to 4s. The retry wraps only the device-list query, so no failing build
+or test can be retried into a pass.
+
+Known gaps carried into item 4: the `--legacy` `xccov` fallback has never
+executed, since the modern invocation worked. Coverage is reported, not gated.
+`workflow-templates/testflight-deploy.yml` remains an unpromoted, never-executed
+template. And CLAUDE.md's gate list still says `-scheme App`, which names nothing
+in this package — the workflow comments record it, but the file itself is
+uncorrected.
 
 ## Phase 1 — Foundation
 - [x] Swift 6 + Xcode 16 project targeting iOS 17+
