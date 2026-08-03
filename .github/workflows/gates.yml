@@ -161,7 +161,6 @@ jobs:
             -destination "id=$SIMULATOR_UDID" \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
-            -quiet \
             2>&1 | tee build.log
 
       - name: Run the test suite
