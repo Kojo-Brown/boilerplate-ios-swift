@@ -106,6 +106,14 @@ jobs:
           fi
           sudo xcode-select -s "$xcode/Contents/Developer"
 
+      # The x86_64 slice is the only simulator build ML Kit ships, and executing
+      # x86_64 code on these Apple Silicon runners needs Rosetta, which the
+      # macos-15 image does not preinstall. Without it the bundle links but every
+      # test dies on an illegal instruction — the first run to get this far
+      # reported "272 runs of 272 tests failed with Test crashed with signal ill."
+      - name: Install Rosetta
+        run: softwareupdate --install-rosetta --agree-to-license
+
       - name: Print tool versions
         run: |
           swift --version
