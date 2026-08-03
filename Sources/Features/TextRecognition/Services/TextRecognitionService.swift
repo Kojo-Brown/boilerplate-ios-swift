@@ -74,8 +74,11 @@ final class LiveTextRecognitionService: TextRecognizing, @unchecked Sendable {
         let imageSize = imageSize(from: buffer)
         let blocks = text.blocks.map { block -> RecognizedTextBlock in
             let normalized = normalize(rect: block.frame, imageSize: imageSize)
-            let confidence = block.lines.first?.elements.first?.confidence ?? 1.0
-            return RecognizedTextBlock(text: block.text, normalizedFrame: normalized, confidence: confidence)
+            // ML Kit for iOS vends no per-element confidence: `MLKTextElement` has
+            // `text`, `frame`, `cornerPoints` and `recognizedLanguages` and nothing
+            // else, unlike the Android API this line was written against. Blocks
+            // take `RecognizedTextBlock`'s default rather than an invented number.
+            return RecognizedTextBlock(text: block.text, normalizedFrame: normalized)
         }
         return RecognitionResult(fullText: text.text, blocks: blocks)
     }
