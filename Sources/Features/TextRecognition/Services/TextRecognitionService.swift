@@ -22,7 +22,7 @@ enum TextRecognitionError: Error, LocalizedError {
 
 /// Abstracts the text recognizer so tests can inject a predictable mock.
 protocol TextRecognizing: Sendable {
-    func recognize(sampleBuffer: CMSampleBuffer) async throws -> RecognitionResult
+    func recognize(frame: CapturedFrame) async throws -> RecognitionResult
 }
 
 // MARK: - Live implementation
@@ -48,7 +48,8 @@ final class LiveTextRecognitionService: TextRecognizing, @unchecked Sendable {
         recognizer = TextRecognizer.textRecognizer(options: TextRecognizerOptions())
     }
 
-    func recognize(sampleBuffer: CMSampleBuffer) async throws -> RecognitionResult {
+    func recognize(frame: CapturedFrame) async throws -> RecognitionResult {
+        let sampleBuffer = frame.buffer
         let visionImage = VisionImage(buffer: sampleBuffer)
         visionImage.orientation = Self.imageOrientation(from: sampleBuffer)
 
@@ -119,7 +120,7 @@ struct MockTextRecognitionService: TextRecognizing {
     )
     var stubbedError: (any Error & Sendable)?
 
-    func recognize(sampleBuffer _: CMSampleBuffer) async throws -> RecognitionResult {
+    func recognize(frame _: CapturedFrame) async throws -> RecognitionResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult

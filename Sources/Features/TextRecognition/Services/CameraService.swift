@@ -17,6 +17,23 @@ enum CameraError: Error, LocalizedError {
     }
 }
 
+// MARK: - CapturedFrame
+
+/// One video frame, handed from the capture queue to a single consumer.
+///
+/// `CMSampleBuffer` is a CoreFoundation type that carries no `Sendable`
+/// annotation, so an `AsyncStream<CMSampleBuffer>` cannot be iterated from an
+/// actor-isolated task at all: `next()` would return a non-Sendable value across
+/// the isolation boundary, which is exactly what the view models were doing.
+///
+/// Wrapping the frame makes the single hop it really takes — capture queue to
+/// recogniser — expressible. The `@unchecked` is sound for that hop specifically:
+/// a buffer is yielded to one stream, is never mutated after capture, and is not
+/// retained beyond the recognise call that consumes it.
+struct CapturedFrame: @unchecked Sendable {
+    let buffer: CMSampleBuffer
+}
+
 // MARK: - CameraService
 
 /// Manages `AVCaptureSession` and streams raw sample buffers as an `AsyncStream`.
@@ -30,7 +47,7 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "com.boilerplate.camera.session", qos: .userInitiated)
-    private var continuation: AsyncStream<CMSampleBuffer>.Continuation?
+    private var continuation: AsyncStream<CapturedFrame>.Continuation?
 
     // MARK: - Public
 
@@ -45,9 +62,9 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     // MARK: - Frame stream
 
-    /// Returns a new `AsyncStream` that yields each captured sample buffer.
+    /// Returns a new `AsyncStream` that yields each captured frame.
     /// Frames arrive at ~30 fps; downstream consumers should throttle as needed.
-    func makeFrameStream() -> AsyncStream<CMSampleBuffer> {
+    func makeFrameStream() -> AsyncStream<CapturedFrame> {
         AsyncStream { [weak self] continuation in
             self?.sessionQueue.async { self?.continuation = continuation }
             continuation.onTermination = { @Sendable [weak self] _ in
@@ -129,6 +146,6 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from _: AVCaptureConnection
     ) {
-        continuation?.yield(sampleBuffer)
+        continuation?.yield(CapturedFrame(buffer: sampleBuffer))
     }
 }

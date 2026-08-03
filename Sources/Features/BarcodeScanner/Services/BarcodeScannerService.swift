@@ -18,7 +18,7 @@ enum BarcodeScanError: Error, LocalizedError {
 
 /// Abstracts the barcode recognizer so tests can inject a predictable mock.
 protocol BarcodeScanning: Sendable {
-    func scan(sampleBuffer: CMSampleBuffer) async throws -> ScanResult
+    func scan(frame: CapturedFrame) async throws -> ScanResult
 }
 
 // MARK: - Live implementation
@@ -35,8 +35,8 @@ final class LiveBarcodeScannerService: BarcodeScanning {
         .i2of5, .itf14, .microQR, .pdf417, .upce,
     ]
 
-    func scan(sampleBuffer: CMSampleBuffer) async throws -> ScanResult {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+    func scan(frame: CapturedFrame) async throws -> ScanResult {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
             return ScanResult(barcodes: [])
         }
 
@@ -110,7 +110,7 @@ struct MockBarcodeScannerService: BarcodeScanning {
     ])
     var stubbedError: (any Error & Sendable)?
 
-    func scan(sampleBuffer _: CMSampleBuffer) async throws -> ScanResult {
+    func scan(frame _: CapturedFrame) async throws -> ScanResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult
