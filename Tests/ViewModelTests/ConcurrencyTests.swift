@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import os
 @testable import BoilerplateiOSSwift
 
 @Suite("PollingStream")
@@ -51,11 +52,11 @@ struct PollingStreamTests {
 
     @Test("transient fetch errors keep stream alive")
     func transientErrorsKeepStreamAlive() async throws {
-        var callCount = 0
+        let calls = CallCounter()
         let stream = PollingStream.make(interval: .milliseconds(10)) { () async throws -> Int in
-            callCount += 1
-            if callCount == 1 { throw URLError(.notConnectedToInternet) }
-            return callCount
+            let call = calls.next()
+            if call == 1 { throw URLError(.notConnectedToInternet) }
+            return call
         }
 
         // Second call should succeed after the error on call 1
@@ -136,5 +137,25 @@ struct HomeViewModelConcurrencyTests {
         #expect(viewModel.items.count > countMidway)
 
         viewModel.stopLiveUpdates()
+    }
+}
+
+// MARK: - CallCounter (test helper)
+
+/// Counts invocations from `@Sendable` closures.
+///
+/// `PollingStream.make` takes a `@Sendable` fetch closure and runs it on the
+/// cooperative pool, so a captured `var` cannot be mutated from it — "mutation of
+/// captured var in concurrently-executing code". Holding the count inside the lock
+/// rather than beside it means this is `Sendable` outright, with no `@unchecked`.
+private struct CallCounter: Sendable {
+    private let state = OSAllocatedUnfairLock(initialState: 0)
+
+    /// Increments the count and returns the new value.
+    func next() -> Int {
+        state.withLock { count -> Int in
+            count += 1
+            return count
+        }
     }
 }
