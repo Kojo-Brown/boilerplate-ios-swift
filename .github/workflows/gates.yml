@@ -88,12 +88,12 @@ jobs:
       - name: Discover the scheme
         run: |
           xcodebuild -list
-          scheme=$(xcodebuild -list -json | python3 -c '
-import json, sys
-schemes = json.load(sys.stdin).get("workspace", {}).get("schemes", [])
-package = [s for s in schemes if s.endswith("-Package")]
-print(package[0] if package else (schemes[0] if schemes else ""))
-')
+          scheme=$(xcodebuild -list -json | jq -r '
+            [ (.workspace.schemes // .project.schemes // [])[] ] as $schemes
+            | ( ($schemes | map(select(endswith("-Package"))) | first)
+                // ($schemes | first)
+                // empty )
+          ')
           if [ -z "$scheme" ]; then
             echo "::error::xcodebuild reported no schemes for this package."
             exit 1
@@ -107,31 +107,24 @@ print(package[0] if package else (schemes[0] if schemes else ""))
       - name: Choose an iOS Simulator
         run: |
           xcrun simctl list devices available
-          udid=$(xcrun simctl list devices available --json | python3 -c '
-import json, re, sys
-runtimes = json.load(sys.stdin)["devices"]
-
-def ios_version(runtime):
-    match = re.search(r"iOS-(\d+)-(\d+)", runtime)
-    return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
-
-candidates = []
-for runtime, devices in runtimes.items():
-    if "iOS" not in runtime:
-        continue
-    for device in devices:
-        if device.get("isAvailable") and device["name"].startswith("iPhone"):
-            candidates.append((ios_version(runtime), device["name"], device["udid"]))
-
-if not candidates:
-    sys.exit("no available iPhone simulator")
-
-# Newest runtime wins; "iPhone 16" preferred within it for a stable log line.
-newest = max(version for version, _, _ in candidates)
-same_runtime = [c for c in candidates if c[0] == newest]
-preferred = [c for c in same_runtime if c[1] == "iPhone 16"]
-print((preferred or same_runtime)[0][2])
-')
+          udid=$(xcrun simctl list devices available --json | jq -r '
+            [ .devices
+              | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
+              | .value[]
+              | select(.isAvailable and (.name | startswith("iPhone")))
+              | { version: [($v.major | tonumber), ($v.minor | tonumber)],
+                  name: .name,
+                  udid: .udid }
+            ] as $all
+            | if ($all | length) == 0 then empty else
+                ($all | map(.version) | max) as $newest
+                | ($all | map(select(.version == $newest))) as $latest
+                | ( ($latest | map(select(.name == "iPhone 16")) | first)
+                    // ($latest | first) ).udid
+              end
+          ')
           if [ -z "$udid" ]; then
             echo "::error::No iPhone simulator available on this runner image."
             exit 1
