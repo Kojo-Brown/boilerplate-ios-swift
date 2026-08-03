@@ -4,7 +4,7 @@
 
 ## Phase 0 — Green Baseline (blocks all feature work)
 - [x] Confirm the Xcode project resolves all Swift Package dependencies at pinned versions — the graph could never have resolved: `google-mlkit/ml-kit-ios` does not exist and neither product it was asked for is real (PR #19)
-- [ ] Get build, SwiftLint (strict), and the XCTest suite passing locally on a simulator
+- [x] Get build, SwiftLint (strict), and the XCTest suite passing locally on a simulator — the package had never been compiled, linked or run; ML Kit could not link on any Apple silicon simulator so text recognition moved to Apple's Vision framework, and the test process was dying on an orphaned `ModelContext` (PR #21)
 - [ ] Promote `workflow-templates/ios-ci.yml` to `.github/workflows/` and confirm it runs green on a PR
 - [ ] Confirm the project builds under Swift 6 strict concurrency with no warnings
 
@@ -32,16 +32,36 @@ so zero of the five gates can execute locally. CI is the source of truth for thi
 repo, the same conclusion `boilerplate-android-kotlin` reached for its own item 1.
 Future runs should expect the same and read the PR checks, not a local run.
 
-Known gaps carried into item 2: nothing has been **compiled** — whether the
-package builds against `MLKitTextRecognition` is item 2's job, and the source
-still calls the V2 API through that module on the assumption it is the right one.
-There is no `.swiftlint.yml` or SwiftFormat config anywhere in the repo despite
-Phase 1 marking "SwiftLint + SwiftFormat config" done, so `swiftlint --strict`
-has nothing to run against. There is no `.xcodeproj` either — this is an SPM
-package, and CLAUDE.md's `-scheme App` does not match anything here. The ML Kit
-mirror is a single-maintainer republish of Google's binaries, not a Google
-artifact; a consumer who cannot accept that should move `TextRecognitionService`
-onto Apple's Vision framework, which this repo already uses for barcode scanning.
+Item 2 complete as of PR #21 (2026-08-03). `gates.yml` builds, lints and runs the
+suite on an arm64 iOS Simulator; all four checks are green. Every gap item 1
+recorded is closed: `.swiftlint.yml` now exists (84 violations fixed, none
+configured away), the scheme is discovered from `xcodebuild -list -json` rather
+than guessed at `-scheme App`, and the package has been compiled and run for the
+first time.
+
+The ML Kit escape hatch item 1 described was taken, and not by preference. The
+mirror builds "`arm64` for iphoneos and `x86_64` for iphonesimulator only", so
+the test bundle could not link on any Apple silicon Mac or macOS runner; building
+the package `x86_64` under Rosetta links and then aborts 195/195 tests at launch.
+`TextRecognitionService` now uses Vision, which drops the dependency graph from
+nine pins to four and vends a real per-observation confidence that ML Kit's iOS
+API does not.
+
+The crash that followed took five diagnoses, and the four wrong ones each found a
+real defect: an optional-key-path `SortDescriptor`, a `UUID` `#Predicate`, and
+`@Attribute(.unique)` on an in-memory store are all genuinely unreliable in
+SwiftData. The actual cause was lifetime — the test suite built its
+`ModelContainer` as a local and kept only `container.mainContext`, and a context
+does not keep its container alive, so every test ran against an orphaned context.
+SwiftData reports that by trapping rather than throwing, which is why one bug
+presented as ~200 tests "failing" that had never run.
+
+Carried into later items: `.serialized` on the persistence suite is retained but
+is **not** known to be needed — it was added on a theory that turned out wrong and
+did not stop the crash; removing it is a one-line experiment. And no `#Predicate`
+survives in the package, because `UserEntity.id` is a `UUID` and SwiftData traps
+comparing one; making predicates usable means changing the model's identifier
+type, which is a model change and its own item.
 
 ## Phase 1 — Foundation
 - [x] Swift 6 + Xcode 16 project targeting iOS 17+
