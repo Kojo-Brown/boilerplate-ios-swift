@@ -154,6 +154,7 @@ jobs:
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
 
       - name: Build for the iOS Simulator
+        timeout-minutes: 25
         run: |
           set -o pipefail
           xcodebuild build-for-testing \
@@ -163,7 +164,18 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build.log
 
+      # `-test-timeouts-enabled` makes a test that never returns fail by name
+      # instead of wedging the runner. Without it the first hang costs the full
+      # job timeout and reports as "cancelled", which says nothing about which
+      # test hung — and because a cancelled job skips its remaining steps, the
+      # logs that would have said so are never uploaded.
+      #
+      # The step timeout is the backstop for a hang that the allowance cannot
+      # see (a wedged simulator, a stuck xcodebuild). It is deliberately shorter
+      # than the job's, so the step fails while the job lives on to run the
+      # summary and upload the logs.
       - name: Run the test suite
+        timeout-minutes: 25
         run: |
           set -o pipefail
           xcodebuild test-without-building \
@@ -171,6 +183,9 @@ jobs:
             -destination "id=$SIMULATOR_UDID" \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee test.log
 
@@ -184,10 +199,15 @@ jobs:
           for log in build.log test.log; do
             [ -f "$log" ] || continue
             echo "::group::$log — errors and failures"
-            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]|^ld: |Undefined symbol|building for .* but linking|does not contain|missing architecture' "$log" \
+            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|failed \([0-9]|^ld: |Undefined symbol|building for .* but linking|does not contain|missing architecture|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
               | grep -v '^[[:space:]]*/Applications/Xcode' \
               | sort -u \
               || echo "(no error lines matched; see the uploaded $log)"
+            echo "::endgroup::"
+            # A hang leaves no error line at all — the last thing the log says is
+            # the test that started and never finished, so print the tail too.
+            echo "::group::$log — last 40 lines"
+            tail -40 "$log"
             echo "::endgroup::"
           done
 
