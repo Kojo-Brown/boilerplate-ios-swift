@@ -202,7 +202,7 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] Fastlane setup for TestFlight deploy
 
 ## Phase 7 — Swift Concurrency Mastery
-- [ ] Strict concurrency checking enabled with `Sendable` conformance across the codebase
+- [x] Strict concurrency checking enabled with `Sendable` conformance across the codebase — checking was already on and gated from Phase 0 item 4; the conformances were not. Four test doubles asserted `@unchecked Sendable` over bare mutable stored properties, and `LoadingState` was not `Sendable` at any `Value` because its failure payload was a bare `any Error` (PR #24)
 - [ ] Actors for shared mutable state + a documented actor-reentrancy pitfall
 - [ ] `@MainActor` isolation rules and safe hops off the main actor
 - [ ] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler`
@@ -210,6 +210,57 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [ ] Global actors and custom executors for a serial background domain
 - [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 1 complete as of PR #24 (2026-08-04). All four checks green: `TEST BUILD
+SUCCEEDED` with no warnings from this package's sources, 286 tests, SwiftLint
+strict clean, and the new Sendable audit step passing.
+
+Phase 0 item 4 had already made the Swift 6 language mode a compile-time fact and
+gated the build at zero warnings, which is the "checking enabled" half. It is no
+evidence about the other half, because `@unchecked Sendable` and
+`nonisolated(unsafe)` are exactly the constructs that emit no diagnostic. Six
+types opted out; four of them — `MockAPIClient`, `MockBiometricAuthService`,
+`MockSocialAuthProvider`, `MockSocialAuthExchangeService` — asserted the
+conformance over bare mutable stored properties with no synchronisation at all,
+which is a data race the checker had been told not to look at, reachable from any
+test that configures a double on one task and exercises it from another. All four
+now hold state inside `OSAllocatedUnfairLock`, the pattern `MockAuthService`
+already used here; `EventBus`, `InMemoryKeychain` and `AtomicCounter` had the
+correct-but-unverifiable lock-beside-a-`var` shape and were converted too. The
+property APIs did not change, so no test call site moved.
+
+`LoadingState` was the one value type that was not `Sendable` at all:
+`case failure(Error)` stores a bare existential, which does not conform, so no
+`LoadingState` was `Sendable` whatever its `Value`. It had zero call sites, which
+is the only reason nobody had hit it.
+
+Two opt-outs remain and are load-bearing, both AVFoundation's shape rather than
+ours: `CapturedFrame` wraps a `CMSampleBuffer`, and `CameraService` is isolated
+by a serial `DispatchQueue` the compiler cannot see.
+
+Two gates keep it from rotting. `.github/scripts/assert-sendable-audit.py` fails
+on any opt-out not recorded with a reason **and** on any recorded reason whose
+code is gone; it is syntactic, so it is the one gate in this repo that runs on
+the Linux agent. `SendableConformanceTests` names the 67 types whose conformance
+is load-bearing and requires it as a generic constraint — most are inferred and
+appear nowhere in the source, so without it losing one is silent until a distant
+call site fails. `docs/concurrency.md` documents the isolation model.
+
+One red run on the way, worth recording because the cause was not where it
+looked. `HomeViewModelConcurrencyTests.startLiveUpdatesAppendsItems` failed while
+the build was clean. Nothing in the PR touches `HomeViewModel`: Swift Testing runs
+suites in parallel, and the new coherence test fanned out to 200 concurrent tasks
+in one group and saturated the cooperative pool. The tell was the timing — that
+suite's four tests sleep about 0.7s in total and it took 40.462s before failing.
+Reshaped to 8 tasks looping 25 times each, same call count and same assertions.
+**Wall-clock tests in this suite are the canary for pool pressure; keep new task
+groups narrow.**
+
+Known gaps carried into item 2: the audit lists types by hand, so a new model
+nobody adds to it is unaudited. Coverage is still reported rather than gated and
+the `--legacy` `xccov` fallback has still never executed;
+`workflow-templates/testflight-deploy.yml` is still unpromoted; and CLAUDE.md's
+gate list still says `-scheme App`, which names nothing in this package.
 
 ## Phase 8 — Architecture & Patterns
 - [ ] SOLID audit of the repository/service layers documented in `docs/solid.md`
