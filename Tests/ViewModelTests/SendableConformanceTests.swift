@@ -154,24 +154,37 @@ struct SendableConformanceTests {
     /// too. What it does prove is that the lock-backed rewrite kept the
     /// behaviour — every increment is counted, no write is lost — which is the
     /// part a reader would otherwise have to take on faith.
+    ///
+    /// The shape is a few tasks looping, not one task per call. Contention on
+    /// the lock is what is under test, and repeated hammering from a handful of
+    /// tasks produces more of it than a wide fan-out does. The width matters
+    /// separately: Swift Testing runs suites in parallel, so a task group as
+    /// wide as the call count saturates the cooperative pool and starves
+    /// whatever is running beside it — here, the `@MainActor` wall-clock tests
+    /// in `HomeViewModelConcurrencyTests`, whose four sleeps total ~0.7s and
+    /// which took 40s and failed when this test fanned out to 200 tasks.
     @Test("Concurrent configuration of a lock-backed double loses no writes")
     func concurrentMockAccessIsCoherent() async {
         let mock = MockBiometricAuthService()
-        let iterations = 200
+        let writers = 8
+        let callsPerWriter = 25
 
         await withTaskGroup(of: Void.self) { group in
-            for index in 0..<iterations {
+            for writer in 0..<writers {
                 group.addTask {
-                    // Interleave reads, writes and recorded calls on purpose:
-                    // each one takes the same lock, from a different task.
-                    mock.stubbedIsAvailable = index.isMultiple(of: 2)
-                    _ = mock.biometricType
-                    try? await mock.authenticate(reason: "Unlock \(index)")
+                    for call in 0..<callsPerWriter {
+                        // Interleave reads, writes and recorded calls on
+                        // purpose: each one takes the same lock, from a
+                        // different task.
+                        mock.stubbedIsAvailable = call.isMultiple(of: 2)
+                        _ = mock.biometricType
+                        try? await mock.authenticate(reason: "Unlock \(writer)")
+                    }
                 }
             }
         }
 
-        #expect(mock.authenticateCallCount == iterations)
+        #expect(mock.authenticateCallCount == writers * callsPerWriter)
         #expect(mock.lastReason?.hasPrefix("Unlock ") == true)
     }
 }
