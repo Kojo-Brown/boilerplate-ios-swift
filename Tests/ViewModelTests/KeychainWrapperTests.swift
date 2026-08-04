@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import BoilerplateiOSSwift
 
@@ -8,24 +9,27 @@ import Testing
 ///
 /// Avoids a dependency on the Keychain daemon, which is unavailable in CI
 /// and simulators without entitlements.
-final class InMemoryKeychain: KeychainStoring, @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [String: String] = [:]
+///
+/// The storage lives inside the lock rather than beside it, which leaves this
+/// class with one `let` stored property of `Sendable` type and so a conformance
+/// the compiler checks instead of one it is told to assume.
+final class InMemoryKeychain: KeychainStoring, Sendable {
+    private let storage = OSAllocatedUnfairLock(initialState: [String: String]())
 
     func string(forKey key: String) throws -> String? {
-        lock.withLock { storage[key] }
+        storage.withLock { $0[key] }
     }
 
     func set(_ value: String, forKey key: String) throws {
-        lock.withLock { storage[key] = value }
+        storage.withLock { $0[key] = value }
     }
 
     func remove(forKey key: String) throws {
-        lock.withLock { storage[key] = nil }
+        storage.withLock { $0[key] = nil }
     }
 
     func removeAll() throws {
-        lock.withLock { storage.removeAll() }
+        storage.withLock { $0.removeAll() }
     }
 }
 

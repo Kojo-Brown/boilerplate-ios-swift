@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import os
 
 // MARK: - BiometricType
 
@@ -111,21 +112,55 @@ struct LiveBiometricAuthService: BiometricAuthProvider {
 
 // MARK: - MockBiometricAuthService
 
-/// In-memory test double. Configure `biometricType`, `available`, and `outcome`
-/// before each test; never triggers the system biometric prompt.
-final class MockBiometricAuthService: BiometricAuthProvider, @unchecked Sendable {
-    var stubbedBiometricType: BiometricType = .faceID
-    var stubbedIsAvailable: Bool = true
-    var stubbedError: BiometricAuthError?
-    var authenticateCallCount = 0
-    var lastReason: String?
+/// In-memory test double. Configure `stubbedBiometricType`, `stubbedIsAvailable`
+/// and `stubbedError` before each test; never triggers the system biometric
+/// prompt.
+///
+/// `BiometricAuthProvider` is `Sendable`, so the stubs and the recorded calls
+/// live behind a lock rather than under `@unchecked Sendable`. The recording is
+/// also atomic now: the call count, the reason and the outcome are read and
+/// written in one critical section, so two concurrent `authenticate` calls
+/// cannot interleave into a lost increment.
+final class MockBiometricAuthService: BiometricAuthProvider {
+    private struct State: Sendable {
+        var biometricType: BiometricType = .faceID
+        var isAvailable = true
+        var error: BiometricAuthError?
+        var authenticateCallCount = 0
+        var lastReason: String?
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    var stubbedBiometricType: BiometricType {
+        get { state.withLock { $0.biometricType } }
+        set { state.withLock { $0.biometricType = newValue } }
+    }
+
+    var stubbedIsAvailable: Bool {
+        get { state.withLock { $0.isAvailable } }
+        set { state.withLock { $0.isAvailable = newValue } }
+    }
+
+    var stubbedError: BiometricAuthError? {
+        get { state.withLock { $0.error } }
+        set { state.withLock { $0.error = newValue } }
+    }
+
+    /// Read-only: these record what the double was asked to do, so nothing
+    /// outside it has any business writing them.
+    var authenticateCallCount: Int { state.withLock { $0.authenticateCallCount } }
+    var lastReason: String? { state.withLock { $0.lastReason } }
 
     var biometricType: BiometricType { stubbedBiometricType }
     var isAvailable: Bool { stubbedIsAvailable }
 
     func authenticate(reason: String) async throws {
-        authenticateCallCount += 1
-        lastReason = reason
-        if let error = stubbedError { throw error }
+        let outcome: BiometricAuthError? = state.withLock { current in
+            current.authenticateCallCount += 1
+            current.lastReason = reason
+            return current.error
+        }
+        if let outcome { throw outcome }
     }
 }

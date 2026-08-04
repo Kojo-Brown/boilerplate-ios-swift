@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import BoilerplateiOSSwift
 
@@ -203,19 +204,16 @@ struct APIClientTests {
 // MARK: - AtomicCounter (test helper)
 
 /// Thread-safe integer counter for verifying call counts across task boundaries.
-private final class AtomicCounter: @unchecked Sendable {
-    private var _value = 0
-    private let lock = NSLock()
+///
+/// The count lives inside the lock rather than beside it, which leaves this
+/// class with one `let` stored property of `Sendable` type and so a conformance
+/// the compiler checks instead of one it is told to assume.
+private final class AtomicCounter: Sendable {
+    private let count = OSAllocatedUnfairLock(initialState: 0)
 
-    var value: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _value
-    }
+    var value: Int { count.withLock { $0 } }
 
     func increment() {
-        lock.lock()
-        _value += 1
-        lock.unlock()
+        count.withLock { $0 += 1 }
     }
 }
