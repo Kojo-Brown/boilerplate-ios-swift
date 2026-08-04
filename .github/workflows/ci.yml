@@ -82,6 +82,19 @@ jobs:
             exit 1
           fi
 
+      # Phase 7 item 1. Swift 6 mode checks `Sendable` for you everywhere the
+      # source does not opt out; `@unchecked Sendable` and `nonisolated(unsafe)`
+      # are the two ways to opt out, and a build that is already warning-free
+      # says nothing about either. This fails on any occurrence that is not
+      # recorded with a reason, and on any recorded reason whose code is gone.
+      #
+      # It sits in the lint job rather than the build job because it is
+      # syntactic: it needs no toolchain, no resolved packages and no simulator,
+      # so it reports even when the build is broken — and, unlike every other
+      # gate in this repo, it can be run locally on the Linux agent.
+      - name: Audit the opt-outs from Sendable checking
+        run: python3 .github/scripts/assert-sendable-audit.py "$GITHUB_WORKSPACE"
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

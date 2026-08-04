@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Protocol
 
@@ -20,12 +21,29 @@ extension APIClient {
 
 // MARK: - Mock
 
-final class MockAPIClient: APIClient, @unchecked Sendable {
+/// `APIClient` is `Sendable`, so this double cannot hold a bare mutable stored
+/// property. The handler lives behind a lock rather than under
+/// `@unchecked Sendable`: a test that swaps the handler from one task while
+/// another is mid-`send` is then actually safe, instead of only asserted to be.
+final class MockAPIClient: APIClient {
     typealias Handler = @Sendable (APIEndpoint) async throws -> Any
 
-    var handler: Handler = { _ in EmptyResponse() }
+    private struct State: Sendable {
+        var handler: Handler = { _ in EmptyResponse() }
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    var handler: Handler {
+        get { state.withLock { $0.handler } }
+        set { state.withLock { $0.handler = newValue } }
+    }
 
     func send<Response: Decodable & Sendable>(_ endpoint: APIEndpoint) async throws -> Response {
+        // Read the handler out of the lock *before* awaiting it. Holding an
+        // unfair lock across a suspension point would let the awaiting task be
+        // resumed on a different thread than the one that took it, which is
+        // undefined behaviour for `os_unfair_lock`.
         let result = try await handler(endpoint)
         guard let typed = result as? Response else {
             throw APIError.decodingFailed("MockAPIClient: expected \(Response.self)")
