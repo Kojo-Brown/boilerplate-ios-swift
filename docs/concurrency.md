@@ -96,6 +96,63 @@ leaves the main actor — `UserPersistenceService` maps it to the `Sendable`
 `User` struct at the boundary, which is the pattern to copy for any future
 `@Model` type.
 
+## Actors give you isolation, not atomicity
+
+Making shared mutable state an `actor` removes the lock and the data race. It
+does not make a method body atomic, and reading it as though it does is the most
+common way to write a correct-by-the-compiler actor that still does the wrong
+thing.
+
+An actor guarantees mutual exclusion only *between* suspension points. At every
+`await` inside an isolated method the actor is released, another call can run to
+completion, and the first one resumes into whatever state that left behind. This
+is reentrancy. It is deliberate — without it, an actor awaiting the network would
+block every other caller — and it means an `await` is a hole in any invariant the
+method is maintaining across it.
+
+The check-then-await-then-act cache is the canonical way to fall in:
+
+```swift
+actor NaiveCache {
+    private var cached: [Key: Value] = [:]
+
+    func value(for key: Key) async throws -> Value {
+        if let hit = cached[key] { return hit }   // 1. check
+        let value = try await load(key)           // 2. suspend — actor released
+        cached[key] = value                       // 3. act
+        return value
+    }
+}
+```
+
+Five callers arriving on a cold key all get past step 1 before any reaches step
+3, so the load runs five times. That actor is not a hypothetical in this repo:
+it is compiled and run in `SingleFlightCacheTests`, where the test asserts the
+five duplicate loads. A pitfall nothing executes is folklore, and folklore stops
+being true without telling you.
+
+`SingleFlightCache` is the same cache written from the two rules that follow:
+
+- **Publish in-flight work before the first `await`.** It creates the loading
+  `Task` and stores it in the same uninterrupted stretch of actor execution as
+  the lookup that found the key empty. A second caller either arrives before that
+  write and starts the load, or arrives after it and finds a task to await; there
+  is no third possibility, which is the guarantee steps 1-to-3 lacked.
+- **Re-read shared state after an `await`.** When the load returns, the entry
+  holds whatever it holds *now* — `invalidate(_:)` may have run in the meantime.
+  Writing the result back unconditionally would resurrect an entry a caller had
+  explicitly dropped, with the stale value it was dropped for. The completion
+  path compares task identity and writes only if its own claim is still there.
+
+The same shape is already in `TokenStore.refreshIfNeeded`, which stores the
+in-flight refresh `Task` before awaiting it so that concurrent 401s produce one
+refresh request rather than one per caller.
+
+Two rules of thumb fall out. Prefer synchronous actor methods where the work
+allows it — a method with no `await` in it *is* atomic, and needs none of this.
+Where a suspension is unavoidable, hold no invariant across it: park a value the
+other callers can find, and re-check before acting on anything read beforehand.
+
 ## What enforces all of this
 
 Three gates, none of which depend on anyone remembering the rules:
