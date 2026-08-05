@@ -203,7 +203,7 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 
 ## Phase 7 — Swift Concurrency Mastery
 - [x] Strict concurrency checking enabled with `Sendable` conformance across the codebase — checking was already on and gated from Phase 0 item 4; the conformances were not. Four test doubles asserted `@unchecked Sendable` over bare mutable stored properties, and `LoadingState` was not `Sendable` at any `Value` because its failure payload was a bare `any Error` (PR #24)
-- [ ] Actors for shared mutable state + a documented actor-reentrancy pitfall
+- [x] Actors for shared mutable state + a documented actor-reentrancy pitfall — `actor` buys isolation and is routinely misread as buying atomicity; `SingleFlightCache` is the memoising cache written from the two rules that misreading breaks, and the naive version is kept compiled and run so the pitfall is demonstrated rather than asserted (PR #25)
 - [ ] `@MainActor` isolation rules and safe hops off the main actor
 - [ ] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler`
 - [ ] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes
@@ -261,6 +261,50 @@ nobody adds to it is unaudited. Coverage is still reported rather than gated and
 the `--legacy` `xccov` fallback has still never executed;
 `workflow-templates/testflight-deploy.yml` is still unpromoted; and CLAUDE.md's
 gate list still says `-scheme App`, which names nothing in this package.
+
+Item 2 complete as of PR #25 (2026-08-05). All four checks green on the first
+run: `TEST EXECUTE SUCCEEDED`, 296 tests, SwiftLint strict clean, the Sendable
+audit unchanged at 2 recorded opt-outs, and line coverage up from 44.29% to
+46.86% (library 26.07% → 27.72%).
+
+The item's substance is the pitfall, not the actor. `actor` buys **isolation**;
+it is routinely misread as buying **atomicity**, which is a different property it
+does not provide. An actor is mutually exclusive only *between* suspension
+points, so a check-then-act sequence split by an `await` is not atomic and state
+read before the suspension may be stale after it. The canonical casualty is the
+memoising cache: N concurrent callers on a cold key all pass the emptiness check
+before any of them writes back, and the expensive load runs N times. None of that
+is a data race — it compiles clean under Swift 6 strict concurrency, which is
+exactly why the Phase 0 item 4 warning gate and the item 1 Sendable audit have
+nothing to say about it, and why this item asks for documentation rather than
+another checker.
+
+`SingleFlightCache` is that cache written from the two rules the pitfall implies.
+It publishes the in-flight `Task` into its entry table in the same uninterrupted
+stretch of actor execution as the lookup that found the key empty, so a second
+caller either starts the load or finds a task to await with no third possibility;
+and on completion it re-reads the slot and writes only if it still holds its own
+task, so a load invalidated mid-flight cannot resurrect the entry a caller just
+dropped. Failures are not cached. `TokenStore.refreshIfNeeded` already had the
+first half of this shape for concurrent 401s; this generalises it and names the
+reasoning behind it.
+
+The pitfall is demonstrated, not asserted: `NaiveCache` in
+`SingleFlightCacheTests` is the wrong version, compiled and run, with a test
+asserting the five duplicate loads five concurrent callers produce. A pitfall
+nothing executes is folklore, and folklore stops being true without telling you.
+`docs/concurrency.md` carries the same reasoning under "Actors give you
+isolation, not atomicity".
+
+Known gaps carried into item 3: `SingleFlightCache` is a utility beside
+`EventBus` and `PollingStream` — no feature is migrated onto it, so the avatar
+and image paths still load per-caller. The coalescing and mid-flight-invalidation
+tests are timing-based (a load that sleeps 80-200ms while callers pile in) rather
+than gated on an explicit signal, which is reliable at this width but is the
+shape item 1 found can be starved by pool pressure; keep new task groups narrow.
+Every gap item 1 recorded is still open — the audit is still hand-maintained,
+coverage is still reported rather than gated, `testflight-deploy.yml` is still
+unpromoted, and CLAUDE.md still names `-scheme App`.
 
 ## Phase 8 — Architecture & Patterns
 - [ ] SOLID audit of the repository/service layers documented in `docs/solid.md`
