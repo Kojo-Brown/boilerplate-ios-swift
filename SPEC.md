@@ -204,12 +204,58 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 ## Phase 7 — Swift Concurrency Mastery
 - [x] Strict concurrency checking enabled with `Sendable` conformance across the codebase — checking was already on and gated from Phase 0 item 4; the conformances were not. Four test doubles asserted `@unchecked Sendable` over bare mutable stored properties, and `LoadingState` was not `Sendable` at any `Value` because its failure payload was a bare `any Error` (PR #24)
 - [x] Actors for shared mutable state + a documented actor-reentrancy pitfall — `actor` buys isolation and is routinely misread as buying atomicity; `SingleFlightCache` is the memoising cache written from the two rules that misreading breaks, and the naive version is kept compiled and run so the pitfall is demonstrated rather than asserted (PR #25)
-- [ ] `@MainActor` isolation rules and safe hops off the main actor
+- [x] `@MainActor` isolation rules and safe hops off the main actor — the repo had followed "`@Observable`, `@MainActor` view models" since Phase 2 without ever saying how to leave the main actor or how to return to it; `Task { }` does not leave it, a `nonisolated` *synchronous* function does not either, and the `await` that does leave also releases it (PR #26)
 - [ ] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler`
 - [ ] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes
 - [ ] Global actors and custom executors for a serial background domain
 - [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 3 complete as of PR #26 (2026-08-06). All four checks green; the test phase
+runs in 197s.
+
+Only a `nonisolated async` function changes where code runs, and the two
+constructs reached for instead do not. `Task { }` marks its operation
+`@_inheritActorContext`, so a closure literal written in a `@MainActor` method
+runs its body on the main actor — it buys concurrency with respect to the caller
+and none with respect to the main thread, which is exactly why it looks like it
+worked. A `nonisolated` synchronous function moves nothing either: `nonisolated`
+states what a declaration needs, not where it executes. `OffMainActor.run` is the
+third case with a name, and the `@Sendable` on its parameter is load-bearing —
+a non-`@Sendable` closure literal formed in a `@MainActor` method is inferred to
+be main-actor-isolated, so without it the body returns to where it came from
+while the signature claims otherwise.
+
+`LatestOnlyTask` is the hop back. `hits = try await api.hits(matching: text)` has
+no data race and compiles clean; it is still wrong, because responses do not
+arrive in the order requests went out. It supersedes explicitly and then decides
+by generation rather than by cancellation — cancellation is cooperative, so an
+operation that swallows it finishes anyway and returns a perfectly good stale
+result.
+
+Two CI rounds were spent on real constraints, both recorded in the tests. First,
+`Thread.isMainThread` is imported `NS_SWIFT_UNAVAILABLE_FROM_ASYNC`, so it cannot
+be referenced from an `async` context at all; `CurrentThread.isMain` asks it from
+a synchronous property, which has no suspension point for the answer to expire
+across. Second, the suites saturated the cooperative pool: the
+ignore-cancellation test spun on `await Task.yield()`, which is bounded in
+wall-clock time and unbounded in scheduling pressure, and the test phase went to
+559s with four pre-existing tests failing — `HomeViewModelConcurrencyTests` among
+them, which `SendableConformanceTests` already records as the casualty of this
+same failure mode. Both new suites are now `.serialized`.
+
+**Carried forward: `SocialLoginViewModelXCTests` is flaky independently of this
+work.** Run 30897280228, on `main` with none of PR #26's code present, failed
+with `testClearErrorNilsErrorMessage()` exceeding the two-minute execution
+allowance. Both tests that hang construct an `ASPresentationAnchor()` — a
+`UIWindow` — while sibling tests doing the same pass in the same run. It is a
+real defect and it will keep turning runs red at random until someone takes it.
+
+**Every gate in CLAUDE.md remains unrunnable in the scheduled agent's
+environment.** It runs on Linux, where `swift`, `xcodebuild` and `swiftlint` do
+not exist. `assert-sendable-audit.py` is the only one that runs there, and it
+did. The PR checks are the source of truth, as every item since Phase 0 item 1
+has concluded.
 
 Item 1 complete as of PR #24 (2026-08-04). All four checks green: `TEST BUILD
 SUCCEEDED` with no warnings from this package's sources, 286 tests, SwiftLint
