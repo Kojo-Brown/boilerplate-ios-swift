@@ -4,15 +4,6 @@ import Testing
 
 // MARK: - Probes
 
-/// A `nonisolated` **synchronous** function, kept deliberately trivial.
-///
-/// It exists to be called from a `@MainActor` test and report where it landed.
-/// `nonisolated` is widely read as "runs somewhere else"; on a synchronous
-/// declaration it means nothing of the sort, and this is the probe that says so.
-private func threadIsMain() -> Bool {
-    Thread.isMainThread
-}
-
 /// Stands in for a framework callback that is typed `@Sendable` — the shape
 /// `ASAuthorizationControllerDelegate` and friends arrive in.
 ///
@@ -54,12 +45,9 @@ private final class MainActorCounter {
 /// This suite is what turns "the hop works" from a belief into something that
 /// fails a build.
 ///
-/// `Thread.isMainThread` is the probe throughout, and it is not the same
-/// question as "is this the main actor" — the main actor is the abstraction, the
-/// main thread is the implementation that currently backs it. It is the honest
-/// tool available: the cooperative pool never schedules non-main-actor work onto
-/// the main thread, so the two answers coincide in practice, and a
-/// `MainActor.assertIsolated()` would trap the process rather than fail a test.
+/// `CurrentThread.isMain` is the probe throughout — see that type for why the
+/// question has to be asked from a synchronous function, and what it does and
+/// does not tell you.
 @Suite("@MainActor isolation and hops")
 struct MainActorIsolationTests {
 
@@ -68,13 +56,13 @@ struct MainActorIsolationTests {
     @Test("Task { } written on the main actor keeps its body on the main actor")
     @MainActor
     func taskLiteralInheritsTheMainActor() async {
-        #expect(Thread.isMainThread)
+        #expect(CurrentThread.isMain)
 
         // The single most common way to believe work has been moved off the
         // main thread. `Task.init` marks its operation `@_inheritActorContext`,
         // so a closure literal written here is `@MainActor`-isolated. What this
         // buys is concurrency with respect to the *caller*, not the main thread.
-        let ranOnMain = await Task { Thread.isMainThread }.value
+        let ranOnMain = await Task { CurrentThread.isMain }.value
 
         #expect(ranOnMain)
     }
@@ -82,9 +70,11 @@ struct MainActorIsolationTests {
     @Test("a nonisolated synchronous function called from the main actor stays on it")
     @MainActor
     func nonisolatedSynchronousCallStaysOnTheMainActor() {
-        // `nonisolated` describes what a declaration needs, not where it runs.
-        // A synchronous call is a jump, not a scheduling decision.
-        #expect(threadIsMain())
+        // `CurrentThread.isMain` is itself the nonisolated synchronous
+        // declaration under test: it belongs to no actor, and it still reports
+        // this one. `nonisolated` describes what a declaration needs, not where
+        // it runs — a synchronous call is a jump, not a scheduling decision.
+        #expect(CurrentThread.isMain)
     }
 
     // MARK: What does
@@ -92,14 +82,14 @@ struct MainActorIsolationTests {
     @Test("OffMainActor.run leaves the main actor, and the caller resumes on it")
     @MainActor
     func offMainActorRunHopsBothWays() async {
-        #expect(Thread.isMainThread)
+        #expect(CurrentThread.isMain)
 
-        let ranOffMain = await OffMainActor.run { !Thread.isMainThread }
+        let ranOffMain = await OffMainActor.run { !CurrentThread.isMain }
 
         #expect(ranOffMain)
         // The return trip is the half that gets forgotten. The caller is
         // `@MainActor`, so resuming means re-acquiring the main actor.
-        #expect(Thread.isMainThread)
+        #expect(CurrentThread.isMain)
     }
 
     @Test("work that suspends off the main actor resumes off it too")
@@ -107,7 +97,7 @@ struct MainActorIsolationTests {
     func suspensionInsideTheHopDoesNotReturnToTheMainActor() async throws {
         let ranOffMain = try await OffMainActor.run {
             try await Task.sleep(for: .milliseconds(10))
-            return !Thread.isMainThread
+            return !CurrentThread.isMain
         }
 
         #expect(ranOffMain)
@@ -118,7 +108,7 @@ struct MainActorIsolationTests {
         // Deliberately not a `@MainActor` test: this is the trip in the other
         // direction, made from code that has no isolation of its own.
         let onMain = await OffMainActor.run {
-            await MainActor.run { Thread.isMainThread }
+            await MainActor.run { CurrentThread.isMain }
         }
 
         #expect(onMain)

@@ -269,6 +269,12 @@ Three gates, none of which depend on anyone remembering the rules:
   execution semantics of nonisolated async functions in Swift 5.7, and Swift
   6.2's `nonisolated(nonsending)` moves the default again for anyone adopting it.
   If a toolchain upgrade changes where a hop lands, this suite is what says so.
+  The probe is `CurrentThread.isMain` rather than `Thread.isMainThread` directly:
+  Foundation imports the latter as unavailable from asynchronous contexts, on the
+  grounds that in an `async` function the answer expires at every suspension
+  point. Reading it through a synchronous property is the sanctioned way round
+  that, and a synchronous body has no suspension point for the answer to expire
+  across.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that

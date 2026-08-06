@@ -56,7 +56,7 @@ struct LatestOnlyTaskTests {
     func operationRunsOffTheMainActor() async throws {
         let latest = LatestOnlyTask<Bool>()
 
-        let ranOffMain = try await latest.run { !Thread.isMainThread }
+        let ranOffMain = try await latest.run { !CurrentThread.isMain }
 
         #expect(ranOffMain == true)
     }
