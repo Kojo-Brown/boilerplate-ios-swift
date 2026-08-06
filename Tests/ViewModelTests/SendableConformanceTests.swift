@@ -82,6 +82,13 @@ struct SendableConformanceTests {
     /// `LoadingState` is here as a conditional conformance: it is `Sendable`
     /// when its `Value` is, which is why it is audited at a concrete `Value`
     /// rather than as a bare generic.
+    ///
+    /// `LatestOnlyTask` is here for a different reason: it is a `class`, and
+    /// classes are not `Sendable` by inference — this one is only because it is
+    /// `@MainActor`-isolated, which makes the conformance implicit. Dropping the
+    /// global actor from it would leave a mutable reference type that view
+    /// models hold and hand closures to, with nothing in the source saying the
+    /// conformance had gone.
     @Test("Types that rely on inferred conformance still have it")
     func inferredConformancesHold() {
         let audited = [
@@ -92,8 +99,9 @@ struct SendableConformanceTests {
             auditSendable(CameraError.self),
             auditSendable(TextRecognitionError.self),
             auditSendable(AuthError.self),
+            auditSendable(LatestOnlyTask<Int>.self),
         ]
-        expectAudit(audited, count: 7)
+        expectAudit(audited, count: 8)
     }
 
     /// The service layer: the protocols that cross isolation boundaries, and

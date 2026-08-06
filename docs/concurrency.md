@@ -153,6 +153,99 @@ allows it — a method with no `await` in it *is* atomic, and needs none of this
 Where a suspension is unavoidable, hold no invariant across it: park a value the
 other callers can find, and re-check before acting on anything read beforehand.
 
+## `@MainActor`: leaving it, and coming back
+
+`@MainActor` is a global actor and obeys every rule above, including reentrancy.
+It gets treated as a different kind of thing — a thread you are on rather than an
+actor you hold — and that is where its two characteristic bugs come from.
+
+### Only a `nonisolated async` function changes where code runs
+
+Three constructs are reached for to move work off the main thread. One of them
+works, and it is not the popular one.
+
+| Written inside a `@MainActor` method | Where the body runs |
+| --- | --- |
+| `Task { … }` | **On the main actor.** `Task.init` marks its operation `@_inheritActorContext`, so a closure literal inherits the enclosing isolation. |
+| `nonisolated func` (synchronous) | **On the main actor.** `nonisolated` says the declaration does not need the isolation; it does not say where it executes, and a synchronous call is a jump, not a scheduling decision. |
+| `nonisolated func … async` | **On the cooperative pool.** Since SE-0338 a nonisolated async function runs on the generic executor rather than inheriting its caller's actor. |
+
+`Task { }` is the one that bites, because it *is* concurrency — the enclosing
+method returns without waiting — so it looks like it worked. It buys concurrency
+with respect to the caller and none with respect to the main thread. A 200 ms
+parse inside one is still 200 ms of dropped frames, now at an unpredictable
+moment.
+
+`OffMainActor.run` is the third row with a name:
+
+```swift
+let report = await OffMainActor.run { Report.parse(payload) }
+```
+
+The `@Sendable` on its parameter is load-bearing rather than descriptive. A
+non-`@Sendable` closure literal formed in a `@MainActor` method is *inferred* to
+be `@MainActor`-isolated, and passing one would put the body back on the main
+actor while the signature claimed otherwise. `@Sendable` closures do not inherit
+isolation, so the annotation is what makes the hop real.
+
+Because it never leaves the caller's task, it inherits that task's priority,
+task-local values and cancellation. `Task.detached { }` also leaves the main
+actor and inherits none of the three, so cancelling the caller leaves the work
+running — save it for work that genuinely has to outlive whatever started it.
+`OffMainActor.run` is a hop, not a fork: the caller is suspended for its
+duration. When two things really should happen at once, that is `async let` or a
+task group.
+
+`MainActor.assumeIsolated` is the trip in the other direction and is not a hop at
+all. It asserts that this synchronous code is *already* on the main actor and
+hands over the isolation, trapping if the assertion is false. That is the right
+tool for a framework callback documented to arrive on the main thread —
+`AppleSignInService`'s `ASAuthorizationControllerDelegate` methods are all
+`nonisolated` and use it. `MainActor.run` cannot serve there: it is `async`, a
+synchronous callback has nowhere to put the `await`, and deferring the write past
+the callback's own return is exactly the ordering the delegate contract rules
+out.
+
+### The `await` that left also released the main actor
+
+The hop back is the half that gets forgotten. Suspending released the main
+actor, so other main-actor work ran while this was away — very often a second
+call to the same method. State read before the hop may be stale after it, and
+`MainActorIsolationTests` demonstrates that on the main actor rather than
+asserting it.
+
+Written the obvious way, this is wrong:
+
+```swift
+func queryChanged(_ text: String) async {
+    hits = try await api.hits(matching: text)   // ← whoever finishes last wins
+}
+```
+
+There is no data race and Swift 6 compiles it without complaint: the assignment
+happens on the main actor and no invariant visibly spans the `await`. The defect
+is ordering. Responses do not arrive in the order the requests went out, so
+typing `sw` then `swift` leaves the list showing results for `sw` whenever the
+shorter query is slower — a stale screen with a healthy network log, which is why
+it ships.
+
+`LatestOnlyTask` is that method written from the two rules that fix it:
+
+- **Supersede explicitly.** A new run cancels the one in flight rather than
+  racing it.
+- **Decide by generation, not by cancellation.** Each run takes a ticket before
+  it suspends and re-reads the counter when it resumes; only the holder of the
+  current ticket may deliver. Cancellation is cooperative, so it is a request,
+  not a guarantee — an operation that never checks for it runs to completion and
+  produces a perfectly good stale result. `LatestOnlyTaskTests` runs that exact
+  path against an operation written to ignore cancellation outright.
+
+Two calls can be inside `run` at once precisely because the first one's `await`
+released the main actor. The type is built on main-actor reentrancy rather than
+defending against it: the ticket is claimed, the old run cancelled and the new
+task published in one unsuspended stretch, which is the same discipline
+`SingleFlightCache` uses to make its lookup atomic.
+
 ## What enforces all of this
 
 Three gates, none of which depend on anyone remembering the rules:
@@ -169,6 +262,19 @@ Three gates, none of which depend on anyone remembering the rules:
   constraint. Most of these conformances are inferred and appear nowhere in the
   source; without the audit, losing one is silent until some distant call site
   fails to compile. With it, the error lands here.
+- **`Tests/ViewModelTests/MainActorIsolationTests.swift`**. Measures where code
+  actually runs, for each row of the table above, plus the reentrancy of the main
+  actor across an `await`. Two of those answers are the opposite of what the
+  syntax suggests, and all of them are version-sensitive — SE-0338 settled the
+  execution semantics of nonisolated async functions in Swift 5.7, and Swift
+  6.2's `nonisolated(nonsending)` moves the default again for anyone adopting it.
+  If a toolchain upgrade changes where a hop lands, this suite is what says so.
+  The probe is `CurrentThread.isMain` rather than `Thread.isMainThread` directly:
+  Foundation imports the latter as unavailable from asynchronous contexts, on the
+  grounds that in an `async` function the answer expires at every suspension
+  point. Reading it through a synchronous property is the sanctioned way round
+  that, and a synchronous body has no suspension point for the answer to expire
+  across.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that
