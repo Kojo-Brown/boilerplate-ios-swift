@@ -48,7 +48,7 @@ private final class MainActorCounter {
 /// `CurrentThread.isMain` is the probe throughout — see that type for why the
 /// question has to be asked from a synchronous function, and what it does and
 /// does not tell you.
-@Suite("@MainActor isolation and hops")
+@Suite("@MainActor isolation and hops", .serialized)
 struct MainActorIsolationTests {
 
     // MARK: What does not leave the main actor
@@ -138,7 +138,7 @@ struct MainActorIsolationTests {
     func cancellingTheCallerCancelsTheHop() async {
         let work = Task { @MainActor in
             try await OffMainActor.run {
-                try await Task.sleep(for: .seconds(10))
+                try await Task.sleep(for: .seconds(1))
                 return "finished"
             }
         }

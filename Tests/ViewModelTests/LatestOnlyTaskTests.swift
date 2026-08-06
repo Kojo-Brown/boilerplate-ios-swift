@@ -35,7 +35,7 @@ private func waitUntil(
 // MARK: - Tests
 
 /// The hop back onto the main actor: what may land, and what must not.
-@Suite("LatestOnlyTask")
+@Suite("LatestOnlyTask", .serialized)
 struct LatestOnlyTaskTests {
 
     // MARK: The uncontended path
@@ -69,7 +69,7 @@ struct LatestOnlyTaskTests {
 
         let running = Task { @MainActor in
             try await latest.run {
-                try await Task.sleep(for: .milliseconds(150))
+                try await Task.sleep(for: .milliseconds(100))
                 return "done"
             }
         }
@@ -91,7 +91,7 @@ struct LatestOnlyTaskTests {
 
         let first = Task { @MainActor in
             try await latest.run {
-                try await Task.sleep(for: .milliseconds(400))
+                try await Task.sleep(for: .milliseconds(150))
                 return "first"
             }
         }
@@ -111,20 +111,18 @@ struct LatestOnlyTaskTests {
 
         let first = Task { @MainActor in
             try await latest.run {
-                // Written to ignore cancellation outright: `Task.yield()` does
-                // not throw, and nothing here reads `Task.isCancelled`. This is
-                // the third-party SDK, or the request already past its last
-                // cancellation point, that runs to completion whatever is asked
-                // of it — and then hands back a perfectly good, entirely stale
-                // answer.
+                // `try?` is the whole point. Cancellation arrives, the sleep
+                // ends early — and then the operation swallows it and returns a
+                // perfectly ordinary value anyway. That is a third-party SDK
+                // that does not propagate cancellation, or a request already
+                // past its last cancellation point, or simply a `try?` written
+                // without thinking about what it discards. It is much the
+                // commonest way for a cancelled operation to produce a result.
                 //
-                // Cancelling the superseded run is therefore a request, not a
-                // guarantee, which is why the generation ticket rather than
+                // So cancelling the superseded run is a request, not a
+                // guarantee, and the generation ticket rather than
                 // `Task.isCancelled` is what decides who may deliver.
-                let deadline = ContinuousClock.now + .milliseconds(250)
-                while ContinuousClock.now < deadline {
-                    await Task.yield()
-                }
+                try? await Task.sleep(for: .milliseconds(150))
                 return "stale"
             }
         }
@@ -147,7 +145,7 @@ struct LatestOnlyTaskTests {
                 // `try?` so the sleep survives cancellation and the throw below
                 // is reached: the point under test is a superseded *failure*,
                 // not a superseded cancellation.
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(for: .milliseconds(150))
                 throw SampleFailure.boom
             }
         }
@@ -181,7 +179,7 @@ struct LatestOnlyTaskTests {
 
         let running = Task { @MainActor in
             try await latest.run {
-                try await Task.sleep(for: .seconds(5))
+                try await Task.sleep(for: .seconds(1))
                 return "never"
             }
         }
