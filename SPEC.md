@@ -205,11 +205,69 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] Strict concurrency checking enabled with `Sendable` conformance across the codebase — checking was already on and gated from Phase 0 item 4; the conformances were not. Four test doubles asserted `@unchecked Sendable` over bare mutable stored properties, and `LoadingState` was not `Sendable` at any `Value` because its failure payload was a bare `any Error` (PR #24)
 - [x] Actors for shared mutable state + a documented actor-reentrancy pitfall — `actor` buys isolation and is routinely misread as buying atomicity; `SingleFlightCache` is the memoising cache written from the two rules that misreading breaks, and the naive version is kept compiled and run so the pitfall is demonstrated rather than asserted (PR #25)
 - [x] `@MainActor` isolation rules and safe hops off the main actor — the repo had followed "`@Observable`, `@MainActor` view models" since Phase 2 without ever saying how to leave the main actor or how to return to it; `Task { }` does not leave it, a `nonisolated` *synchronous* function does not either, and the `await` that does leave also releases it (PR #26)
-- [ ] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler`
+- [x] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler` — `addTask` starts work rather than enqueuing it, `next()` yields in completion order rather than input order, and cancellation has to stop the window being *refilled* and not just its children; the package's six existing continuation bridges cannot be cancelled at all, because a task parked on a callback has no suspension point for cancellation to be delivered to (PR #27)
 - [ ] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes
 - [ ] Global actors and custom executors for a serial background domain
 - [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 4 complete as of PR #27 (2026-08-07). All four checks green; the build
+emitted no warnings in 48s and the test phase runs in 152s. Every new test
+compiled and passed on the first CI run — the only red round was two
+`empty_count` lint violations.
+
+`ConcurrentMap.over` is the everyday task group, and the three things it fixes
+are the three a hand-rolled one gets wrong. **A group is not a queue**: `addTask`
+creates a child that is immediately runnable, so 500 URLs opens 500 sockets, and
+the cooperative pool bounds only how many are *executing* — not how many are
+suspended on a socket each holding a buffer. Priming the group with
+`maxConcurrent` children and adding one more per completion needs no semaphore;
+`next()` is the backpressure. **`next()` yields in completion order**, so
+`results.append(value)` scrambles the input order invisibly whenever the
+transform is uniformly fast, and visibly in production on the slow network.
+**Cancellation has to stop the feeding**: children are cancelled for you, but
+`addTask` would still add child six to a cancelled group, where it is born
+cancelled and — if its transform never checks `Task.isCancelled` — runs to
+completion anyway. `addTaskUnlessCancelled` is the only thing that declines to
+start it.
+
+One decision is deliberate and documented at the call site: a child that catches
+its cancellation and returns a value has produced a result, and `over` returns
+it. Work finished before the cancellation landed is not discarded. What the
+caller may not get is a half-filled array reported as success, so a run left with
+holes throws `CancellationError`.
+
+`CancellableContinuation.run` is the half a bare continuation cannot do.
+Cancelling a task parked on `withCheckedThrowingContinuation` sets a flag and
+nothing else, so a screen dismissed mid-scan keeps the camera running.
+`withTaskCancellationHandler` is the only way to be told and telling the API is
+the only way to stop — and its `onCancel` is not scheduled: it runs
+synchronously on the cancelling thread, concurrently with the operation body, and
+can land before the body starts (nothing to resume; miss it and the task hangs
+forever), while `start` is still running (the cancel handle does not exist yet),
+or exactly as the callback fires (both paths reach for the same continuation, and
+a second resume *traps*). One winner is picked under a lock, with the state
+*inside* `OSAllocatedUnfairLock`, so the bridge adds no `@unchecked Sendable`.
+
+Both naive spellings are compiled and run rather than quoted, as
+`SingleFlightCacheTests` does for its reentrancy pitfall: the ordering tests
+drive the unbounded group and `ConcurrentMap` through identical gates and get
+["d","c","b","a"] from one and ["a","b","c","d"] from the other, and the fan-out
+tests measure peak 12 against peak 3. Nothing about ordering or cancellation is
+timed — a gate releases work by name and a held callback fires at the chosen
+instant — so the two suites that would otherwise be the flakiest in the repo have
+no timing margin to get wrong.
+
+Known gaps carried forward: neither type has a production call site, which
+matches `OffMainActor`, `LatestOnlyTask` and `SingleFlightCache` before them but
+does mean the six uncancellable bridges in `TextRecognitionService`,
+`CameraService`, `BarcodeScannerService`, `GoogleSignInService` and
+`AppleSignInService` are still uncancellable — migrating them is a real
+behaviour change per service, not this item. `ConcurrentMap.over` takes an
+`Array` rather than any `Sequence` because it needs the count up front to
+preallocate the result slots. And `swiftlint` prints `Found a configuration for
+'closure_body_length' rule, but it is not enabled in 'opt_in_rules'` on every
+run, so that ceiling in `.swiftlint.yml` has never actually been enforced.
 
 Item 3 complete as of PR #26 (2026-08-06). All four checks green; the test phase
 runs in 197s.
