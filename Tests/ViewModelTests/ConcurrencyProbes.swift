@@ -149,12 +149,16 @@ actor TaskGate {
 /// than beside it, which is what lets this be `Sendable` by the compiler's own
 /// reckoning instead of by assertion — see `docs/concurrency.md`.
 final class LockedCounter: Sendable {
-    private let calls = OSAllocatedUnfairLock(initialState: 0)
+    private let recorded = OSAllocatedUnfairLock(initialState: 0)
 
-    var count: Int { calls.withLock { $0 } }
+    /// Named `calls` rather than `count` deliberately. SwiftLint's `empty_count`
+    /// rule rewrites every `something.count == 0` into `something.isEmpty`, and a
+    /// counter has no such thing — "it was never called" *is* a comparison to
+    /// zero, and it is the assertion these tests are made of.
+    var calls: Int { recorded.withLock { $0 } }
 
     func increment() {
-        calls.withLock { $0 += 1 }
+        recorded.withLock { $0 += 1 }
     }
 }
 

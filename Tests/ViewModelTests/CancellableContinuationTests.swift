@@ -32,7 +32,7 @@ struct CancellableContinuationTests {
         #expect(value == 5)
         // The handle arrived after the work was already done, so it was dropped
         // rather than stored for a cancellation that can no longer come.
-        #expect(cancels.count == 0)
+        #expect(cancels.calls == 0)
     }
 
     @Test("a callback that arrives later is delivered")
@@ -122,7 +122,7 @@ struct CancellableContinuationTests {
         // The half a bare `withCheckedThrowingContinuation` cannot do: the
         // underlying API was told to stop. Exactly once — `onCancel` takes the
         // handle out of the state as it uses it.
-        #expect(cancels.count == 1)
+        #expect(cancels.calls == 1)
     }
 
     @Test("a callback arriving after cancellation is dropped rather than resumed twice")
@@ -151,7 +151,7 @@ struct CancellableContinuationTests {
         // continuation: `CheckedContinuation` traps on a second resume.
         finisher.finish(.success(99))
 
-        #expect(cancels.count == 1)
+        #expect(cancels.calls == 1)
     }
 
     @Test("a task cancelled before it reaches the bridge never starts the work")
@@ -189,6 +189,6 @@ struct CancellableContinuationTests {
         // called `start`. Work that has not begun does not need cancelling; the
         // bug this rules out is the body missing it and hanging forever,
         // because nothing will call the handler a second time.
-        #expect(starts.count == 0)
+        #expect(starts.calls == 0)
     }
 }
