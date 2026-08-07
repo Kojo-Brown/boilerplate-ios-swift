@@ -246,9 +246,128 @@ defending against it: the ticket is claimed, the old run cancelled and the new
 task published in one unsuspended stretch, which is the same discipline
 `SingleFlightCache` uses to make its lookup atomic.
 
+## Structured concurrency: the scope is the guarantee
+
+A task group and a `for` loop full of `Task { }` look alike and differ in the
+only property that matters. The group is *structured*: no child of it can
+outlive the call that created it. `withThrowingTaskGroup` does not return until
+every child has finished, on all three exits — the results were drained, a child
+threw and the rest were cancelled and awaited, or the caller was cancelled and
+the group drained what was left. The loop of `Task { }` returns immediately with
+the work still running, cancels nothing when the caller is cancelled, and
+reports no error to anybody.
+
+`ConcurrentMap.over(_:maxConcurrent:transform:)` is the everyday use of a group,
+written from the three things a hand-rolled one usually gets wrong.
+
+**A group is not a queue.** `addTask` does not enqueue work for the group to
+pace; it creates a child that is immediately runnable. `for url in urls {
+group.addTask { … } }` over 500 URLs opens 500 sockets. The cooperative pool is
+sized to the core count, but that bounds how many children are *executing*, not
+how many are suspended on a socket each holding a buffer — so this reads as a
+server refusing connections, or a memory ceiling on an older device, under a
+load the simulator never produced. The fix needs no semaphore: prime the group
+with `maxConcurrent` children and add exactly one more each time `next()` hands
+back a result. The group's own `next()` is the backpressure.
+
+**`next()` yields in completion order.** Collecting with `results.append(value)`
+scrambles the input order, invisibly whenever the transform is uniformly fast.
+It surfaces in production on the slow network, as a list whose rows are
+shuffled, and under test only if the fixtures have deliberately uneven timing —
+which fixtures rarely do. Each child here carries the offset it came from and
+writes to that slot, so ordering is a property of the code rather than of how
+the race happened to run. `ConcurrentMapTests` drives both spellings through
+identical gates, with the completion order chosen by the test rather than raced,
+and gets `["a", "b", "c", "d"]` from one and `["d", "c", "b", "a"]` from the
+other.
+
+**Cancellation has to stop the *feeding*, not just the children.** Children are
+cancelled for you when the parent is. Refilling the window is not: `addTask`
+would happily add child six to a cancelled group, where it is born cancelled and
+— if its transform never checks `Task.isCancelled` — runs to completion anyway.
+`addTaskUnlessCancelled` is what declines to start it, and it is the only thing
+that can. The test cancels a run of six with a window of two and asserts that
+exactly two ever started.
+
+That last point generalises: **cancellation is a request, and a child decides
+what to do with it.** A child that catches `CancellationError` and returns a
+value has produced a result, and `over` returns it. Work that finished before
+the cancellation landed is not discarded — cancelling is a request to stop, not
+an instruction to throw away what is already paid for. What the caller is not
+allowed to get is a half-filled array reported as success, so a run left with
+holes throws `CancellationError` rather than returning fewer results than it was
+given inputs.
+
+## `withTaskCancellationHandler`: cancelling work that is not Swift's
+
+Cooperative cancellation is delivered at suspension points. A continuation
+bridging a callback API has none to deliver it to — the task is parked on a
+callback, and nothing about `Task.isCancelled` becoming true reaches the thing
+that will eventually call it:
+
+```swift
+try await withCheckedThrowingContinuation { continuation in
+    legacyAPI.start { continuation.resume(with: $0) }   // ← nothing can stop this
+}
+```
+
+Cancelling the surrounding task sets a flag and the task stays suspended until
+the callback arrives on its own schedule. A screen dismissed mid-scan keeps the
+camera running; a search superseded three keystrokes ago keeps its socket open.
+This package has six bridges of exactly that shape — in `TextRecognitionService`,
+`CameraService`, `BarcodeScannerService`, `GoogleSignInService` and
+`AppleSignInService` — and none of them can be cancelled. That is not an
+oversight in any one of them; it is what a bare continuation is.
+
+`withTaskCancellationHandler` is the only way to be *told*, and telling the
+underlying API is the only way to stop. `CancellableContinuation.run` is that
+pairing written once:
+
+```swift
+try await CancellableContinuation.run { finish in
+    let task = URLSession.shared.dataTask(with: request) { data, _, error in
+        finish(Result { … })
+    }
+    task.resume()
+    return { task.cancel() }        // ← how this particular API is stopped
+}
+```
+
+### Why it needs a lock and not a flag
+
+`onCancel` is not scheduled. It runs **synchronously, on whichever thread called
+`cancel()`**, concurrently with the operation body, and at any point relative to
+it — including before the body has started, since a task already cancelled when
+it reaches the handler has the handler invoked immediately. Three interleavings
+follow, and each is a hang or a trap if the state is a plain `var`:
+
+| Cancel arrives… | What must happen |
+| --- | --- |
+| before the continuation exists | `onCancel` has nothing to resume, so the body must notice on arrival and resume itself. Miss it and the task hangs forever — nothing calls the handler twice. |
+| while `start` is still running | The cancel handle does not exist yet, so `onCancel` cannot use it. Whoever receives it must check on receipt whether it is already stale, or the work runs on with nobody waiting for it. |
+| just as the callback fires | Both paths reach for the same continuation. Resuming one twice does not produce a wrong answer, it traps — which is the whole reason to pay for `CheckedContinuation` in a bridge rather than the unsafe one. |
+
+So exactly one of the three paths wins, decided under a lock, and the losers do
+nothing. The state lives *inside* `OSAllocatedUnfairLock` per the rule above, so
+the bridge needs no `@unchecked Sendable`; neither critical section awaits or
+calls out while holding it, so a resume never happens under a non-recursive
+lock.
+
+`CancellableContinuationTests` drives all three moments rather than racing them:
+it holds the callback the bridge handed out and fires it at the awkward instant
+on purpose. The late-callback test is the one that would crash the test process
+against a bridge that had kept the continuation — a race a sleep-based test
+would reproduce perhaps one run in fifty.
+
+One deliberate choice: on cancellation this resumes with `CancellationError`
+straight away rather than waiting for the API to acknowledge, and drops whatever
+the callback reports afterwards. Cancellation is cooperative, so an API that
+never calls back after being cancelled is ordinary rather than broken, and a
+bridge that waited for it would turn that into a permanently suspended task.
+
 ## What enforces all of this
 
-Three gates, none of which depend on anyone remembering the rules:
+Six gates, none of which depend on anyone remembering the rules:
 
 - **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
@@ -275,6 +394,17 @@ Three gates, none of which depend on anyone remembering the rules:
   point. Reading it through a synchronous property is the sanctioned way round
   that, and a synchronous body has no suspension point for the answer to expire
   across.
+- **`Tests/ViewModelTests/ConcurrentMapTests.swift`**. Measures the peak
+  concurrency and the result ordering of `ConcurrentMap.over` and of the
+  unbounded, completion-ordered spelling it replaces — the naive one is compiled
+  and run, not quoted, for the same reason `SingleFlightCacheTests` keeps its
+  naive actor. It also asserts the structural guarantee directly: after the call
+  throws, nothing it started is still in flight.
+- **`Tests/ViewModelTests/CancellableContinuationTests.swift`**. Drives each of
+  the three cancellation interleavings by holding the bridged API's callback and
+  firing it at the awkward moment, rather than sleeping and hoping. Two of them
+  trap the process against a bridge that got them wrong, so a regression here
+  fails loudly rather than intermittently.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that
