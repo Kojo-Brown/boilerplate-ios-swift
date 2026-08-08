@@ -386,6 +386,13 @@ struct CameraServiceFrameStreamTests {
         for await _ in first {}
     }
 
+    /// The assertion is that the loop ends. What this test also does — and no
+    /// test here had done before — is keep the service alive across `stop()`'s
+    /// hop onto `sessionQueue`, which is how the exception `AVCaptureSession`
+    /// raises when told to stop a session it never started got run for the first
+    /// time. That is guarded at the source now; whether this test reaches the
+    /// guard on a given run depends on whether the queue drains before the
+    /// service goes away, so it is not what pins it.
     @Test("stop() ends the live frame stream")
     func stopEndsTheLiveStream() async {
         let service = CameraService()

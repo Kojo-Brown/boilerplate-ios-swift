@@ -130,6 +130,18 @@ final class CameraService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Ends the frame stream and stops the capture session.
+    ///
+    /// Safe to call without a matching `start()`, which it was not before. A
+    /// view that never got camera permission still tears down on disappear, and
+    /// `-[AVCaptureSession stopRunning]` on a session that was never configured
+    /// raises an Objective-C exception on the simulator — which, thrown onto
+    /// `sessionQueue`, aborts the process rather than failing anything. Nothing
+    /// had ever observed that: the existing view-model tests call `stop()` and
+    /// then end, so the service was deallocated and the queued block took its
+    /// `weak self` exit before reaching the session. Adding a test that outlives
+    /// the hop is what ran the line for the first time. `configureSession`
+    /// already guards its own entry the same way.
     func stop() {
         // Finished before the hop rather than on it: the consumer's `for await`
         // should end when `stop()` is called, not whenever `sessionQueue` next
@@ -137,7 +149,8 @@ final class CameraService: NSObject, @unchecked Sendable {
         // after this and are counted as undelivered, which is what they are.
         frames.finish()
         sessionQueue.async { [weak self] in
-            self?.session.stopRunning()
+            guard let self, self.session.isRunning else { return }
+            self.session.stopRunning()
         }
     }
 
