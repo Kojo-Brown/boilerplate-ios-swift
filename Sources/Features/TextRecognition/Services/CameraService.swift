@@ -38,16 +38,29 @@ struct CapturedFrame: @unchecked Sendable {
 
 /// Manages `AVCaptureSession` and streams raw sample buffers as an `AsyncStream`.
 ///
-/// All session mutations run on `sessionQueue`. The `AVCaptureVideoDataOutputSampleBufferDelegate`
-/// callback also fires on `sessionQueue`, ensuring `continuation` access is always serialized.
+/// All session mutations run on `sessionQueue`, and the
+/// `AVCaptureVideoDataOutputSampleBufferDelegate` callback fires there too. The
+/// frame stream itself is not confined to that queue — `DelegateStream` carries
+/// its own lock, so a consumer can ask for a stream from any isolation without a
+/// hop, and the delegate can yield into it without knowing who is listening.
 ///
-/// Marked `@unchecked Sendable` because thread-safety is enforced by `sessionQueue`.
+/// Marked `@unchecked Sendable` because the capture session's thread-safety is
+/// enforced by `sessionQueue`, which the compiler cannot see.
 final class CameraService: NSObject, @unchecked Sendable {
-    // MARK: - Private state (accessed only on sessionQueue except previewLayer)
+    // MARK: - Private state (session confined to sessionQueue; `frames` self-locking)
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "com.boilerplate.camera.session", qos: .userInitiated)
-    private var continuation: AsyncStream<CapturedFrame>.Continuation?
+
+    /// Newest-wins, depth one: a recogniser that falls behind should resume on
+    /// the frame in front of the camera now, not on the backlog it missed.
+    ///
+    /// Depth is not free here in the ordinary way. Each buffered frame retains a
+    /// `CMSampleBuffer` from `AVCaptureVideoDataOutput`'s fixed-size pool, and an
+    /// output with no free buffers left stops delivering — so an unbounded
+    /// buffer does not grow without limit, it stalls the scan while the preview
+    /// keeps running. See `DelegateStream` for the rest of that argument.
+    private let frames = DelegateStream<CapturedFrame>(bufferingPolicy: .bufferingNewest(1))
 
     // MARK: - Public
 
@@ -62,20 +75,35 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     // MARK: - Frame stream
 
-    /// Returns a new `AsyncStream` that yields each captured frame.
-    /// Frames arrive at ~30 fps; downstream consumers should throttle as needed.
+    /// Returns an `AsyncStream` of captured frames, superseding any stream
+    /// handed out earlier.
+    ///
+    /// Frames arrive at the capture rate — ~30 fps — and the stream keeps only
+    /// the newest, so a consumer that throttles (both view models do) drops the
+    /// frames it skips at the buffer rather than carrying them through the loop.
+    ///
+    /// Both view models call this again on every `startScanning()`, so a second
+    /// call is the ordinary case rather than a misuse: the previous stream is
+    /// finished, which is what ends the frame task the previous call started.
+    ///
+    /// No termination handler is installed. The session outlives any one
+    /// consumer and is shared with `previewLayer`, and the view models cancel
+    /// the frame task as a way of *switching* streams — stopping the camera on
+    /// consumer exit would race the restart that follows it. `stop()` is what
+    /// ends the session, and it is the caller's to call.
     func makeFrameStream() -> AsyncStream<CapturedFrame> {
-        // Each `sessionQueue.async` body needs its own `[weak self]`. Without
-        // one it reads the enclosing closure's weak binding, and a weak capture
-        // is a mutable box — two concurrently-executing closures sharing it is
-        // the race Swift 6 diagnoses. An explicit capture list copies the weak
-        // reference into the inner closure instead of sharing the box.
-        AsyncStream { [weak self] continuation in
-            self?.sessionQueue.async { [weak self] in self?.continuation = continuation }
-            continuation.onTermination = { @Sendable [weak self] _ in
-                self?.sessionQueue.async { [weak self] in self?.continuation = nil }
-            }
-        }
+        frames.makeStream()
+    }
+
+    /// What the frame stream's buffering policy has done since this service was
+    /// created: frames buffered, frames dropped as the consumer fell behind, and
+    /// frames that arrived while nothing was listening.
+    ///
+    /// Exposed because newest-wins discards silently, and a scan that never
+    /// completes looks the same from the view model whether the recogniser is
+    /// wrong or the frames never got there.
+    var frameStatistics: DelegateStream<CapturedFrame>.Statistics {
+        frames.statistics
     }
 
     // MARK: - Lifecycle
@@ -103,11 +131,13 @@ final class CameraService: NSObject, @unchecked Sendable {
     }
 
     func stop() {
+        // Finished before the hop rather than on it: the consumer's `for await`
+        // should end when `stop()` is called, not whenever `sessionQueue` next
+        // gets round to it. Frames already in flight from the delegate land
+        // after this and are counted as undelivered, which is what they are.
+        frames.finish()
         sessionQueue.async { [weak self] in
-            guard let self else { return }
-            self.session.stopRunning()
-            self.continuation?.finish()
-            self.continuation = nil
+            self?.session.stopRunning()
         }
     }
 
@@ -151,6 +181,10 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from _: AVCaptureConnection
     ) {
-        continuation?.yield(CapturedFrame(buffer: sampleBuffer))
+        // Returns immediately whatever the consumer is doing. That is the point
+        // and also the catch: a delegate that is never late is one AVFoundation
+        // never throttles, so the buffering policy on `frames` is the only thing
+        // bounding the queue behind it.
+        frames.yield(CapturedFrame(buffer: sampleBuffer))
     }
 }
