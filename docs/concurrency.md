@@ -365,9 +365,101 @@ the callback reports afterwards. Cancellation is cooperative, so an API that
 never calls back after being cancelled is ordinary rather than broken, and a
 bridge that waited for it would turn that into a permanently suspended task.
 
+## `AsyncStream` over a delegate: the backpressure that isn't there
+
+`CameraService` turns an `AVCaptureVideoDataOutputSampleBufferDelegate` into an
+`AsyncStream<CapturedFrame>`, which is the standard move and reads like a
+translation between two equivalent things. It is not one. A delegate callback
+and an async sequence disagree about who waits, and the bridge is where that
+disagreement gets settled — silently, if nobody settles it deliberately.
+
+Backpressure is a consumer telling a producer to slow down, and it needs a
+producer that can be told. `AsyncStream` has the channel for it: `yield` returns
+a `YieldResult` carrying the space left in the buffer. `captureOutput` cannot
+act on it. It is a synchronous method AVFoundation calls on a queue of its own,
+it cannot `await`, and a bridge that blocked inside it would block the capture
+queue — starving the preview layer and the session's own bookkeeping to protect
+a recogniser. So the producer runs at 30 fps whatever happens, the consumer runs
+at whatever a Vision request costs, and the difference has to go somewhere.
+
+There are two somewheres: memory, or the floor. That is the whole of the choice,
+and `AsyncStream` makes it for you if you let it — the default is `.unbounded`,
+which is memory, forever.
+
+### Bridging disarms the drop policy that was already there
+
+`AVCaptureVideoDataOutput.alwaysDiscardsLateVideoFrames` is a drop policy, it is
+set in `configureSession`, and it looks like the answer. It drops a frame when
+the delegate is *still executing* the previous one. Once the delegate body is
+`yield(…)` and nothing else, that never happens: a yield returns in nanoseconds
+whatever the consumer is doing, so AVFoundation sees a delegate that is never
+late and hands over every frame there is. Bridging to a stream moves the queue
+from a place with a bound to a place without one, and it does so by making the
+old bound stop firing rather than by removing it — so nothing reports it.
+
+The cost is specific. `AVCaptureVideoDataOutput` vends sample buffers from a
+pool of fixed size, and a buffer goes back to the pool when the last reference
+to it goes away. An unbounded stream holds a reference to every frame the
+consumer has not reached, so a consumer slower than the capture rate drains the
+pool, and an output with no free buffers stops delivering. What that looks like
+is not a memory graph climbing: it is scanning that quietly stops working while
+the preview — fed by its own connection to the session — keeps moving.
+
+### The policy is a domain decision, so it is a parameter
+
+`DelegateStream` has no default `bufferingPolicy`. Picking one is the point:
+
+- **`.bufferingNewest(1)`** for a live signal where only the latest sample means
+  anything — video frames, location fixes, the position of a drag. The consumer
+  never works on stale input, the producer never waits, and the backlog cannot
+  exist. This is what `CameraService` uses.
+- **`.bufferingOldest(n)`** where the first elements are the ones that matter
+  and a burst past `n` is a fault to report rather than absorb — a handshake
+  sequence, the opening errors of a storm.
+- **`.unbounded`** only where something else already bounds the producer: a
+  finite document, a paged fetch, a callback the code itself drives. It is not a
+  default. It is a claim that no burst is possible.
+
+`DelegateStreamTests` runs the same slow consumer against two of these and gets
+different answers from each. Under `.bufferingNewest(1)` it is handed frame 30
+while the camera is at 30; under `.unbounded` it is handed frame 2, with 28 more
+queued behind it, each still holding its buffer. Neither run has a sleep in it —
+a synchronous producer yielding into a stream nobody is draining fills the
+buffer deterministically, and the consumer is stepped one element at a time
+through the iterator.
+
+Whichever policy is chosen, it discards without saying so, which is why
+`statistics` counts. A scan that never completes looks identical from the view
+model whether the recogniser is wrong or the frames never arrived.
+
+### One consumer, and the bug that superseding hides
+
+An `AsyncStream` is not multicast: two tasks iterating one stream split the
+elements between them rather than each seeing all of them. So `DelegateStream`
+vends one live stream at a time, and a second `makeStream()` supersedes the
+first — finishing it, so its consumer's `for await` *ends* rather than waiting
+forever on a stream nothing will yield to again.
+
+Superseding is why the continuation is tracked by generation rather than held in
+a plain property. A replaced stream's termination handler still runs, and the
+obvious body for it is "clear the stored continuation" — which clears the *live*
+one, installed by the call that did the replacing. `CameraService` had exactly
+that shape, and both view models call `makeFrameStream()` on every
+`startScanning()`, so the path was reachable from the ordinary sequence of stop,
+start, stop. The generation is what lets a late handler recognise that it is
+reporting a stream nobody is listening to any more, and do nothing.
+
+The same distinction decides what a termination handler is told. Being
+superseded is not reported: the producer has not become unwanted, somebody else
+wants it, and a camera torn down there would race the consumer that just asked
+for it. `CameraService` installs no handler at all for that reason — the session
+outlives any one consumer and is shared with `previewLayer`, and the view models
+cancel the frame task as a way of switching streams. `stop()` ends the session,
+and it stays the caller's to call.
+
 ## What enforces all of this
 
-Six gates, none of which depend on anyone remembering the rules:
+Seven gates, none of which depend on anyone remembering the rules:
 
 - **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
@@ -405,6 +497,13 @@ Six gates, none of which depend on anyone remembering the rules:
   firing it at the awkward moment, rather than sleeping and hoping. Two of them
   trap the process against a bridge that got them wrong, so a regression here
   fails loudly rather than intermittently.
+- **`Tests/ViewModelTests/DelegateStreamTests.swift`**. Asserts what each
+  buffering policy keeps and what it throws away, including the unbounded
+  spelling — compiled and run rather than described, for the reason
+  `ConcurrentMapTests` keeps its unbounded task group. It also pins the
+  superseding rules: that a replaced stream ends instead of hanging, that its
+  termination does not detach the stream that replaced it, and that being
+  replaced is not reported as the producer becoming unwanted.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that

@@ -45,11 +45,14 @@ ALLOWED: dict[tuple[str, str], str] = {
         "Sources/Features/TextRecognition/Services/CameraService.swift",
         "CameraService",
     ): (
-        "Holds AVCaptureSession and the stream continuation, both confined to "
+        "Holds AVCaptureSession and AVCaptureVideoPreviewLayer, neither of "
+        "which is Sendable, with every mutation of the session confined to "
         "sessionQueue. The isolation is a serial DispatchQueue rather than an "
         "actor because AVCaptureVideoDataOutputSampleBufferDelegate delivers "
         "on a queue you hand it, and the compiler cannot see that a queue "
-        "guards a property."
+        "guards a property. The frame stream is no longer part of this "
+        "reason: it moved to DelegateStream, which keeps its state inside an "
+        "OSAllocatedUnfairLock and is Sendable without an opt-out."
     ),
 }
 
