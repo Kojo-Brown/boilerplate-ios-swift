@@ -206,10 +206,64 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] Actors for shared mutable state + a documented actor-reentrancy pitfall — `actor` buys isolation and is routinely misread as buying atomicity; `SingleFlightCache` is the memoising cache written from the two rules that misreading breaks, and the naive version is kept compiled and run so the pitfall is demonstrated rather than asserted (PR #25)
 - [x] `@MainActor` isolation rules and safe hops off the main actor — the repo had followed "`@Observable`, `@MainActor` view models" since Phase 2 without ever saying how to leave the main actor or how to return to it; `Task { }` does not leave it, a `nonisolated` *synchronous* function does not either, and the `await` that does leave also releases it (PR #26)
 - [x] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler` — `addTask` starts work rather than enqueuing it, `next()` yields in completion order rather than input order, and cancellation has to stop the window being *refilled* and not just its children; the package's six existing continuation bridges cannot be cancelled at all, because a task parked on a callback has no suspension point for cancellation to be delivered to (PR #27)
-- [ ] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes
+- [x] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes — the repo already had this bridge in `CameraService` and it was wrong in both of the ways the item is about: a synchronous delegate can be offered no backpressure at all, so the buffering policy is the only bound and `AsyncStream`'s default is `.unbounded`; and clearing the stored continuation from the termination handler let a superseded stream detach the one that replaced it (PR #28)
 - [ ] Global actors and custom executors for a serial background domain
 - [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 5 complete as of PR #28 (2026-08-08). All four checks green on the second
+round; the build emitted no warnings in 63s and the test phase runs in 156s.
+This is the first Phase 7 item with a production call site: `CameraService`
+adopts `DelegateStream` rather than the type sitting beside the code it
+describes.
+
+**There is no backpressure to have.** `captureOutput` is synchronous, cannot
+`await`, and blocking inside it would block the capture queue — so the producer
+runs at 30 fps regardless and the difference between that and what a Vision
+request costs goes to memory or to the floor. Nothing else is on offer.
+`AsyncStream` picks when you do not, and its default is `.unbounded`.
+`DelegateStream` has no default; the policy is the initialiser's only parameter.
+
+That mattered more than the usual "unbounded buffers grow" argument, because
+bridging had already disarmed the bound that existed.
+`alwaysDiscardsLateVideoFrames` drops a frame while the delegate is still
+executing the previous one, and a delegate whose whole body is `yield(…)` is
+never late. Each buffered frame meanwhile retains a `CMSampleBuffer` from a
+fixed-size pool, and an output with no free buffers stops delivering — so the
+failure is not a memory graph climbing, it is scanning silently stalling while
+the preview, on its own connection, keeps moving.
+
+**The termination handler was the second bug.** `CameraService` cleared its
+stored continuation from `onTermination`, and both view models call
+`makeFrameStream()` on every `startScanning()`, so the superseded stream's
+handler ran after the replacement was installed and cleared it — leaving the new
+frame task waiting on a stream nothing could reach, from an ordinary stop/start.
+Continuations are tracked by generation now, and being superseded is
+deliberately not reported as termination.
+
+CI found a third thing, which is the only reason it is known: the test run
+aborted with SIGABRT out of `-[AVCaptureSession stopRunning]`. That line is not
+new. What was new is that it ran — every existing test that calls `stop()` is
+synchronous and ends immediately, so the service deallocated and the queued
+block took its `weak self` exit before touching the session. The first test to
+await after `stop()` while still holding the service reached it, on a simulator
+where the session was never configured. `stop()` now checks `isRunning` first,
+the way `configureSession` already checks on the way in; a view denied camera
+permission still tears down on disappear, so that path is production's, not only
+a test's.
+
+Known gaps carried forward: no frame ever traverses the adopted path in CI,
+because a simulator has no capture device — whether `.bufferingNewest(1)` is the
+right depth for a real 30 fps feed is argued, not measured, and the three
+`CameraService` tests cover only what needs no camera. `frameStatistics` has no
+production reader, so the drop count is reachable but not surfaced.
+`PollingStream` still uses a bare `AsyncStream { }` at the default policy — its
+producer is bounded by its own `Task.sleep`, which is the one case where
+`.unbounded` is a claim rather than an oversight, but it makes that claim by
+omission, which is the habit this type exists to break. And the guard on
+`stop()` is pinned by nothing: whether a test reaches it depends on whether
+`sessionQueue` drains before the service goes away, which is the race that hid
+the crash for six phases.
 
 Item 4 complete as of PR #27 (2026-08-07). All four checks green; the build
 emitted no warnings in 48s and the test phase runs in 152s. Every new test
