@@ -457,9 +457,149 @@ outlives any one consumer and is shared with `previewLayer`, and the view models
 cancel the frame task as a way of switching streams. `stop()` ends the session,
 and it stays the caller's to call.
 
+## A global actor, and the executor underneath it
+
+`DiagnosticsActor` is this package's one global actor. It exists for a domain
+that needs three things at once: several types sharing one isolation domain, a
+thread that is allowed to block, and a fixed QoS that does not follow the
+caller's priority.
+
+### A global actor is for a domain, not for a type
+
+A plain `actor` gives *one instance* its own isolation. That is the right
+default, and `TokenStore` is it — token state, protected, nothing else inside.
+
+The default stops fitting when two types have to agree about each other's state.
+`DiagnosticJournal` admits a record only if `DiagnosticBudget` has room, which is
+a check followed by an act. As two actors, the check is an `await`, and every
+`await` is a hole: a second caller can be admitted against a count the first one
+has already decided to change. That is the same non-atomicity
+`SingleFlightCache` exists to close, reintroduced by nothing more than a choice
+of isolation. As one global actor, `record` consults the budget with a plain
+synchronous call and there is no suspension point for anything to run in.
+
+So the question is not "does this need an actor" but "how many things belong in
+this domain". One: `actor`. Several: `@globalActor`.
+
+The price is that a global actor is global state. Every `@DiagnosticsActor`
+declaration shares one queue, so a slow write in any of them delays all of them,
+and there is no second, independent diagnostics domain to be had — not even for
+a test. `DiagnosticJournal` takes its sink and budget as initialiser parameters
+for exactly that reason: the domain is global, the objects in it are not, and
+the tests build their own.
+
+### Neither executor promises an ordering
+
+The reflex is that a serial domain gives ordered delivery. It does not. Nothing
+orders two *independently created* tasks arriving at the same actor: the default
+actor executor drains its queue in priority order, and while a serial
+`DispatchQueue` is FIFO with respect to `enqueue`, when each task gets to call
+`enqueue` is still a scheduling detail.
+
+A total order has to be taken *inside* the domain, where the actor's own
+serialisation supplies it. `DiagnosticJournal.record` stamps its sequence number
+there, in a method with no `await` in it, which is why sixty-four concurrent
+callers produce sixty-four consecutive numbers.
+
+The same reasoning is why there is no `DiagnosticJournal.log(_:)` that wraps the
+hop in a `Task` and returns immediately. It would be the nicer API and it would
+lose the property a log exists to have: two calls in a row from one function are
+two independent tasks, and the second line can be journalled before the first.
+`record` is awaited, so the caller's own program order survives.
+
+### What the custom executor is actually for
+
+`SerialDispatchExecutor` is installed by overriding `unownedExecutor`:
+
+```swift
+@globalActor
+actor DiagnosticsActor {
+    static let shared = DiagnosticsActor()
+    nonisolated let executor = SerialDispatchExecutor(label: "…diagnostics", qos: .utility)
+    nonisolated var unownedExecutor: UnownedSerialExecutor {
+        executor.asUnownedSerialExecutor()
+    }
+}
+```
+
+Both `nonisolated`s are load-bearing. The runtime reads `unownedExecutor` in
+order to schedule work *onto* this actor, which is necessarily from outside the
+actor's isolation — an executor you had to be isolated to reach would be
+unreachable, because reaching it is how you become isolated. Leaving the stored
+property to the compiler's implicit "a `Sendable` `let` is nonisolated" rule is
+not enough: read it from a `@DiagnosticsActor` context and you get *"actor-
+isolated property 'executor' can not be referenced from global actor
+'DiagnosticsActor'"*, because isolation to the global actor is not the same
+statement as isolation to the `DiagnosticsActor.shared` instance. Nothing is
+given up by saying `nonisolated` outright — the value is an immutable reference
+to a `Sendable` type, so there is no state for the isolation to have guarded.
+
+It buys none of the things it is usually reached for. It does not make the actor
+serial — every actor already is. It does not order anything, per above.
+
+What it buys is a thread that is not the cooperative pool's. The pool has one
+thread per core and no reserve, on the stated assumption that work there
+*suspends* rather than *blocks*. `FileDiagnosticSink.write` is a `write(2)`; it
+blocks. On the pool that parks one of a handful of threads inside a syscall and
+stalls unrelated tasks across the process, so a domain whose terminal operation
+is blocking I/O has to run somewhere it is allowed to block. A serial
+`DispatchQueue` is that somewhere, and the cost of blocking it is bounded to the
+domain that chose to.
+
+Two smaller reasons come with it. The queue label appears in crash reports,
+`sample`, and Instruments, so this work is attributable instead of being another
+anonymous `com.apple.root.*` frame. And jobs run at the queue's QoS whatever the
+enqueuing task's priority, so a background domain called from a `.userInitiated`
+task cannot inherit its way into competing with it. Dispatch may still boost the
+queue to resolve a priority inversion, which is the intended behaviour rather
+than a hole in the ceiling.
+
+### `enqueue`, and why the job is converted
+
+```swift
+func enqueue(_ job: consuming ExecutorJob) {
+    let unownedJob = UnownedJob(job)
+    queue.async { [self] in
+        unownedJob.runSynchronously(on: asUnownedSerialExecutor())
+    }
+}
+```
+
+The conversion is required, not stylistic. `ExecutorJob` is non-copyable and
+non-`Sendable`, so it cannot be captured by the escaping closure `async` takes;
+`UnownedJob` is the unmanaged handle that can be. Consuming the `ExecutorJob` to
+make one transfers an obligation to run it exactly once — drop the handle
+without running it and the job leaks and whatever awaits it hangs.
+
+`UnownedSerialExecutor` does not retain, which is why the actor holds the
+executor as a stored `let`: something has to own it, and an executor that
+outlives nothing is an executor the runtime has a dangling reference to.
+
+### `checkIsolated()` is not optional
+
+```swift
+func checkIsolated() {
+    dispatchPrecondition(condition: .onQueue(queue))
+}
+```
+
+This is SE-0424's hook. `assumeIsolated` and `assertIsolated` cannot reason
+about a custom executor by themselves, so they ask it, and the protocol's
+default implementation traps unconditionally with "expected checkIsolated to be
+implemented" — which turns every `assumeIsolated` on the domain into a crash,
+including the correct ones. Implementing it is also what makes the
+`DispatchQueue` backing worth having for interop: a legacy callback delivered to
+that queue really is isolated to the actor, and this is how the runtime can be
+told to verify that rather than take it on trust.
+
+It carries no availability annotation. The requirement it satisfies is gated to
+the Swift 6 runtime, a witness may always be *more* available than its
+requirement, and leaving it ungated is what lets the tests call it directly on
+the package's iOS 17 floor.
+
 ## What enforces all of this
 
-Seven gates, none of which depend on anyone remembering the rules:
+Eight gates, none of which depend on anyone remembering the rules:
 
 - **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
@@ -504,6 +644,18 @@ Seven gates, none of which depend on anyone remembering the rules:
   superseding rules: that a replaced stream ends instead of hanging, that its
   termination does not detach the stream that replaced it, and that being
   replaced is not reported as the producer becoming unwanted.
+- **`Tests/ViewModelTests/DiagnosticsActorTests.swift`**. Asserts that the
+  diagnostics domain landed where its documentation says: off the main thread,
+  and on the executor's own queue rather than the cooperative pool. The second
+  of those is the one that matters, because losing `unownedExecutor` from
+  `DiagnosticsActor` breaks nothing visible — the actor stays correct and stays
+  serial, and only stops being on a thread it is allowed to block. It is checked
+  through the executor's own `checkIsolated()`, so a wrong answer trips a
+  `dispatchPrecondition` and takes the process with it rather than failing
+  quietly. The suite also pins the ordering claim from the other end: sixty-four
+  concurrent `record` calls produce sixty-four consecutive sequence numbers,
+  which is the actor's serialisation observed through the thing that would
+  visibly break without it.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that
