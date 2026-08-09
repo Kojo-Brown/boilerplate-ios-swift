@@ -207,9 +207,56 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] `@MainActor` isolation rules and safe hops off the main actor — the repo had followed "`@Observable`, `@MainActor` view models" since Phase 2 without ever saying how to leave the main actor or how to return to it; `Task { }` does not leave it, a `nonisolated` *synchronous* function does not either, and the `await` that does leave also releases it (PR #26)
 - [x] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler` — `addTask` starts work rather than enqueuing it, `next()` yields in completion order rather than input order, and cancellation has to stop the window being *refilled* and not just its children; the package's six existing continuation bridges cannot be cancelled at all, because a task parked on a callback has no suspension point for cancellation to be delivered to (PR #27)
 - [x] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes — the repo already had this bridge in `CameraService` and it was wrong in both of the ways the item is about: a synchronous delegate can be offered no backpressure at all, so the buffering policy is the only bound and `AsyncStream`'s default is `.unbounded`; and clearing the stored continuation from the termination handler let a superseded stream detach the one that replaced it (PR #28)
-- [ ] Global actors and custom executors for a serial background domain
+- [x] Global actors and custom executors for a serial background domain — a global actor is for a *domain*, not a type: `DiagnosticJournal` admits a record only if `DiagnosticBudget` has room, and as two actors that check-then-act would be split by an `await`, which is the non-atomicity `SingleFlightCache` exists to close reintroduced by nothing but a choice of isolation. The custom executor buys none of what it is usually reached for — every actor is already serial, and neither executor orders independently created tasks — it buys a thread that is *allowed to block*, which the cooperative pool is not, for a domain whose terminal operation is a `write(2)` (PR #29)
 - [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 6 complete as of PR #29 (2026-08-09). All four checks green on the second
+round; the build emitted no warnings in 48s and the test phase runs in 156s.
+
+**A global actor is for a domain, not for a type.** A plain `actor` gives one
+*instance* its own isolation, which is right for `TokenStore` and wrong the
+moment two types have to agree about each other's state. `DiagnosticJournal`
+admits a record only if `DiagnosticBudget` has room — a check followed by an act.
+Written as two actors the check is an `await`, and a second caller fits through
+that hole against a count the first has already decided to change: the same
+non-atomicity `SingleFlightCache` exists to close, reintroduced by nothing but a
+choice of isolation. The price is stated rather than glossed: a global actor is
+global state, one slow member delays every other, and there is no second
+independent domain to be had — which is why the journal takes its sink and
+budget as parameters and the tests build their own.
+
+**The custom executor buys none of what it is usually reached for.** It does not
+make the actor serial; every actor already is. It does not order anything —
+nothing orders two independently created tasks arriving at one actor, since the
+default executor drains in *priority* order and a serial `DispatchQueue`'s FIFO
+is only with respect to `enqueue`. A total order has to be taken inside the
+domain, which is why `record` stamps its sequence number there, in a method with
+no `await` in it. What the executor does buy is a thread that is *allowed to
+block*: the cooperative pool has one thread per core and no reserve, on the
+stated assumption that work there suspends, and this domain's terminal operation
+is `FileDiagnosticSink.write` — a `write(2)`. That is the whole justification,
+and the file sink exists so it is a fact rather than a claim.
+
+`checkIsolated()` is not optional. The protocol default traps unconditionally,
+so an executor that omits it turns every `assumeIsolated` on the domain into a
+crash, including the correct ones.
+
+CI found the thing that was actually load-bearing: `executor` had been left a
+plain stored `let`, on the assumption that "a `Sendable` `let` is nonisolated"
+covered every reader. It does not — reading it from a `@DiagnosticsActor`
+context fails, because isolation to the global actor is not the same statement
+as isolation to the `DiagnosticsActor.shared` instance. It is `nonisolated` now,
+which is what it always was: the runtime has to reach the executor from outside
+the actor's isolation, since reaching it is how anything becomes isolated.
+
+Known gaps carried forward: the journal has no call sites in the feature code,
+which matches every other Phase 7 pattern here but means the blocking-I/O
+argument is demonstrated by the tests rather than by the app. `FileDiagnosticSink`
+bounds nothing on disk — `DiagnosticBudget` caps the in-memory buffer only, so a
+long-lived journal grows a file without rotation. And no `deinit` closes the
+handle, because closing throws and deinitialisers cannot; `close()` is the
+caller's to call, and losing it costs a file descriptor at exit rather than data.
 
 Item 5 complete as of PR #28 (2026-08-08). All four checks green on the second
 round; the build emitted no warnings in 63s and the test phase runs in 156s.
