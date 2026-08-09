@@ -59,11 +59,17 @@ actor DiagnosticsActor {
     /// The queue-backed executor this domain runs on.
     ///
     /// Held as a stored `let` so it outlives every job scheduled on it —
-    /// `UnownedSerialExecutor` does not retain, so something has to. It is
-    /// readable from outside the actor because it is immutable and `Sendable`;
-    /// the tests use that to assert the domain really landed here rather than on
-    /// the cooperative pool.
-    let executor = SerialDispatchExecutor(
+    /// `UnownedSerialExecutor` does not retain, so something has to.
+    ///
+    /// `nonisolated` because the actor genuinely does not protect it, and
+    /// saying so is not optional here. The runtime reads it through
+    /// `unownedExecutor` to schedule work *onto* this actor, which is by
+    /// definition from outside the actor's isolation — an executor you had to
+    /// be isolated to reach would be unreachable, since reaching it is how you
+    /// become isolated. Nothing is given up: the value is an immutable
+    /// reference to a `Sendable` type, so there is no state here for isolation
+    /// to have been guarding.
+    nonisolated let executor = SerialDispatchExecutor(
         label: "com.boilerplate.iosswift.diagnostics",
         qos: .utility
     )

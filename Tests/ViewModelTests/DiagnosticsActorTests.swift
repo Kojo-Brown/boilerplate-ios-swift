@@ -153,15 +153,16 @@ struct DiagnosticsActorTests {
     @Test("The budget refuses records past capacity and counts every refusal")
     func budgetRefusesPastCapacity() async {
         let fixture = await makeJournal(capacity: 4)
-        var accepted = 0
+        var outcomes: [DiagnosticRecord?] = []
 
         for index in 1...7 {
-            if await fixture.journal.record(.network, "event \(index)") != nil {
-                accepted += 1
-            }
+            outcomes.append(await fixture.journal.record(.network, "event \(index)"))
         }
 
-        #expect(accepted == 4)
+        // The refusals are the *last* three, not three somewhere in the middle:
+        // the budget refuses on a full buffer rather than sampling.
+        #expect(outcomes.compactMap { $0 }.count == 4)
+        #expect(outcomes.suffix(3).allSatisfy { $0 == nil })
         let pending = await fixture.journal.pending
         #expect(pending.count == 4)
         let dropped = await fixture.journal.dropped

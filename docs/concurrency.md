@@ -515,12 +515,24 @@ two independent tasks, and the second line can be journalled before the first.
 @globalActor
 actor DiagnosticsActor {
     static let shared = DiagnosticsActor()
-    let executor = SerialDispatchExecutor(label: "…diagnostics", qos: .utility)
+    nonisolated let executor = SerialDispatchExecutor(label: "…diagnostics", qos: .utility)
     nonisolated var unownedExecutor: UnownedSerialExecutor {
         executor.asUnownedSerialExecutor()
     }
 }
 ```
+
+Both `nonisolated`s are load-bearing. The runtime reads `unownedExecutor` in
+order to schedule work *onto* this actor, which is necessarily from outside the
+actor's isolation — an executor you had to be isolated to reach would be
+unreachable, because reaching it is how you become isolated. Leaving the stored
+property to the compiler's implicit "a `Sendable` `let` is nonisolated" rule is
+not enough: read it from a `@DiagnosticsActor` context and you get *"actor-
+isolated property 'executor' can not be referenced from global actor
+'DiagnosticsActor'"*, because isolation to the global actor is not the same
+statement as isolation to the `DiagnosticsActor.shared` instance. Nothing is
+given up by saying `nonisolated` outright — the value is an immutable reference
+to a `Sendable` type, so there is no state for the isolation to have guarded.
 
 It buys none of the things it is usually reached for. It does not make the actor
 serial — every actor already is. It does not order anything, per above.

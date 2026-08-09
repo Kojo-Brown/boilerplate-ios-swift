@@ -7,7 +7,7 @@ import Dispatch
 /// @globalActor
 /// actor DiagnosticsActor {
 ///     static let shared = DiagnosticsActor()
-///     let executor = SerialDispatchExecutor(label: "…diagnostics", qos: .utility)
+///     nonisolated let executor = SerialDispatchExecutor(label: "…diagnostics", qos: .utility)
 ///     nonisolated var unownedExecutor: UnownedSerialExecutor {
 ///         executor.asUnownedSerialExecutor()
 ///     }
