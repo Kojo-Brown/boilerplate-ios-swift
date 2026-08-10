@@ -79,16 +79,18 @@ Two rules for using it:
 an assertion, not a check: the compiler records it and stops looking, including
 at whatever gets added to the type later.
 
-## The two remaining opt-outs
+## The three remaining opt-outs
 
-Both are in `CameraService.swift`, both are AVFoundation's shape rather than
-ours, and both are recorded in `.github/scripts/assert-sendable-audit.py` with
-the reason:
+Two are in `CameraService.swift` and are AVFoundation's shape rather than ours.
+The third is the one place this package builds a value type over a mutable
+allocation by hand. All three are recorded in
+`.github/scripts/assert-sendable-audit.py` with the reason:
 
 | Type | Why it cannot be checked |
 | --- | --- |
 | `CapturedFrame` | Wraps `CMSampleBuffer`. CoreMedia's types carry no `Sendable` annotation and are not ours to annotate. The wrapper narrows the assertion to the single hop the frame really takes: capture queue to recogniser, never mutated after capture, not retained past the `recognise` call that consumes it. |
 | `CameraService` | Holds `AVCaptureSession` and the stream continuation, both confined to `sessionQueue`. The isolation is a serial `DispatchQueue` rather than an actor because `AVCaptureVideoDataOutputSampleBufferDelegate` delivers on a queue you hand it, and the compiler cannot see that a queue guards a property. |
+| `CopyOnWriteBox` | Its `Storage` class holds a mutable `var` and is not `Sendable`; the struct in front of it is, conditionally on `Value`, because copying is what sending a struct means and every mutation of a *shared* allocation copies rather than writing through it. The unprovable part is that `Storage` never escapes and that every write funnels through `makeUnique()` — true of one file, which is why `Storage` is private to it. `Array` makes the same bargain for the same reason. See [Value semantics](#value-semantics-let-first-modelling-and-copy-on-write). |
 
 `UserEntity` is deliberately absent from the audit and carries no opt-out: it is
 a SwiftData `@Model` class, is not `Sendable`, and is not meant to be. It never
@@ -597,9 +599,157 @@ the Swift 6 runtime, a witness may always be *more* available than its
 requirement, and leaving it ungated is what lets the tests call it directly on
 the package's iOS 17 floor.
 
+## Value semantics, `let`-first modelling, and copy-on-write
+
+Rule 1 of "four ways to be `Sendable`" is *be a value type*, and it is the only
+one of the four that costs nothing to maintain. This section is what that rule
+actually rests on, because "value type" is not the same claim as `struct`.
+
+### `struct` is a syntax; value semantics is a property
+
+A type has value semantics when a copy is independent of the thing it was copied
+from: mutating one is not observable through the other. Structs of `Int`,
+`String`, `Array` and other structs have it. A struct with one stored reference
+does not, and nothing says so:
+
+```swift
+struct Draft {
+    private final class Body { var text = "" }
+    private var body = Body()
+    var text: String {
+        get { body.text }
+        set { body.text = newValue }
+    }
+}
+
+var a = Draft(); var b = a
+b.text = "edited"
+a.text        // "edited"
+```
+
+That compiles in Swift 6 language mode with no warning, and it is not a data
+race — one thread, no concurrency involved. It is worse than a class would have
+been, because `var b = a` reads as a copy at every call site.
+`ImmutabilityTests` keeps that type compiled and runs it, for the same reason
+`SingleFlightCacheTests` keeps its naive actor: an assertion about a mistake is
+weaker than the mistake, executed.
+
+It matters for concurrency because value semantics is *exactly* the property
+that makes `Sendable` inference sound. The compiler catches the version of this
+where the class is not `Sendable`. It does not catch the version where the class
+is — a `final class` whose state lives inside an `OSAllocatedUnfairLock` is
+`Sendable`, so a struct wrapping one is `Sendable` too, and its copies share.
+That type is safe to send and still not a value.
+
+### `let`-first, and what a transform is for
+
+`User` now has no `var` stored properties. It never needed any: nothing in the
+package has ever mutated a `User` in place, because a domain model fetched over
+HTTP is edited by the server and comes back as a new value. Writing that as
+`let` costs nothing and buys three things — no partially-updated state for a
+reader to reason about, an `==` that stays true, and a type that is `Sendable`
+by inspection.
+
+What it takes away is `user.name = "Ada"`, and what replaces it is a
+derivation. The obvious spelling of one is a method whose parameters default to
+`nil`, and it has a hole in it:
+
+```swift
+func with(name: String? = nil, avatarURL: URL?? = nil) -> User
+```
+
+`name` is fine. `avatarURL` is already optional, so "not supplied" and "set to
+nil" have collided, and the double optional that resolves it in the type does
+not resolve it at the call site: `user.with(avatarURL: nil)` compiles, reads as
+*clear the avatar*, and means *leave the avatar alone*, because `nil` binds to
+the outer optional. Both readings type-check, so there is no diagnostic — only a
+field that silently fails to clear.
+
+`FieldUpdate` names the two cases instead of documenting the trap:
+
+```swift
+user.with(name: .set("Ada"))       // rename, keep the avatar
+user.with(avatarURL: .set(nil))    // clear the avatar, keep the name
+```
+
+`with(_:)` takes no `id` and no `email`. A transform's parameter list is the
+type's statement about what an edit is allowed to touch, and changing either of
+those does not produce an edited user — it produces a different one, which the
+memberwise initialiser is for.
+
+The rebuild-by-hand this replaces was live in the package and losing data.
+`MockUserRepository.updateProfile(name:)` read
+`User(id: stubbedUser.id, email: stubbedUser.email, name: name)`, which threw
+away the avatar and both timestamps every time it ran, because the memberwise
+initialiser defaults them to `nil`. A transform cannot drop a field it was not
+asked about.
+
+### Copy-on-write, and inspecting it rather than believing in it
+
+Value semantics sounds expensive: if every assignment copies, a struct holding a
+large array is a copy per assignment. It is not, because the standard library's
+containers are copy-on-write — assignment shares the buffer and refcounts it, and
+the *first mutation through a shared reference* is what allocates.
+
+That is a performance claim, and a performance claim nothing measures is a hope.
+Two arrays share a buffer exactly when their base addresses are equal, which is
+observable without escaping a pointer:
+
+```swift
+lhs.withUnsafeBufferPointer { left in
+    rhs.withUnsafeBufferPointer { right in
+        left.baseAddress == right.baseAddress
+    }
+}
+```
+
+`StandardLibraryCopyOnWriteTests` uses it to pin both halves: assignment shares,
+and appending to one of two sharers gives it its own buffer while the other keeps
+the original. It also checks the inherited case — `ScanResult` stores an array,
+declares no copy-on-write of its own, and gets it anyway.
+
+**`CopyOnWriteBox` is almost always the wrong tool**, and that is worth saying in
+the file that ships it. `Array`, `Dictionary`, `Set`, `String` and `Data` already
+do this; a struct built from them inherits it for free, and every model in this
+package is that shape. Putting a hand-rolled box in front of one adds an
+allocation and buys nothing. It earns its place in exactly one situation: a value
+type that must store a *reference* and must still behave like a value — which is
+`Draft` above, with the missing line put back.
+
+The missing line is the whole mechanism:
+
+```swift
+private mutating func makeUnique() {
+    guard !isKnownUniquelyReferenced(&storage) else { return }
+    storage = Storage(storage.value)
+}
+```
+
+`isKnownUniquelyReferenced(_:)` reads the object's reference count, which is
+precisely the question *does anyone else see the write I am about to make*. It is
+`mutating` and takes its argument `inout` because it needs exclusive access to
+the reference it is asked about — which is also why a box held in a `let` cannot
+be asked, and why `CopyOnWriteBox.isUniquelyReferenced()` is `mutating` in turn.
+
+Two things the box exposes are there to be tested rather than used:
+`storageIdentity` reports which allocation a box currently points at, and
+`isUniquelyReferenced()` reports whether the next mutation will copy. Between
+them `CopyOnWriteBoxTests` states the contract as measurements — sharing after
+assignment, one copy on the first write through a shared box, no copy at all when
+the box is the only owner, and uniqueness returning to the original once a copy
+has diverged.
+
+One consequence is easy to miss: **mutate through `withValue`, not through
+`value`**. `value` is a computed property, so `box.value.append(1)` is a get, a
+mutation of the temporary, and a set — it copies the payload out and back on
+every call, and defeats the payload's own copy-on-write while doing it.
+`withValue` yields the storage `inout` and mutates in place. The accessor that
+would close the gap on the property itself is the underscored `_modify`, which is
+not language surface this package is willing to depend on.
+
 ## What enforces all of this
 
-Eight gates, none of which depend on anyone remembering the rules:
+Nine gates, none of which depend on anyone remembering the rules:
 
 - **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
@@ -656,6 +806,14 @@ Eight gates, none of which depend on anyone remembering the rules:
   concurrent `record` calls produce sixty-four consecutive sequence numbers,
   which is the actor's serialisation observed through the thing that would
   visibly break without it.
+- **`Tests/ViewModelTests/ImmutabilityTests.swift`**. Measures value semantics
+  rather than assuming it. The struct-over-a-reference that silently has
+  reference semantics is compiled and run, next to the same shape with
+  `makeUnique()` put back, so the difference is a test result rather than a
+  paragraph. It also pins the copy-on-write claims as observations —
+  `storageIdentity` for `CopyOnWriteBox`, buffer base addresses for `Array` —
+  and the `with(_:)` transform's promise that a field it was not asked about
+  survives the edit, which is the bug it was introduced to fix.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that

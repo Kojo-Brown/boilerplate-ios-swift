@@ -54,6 +54,20 @@ ALLOWED: dict[tuple[str, str], str] = {
         "reason: it moved to DelegateStream, which keeps its state inside an "
         "OSAllocatedUnfairLock and is Sendable without an opt-out."
     ),
+    (
+        "Sources/Core/Immutability/CopyOnWriteBox.swift",
+        "CopyOnWriteBox",
+    ): (
+        "A hand-rolled copy-on-write box, and the same bargain Array makes for "
+        "the same reason: the storage class holds a mutable var and is not "
+        "Sendable, while the struct in front of it is, because sending copies "
+        "the struct and every mutation of a shared allocation copies rather "
+        "than writing where another copy can see it. What the compiler cannot "
+        "check is that Storage never escapes and that every write funnels "
+        "through makeUnique(); both are true of one file, which is why Storage "
+        "is private to it. The conformance is conditional on Value, so a box "
+        "of a non-Sendable payload is not sendable at all."
+    ),
 }
 
 HATCHES = (
