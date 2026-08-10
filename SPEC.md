@@ -208,8 +208,40 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] Structured concurrency: `TaskGroup`, cancellation propagation, and `withTaskCancellationHandler` — `addTask` starts work rather than enqueuing it, `next()` yields in completion order rather than input order, and cancellation has to stop the window being *refilled* and not just its children; the package's six existing continuation bridges cannot be cancelled at all, because a task parked on a callback has no suspension point for cancellation to be delivered to (PR #27)
 - [x] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes — the repo already had this bridge in `CameraService` and it was wrong in both of the ways the item is about: a synchronous delegate can be offered no backpressure at all, so the buffering policy is the only bound and `AsyncStream`'s default is `.unbounded`; and clearing the stored continuation from the termination handler let a superseded stream detach the one that replaced it (PR #28)
 - [x] Global actors and custom executors for a serial background domain — a global actor is for a *domain*, not a type: `DiagnosticJournal` admits a record only if `DiagnosticBudget` has room, and as two actors that check-then-act would be split by an `await`, which is the non-atomicity `SingleFlightCache` exists to close reintroduced by nothing but a choice of isolation. The custom executor buys none of what it is usually reached for — every actor is already serial, and neither executor orders independently created tasks — it buys a thread that is *allowed to block*, which the cooperative pool is not, for a domain whose terminal operation is a `write(2)` (PR #29)
-- [ ] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection
+- [x] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection — `struct` is a syntax and value semantics is a property, and the version that has the first without the second compiles with no warning and is not a data race; `User` never needed the four `var`s it carried, and the `with(_:)` that replaces them fixes a live field-dropping bug in `MockUserRepository`; copy-on-write is inspected through storage identity and buffer base addresses rather than believed (PR #30)
 - [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+
+Item 7 complete as of PR #30 (2026-08-10). All four checks green on the first
+round; the build emitted no warnings in 50s and the test phase ran in 139s.
+
+**`struct` is a syntax; value semantics is a property.** A struct with one
+stored reference has the first and not the second, and nothing says so — the
+setter writes through an allocation every copy shares, `var b = a` reads as a
+copy at every call site and is not one, and Swift 6 language mode accepts all of
+it because one thread mutating shared state is not a data race.
+`ReferenceBackedDraft` is that type, kept compiled and run beside the same shape
+with `makeUnique()` put back. It is also why this belongs in a document about
+concurrency: value semantics is exactly what makes `Sendable` inference sound,
+and the compiler only catches the version where the wrapped class is *not*
+`Sendable`. A `final class` holding its state inside an `OSAllocatedUnfairLock`
+is `Sendable`, so a struct over one is sendable and still not a value.
+
+**`CopyOnWriteBox` is almost always the wrong tool, and its own documentation
+says so first.** `Array`, `Dictionary`, `Set`, `String` and `Data` are already
+copy-on-write and a struct built from them inherits it; every model here is that
+shape, which is why the box has no production call site and why inventing one
+was rejected. It adds the package's third `@unchecked Sendable` and the first
+that is not AVFoundation's shape — the same bargain `Array` makes, recorded in
+`assert-sendable-audit.py` and audited from the other side in
+`SendableConformanceTests` so the conformance cannot quietly widen past `Value`.
+
+**A `let`-first model needs a transform, and the obvious transform has a hole.**
+`func with(avatarURL: URL?? = nil)` compiles, reads at the call site as *clear
+the avatar*, and means *leave it alone*; both readings type-check, so there is no
+diagnostic. `FieldUpdate` names the two cases instead. The rebuild-by-hand it
+replaces was live and losing data: `MockUserRepository.updateProfile(name:)`
+discarded the avatar and both timestamps on every call, because the memberwise
+initialiser defaults them to `nil`.
 
 Item 6 complete as of PR #29 (2026-08-09). All four checks green on the second
 round; the build emitted no warnings in 48s and the test phase runs in 156s.
