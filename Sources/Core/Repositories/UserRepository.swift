@@ -70,7 +70,11 @@ final class MockUserRepository: UserRepository {
     func updateProfile(name: String) async throws -> User {
         updateCallCount += 1
         if shouldThrow { throw stubbedError }
-        stubbedUser = User(id: stubbedUser.id, email: stubbedUser.email, name: name)
+        // A derivation rather than a rebuild: the previous spelling passed `id`
+        // and `email` through by hand and let the memberwise initialiser default
+        // the avatar and both timestamps back to `nil`, so a double sets a
+        // profile up and then watches the mock throw half of it away.
+        stubbedUser = stubbedUser.with(name: .set(name))
         return stubbedUser
     }
 

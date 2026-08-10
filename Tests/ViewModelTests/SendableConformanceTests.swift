@@ -72,8 +72,15 @@ struct SendableConformanceTests {
             auditSendable(BiometricAuthError.self),
             auditSendable(KeychainError.self),
             auditSendable(KeychainWrapper.self),
+            auditSendable(FieldUpdate<String>.self),
+            // Conditional and *unchecked*: the conformance rests on the
+            // uniqueness check in `makeUnique()`, not on anything the compiler
+            // re-verifies. Auditing it here pins the other half of the promise —
+            // that the conformance is conditional on `Value` and has not been
+            // widened to every payload.
+            auditSendable(CopyOnWriteBox<[Int]>.self),
         ]
-        expectAudit(audited, count: 31)
+        expectAudit(audited, count: 33)
     }
 
     /// Types that are `Sendable` only by inference — nothing in their
