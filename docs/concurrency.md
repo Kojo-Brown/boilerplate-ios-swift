@@ -747,9 +747,118 @@ every call, and defeats the payload's own copy-on-write while doing it.
 would close the gap on the property itself is the underscored `_modify`, which is
 not language surface this package is willing to depend on.
 
+## Retry, jitter, and a timeout that cannot stop anything
+
+`Retry.run` and `withTimeout` are the two combinators every networking layer
+grows, and both are usually written from a mental model that is wrong in the
+same way: that a retry loop is about *how long to wait*, and that a timeout is
+about *stopping work*. Neither is.
+
+### Backoff does not spread load. Jitter does
+
+Exponential backoff is introduced as the fix for a server buckling under
+retries, and on its own it is not one. Delays of 1s, 2s, 4s, 8s are the same
+delays for every client, so a thousand callers that failed in the same second
+retry in the same second, four times over — and the instant the service recovers
+is the instant all thousand arrive. Backoff lowers the total request *rate*. It
+does nothing to the *peak*, and the peak is what fails.
+
+`BackoffTests` runs a thousand simulated clients through `.none` and `.full` and
+buckets their arrival instants. With `.none` the busiest 10ms bucket holds all
+thousand of them, by construction — nothing in that schedule differs between
+clients. With `.full` it holds around a hundred. Same terms, same clients, one
+strategy apart. `Jitter.none` exists in the enum to be the control in that
+measurement, not to be selected.
+
+The three jittered strategies come from Marc Brooker's "Exponential Backoff And
+Jitter" (AWS, 2015). `.full` — `random(0, term)` — spreads hardest and is the
+default. `.equal` — `term/2 + random(0, term/2)` — keeps a floor under every
+delay, at half the spreading. `.decorrelated` — `random(base, previous × 3)` —
+grows from the delay actually slept rather than from the attempt number, so two
+clients failing in lockstep follow different series rather than different points
+in one series.
+
+All of it is a pure function of the attempt number and a `@Sendable () -> Double`
+that the caller can supply, which is why the suite asserts exact schedules
+without a clock, without sleeping and without a tolerance.
+
+### Three things a hand-written retry loop gets wrong
+
+```swift
+for _ in 0..<3 {
+    do { return try await send() } catch { }          // ← 1, 2
+    try await Task.sleep(for: .seconds(1))            // ← 3
+}
+```
+
+**A bare `catch` retries cancellation.** `CancellationError` is an error like
+any other, so a dismissed screen does not stop — it starts over, sleeps, and
+starts over, and the caller who cancelled waits out the whole budget for a
+result nobody wants. This is how adding a retry wrapper quietly breaks
+`LatestOnlyTask`-style superseding. `Retry.run` refuses on the error type *and*
+on `Task.isCancelled`, because a cancelled `URLSession` call arrives as
+`URLError(.cancelled)`, not as `CancellationError` — a classification keyed only
+on the type misses it, which `RetryTests` pins from both directions.
+
+**A bare `catch` also retries what cannot succeed.** A 401 needs a token and a
+404 needs a different URL; neither comes out differently in 800ms. So
+classification is a parameter, and the default answers `false` for anything it
+does not recognise: not retrying costs one avoidable failure, while retrying an
+unclassified write costs a duplicated side effect. For the same reason `5xx` is
+not taken wholesale — 501 and 505 are permanent statements about the endpoint.
+
+**The last attempt sleeps for nothing.** A loop that sleeps at the bottom waits
+out a full term after the final failure and then reports it: with a 30s cap,
+half a minute of latency added to an outcome already decided. `run` sleeps
+between attempts only, and the suite asserts it by counting recorded delays
+rather than by reading the code.
+
+None of this makes an operation idempotent. A request that timed out may have
+been received and applied; `run` hands the operation its 1-based attempt number
+so a caller can carry a stable idempotency key, and that is the most a
+combinator can do about it.
+
+### A timeout stops waiting, not working — and sometimes not even that
+
+`withTimeout` races the operation against a sleep in a task group. When the
+sleep wins it calls `cancelAll()` and throws. But cancellation is cooperative,
+and **a task group waits for its children before it returns**. So an operation
+that never checks for cancellation is not stopped and not abandoned: the group
+blocks on it, and `withTimeout(.seconds(1))` returns whenever the operation
+happens to finish, carrying a `TimedOutError` that faithfully reports a deadline
+it had no power to enforce.
+
+`TimeoutTests` puts a 600ms uncancellable operation under a 100ms deadline and
+measures the elapsed time, for the reason `ConcurrentMapTests` keeps its
+unbounded task group: a caveat nothing executes is folklore. The fix is not in
+this function — it is `CancellableContinuation`, which is what makes a
+callback-based API stoppable in the first place, and the six bridges it
+documents are exactly the ones a deadline cannot otherwise interrupt.
+
+Running the operation in an unstructured `Task` and walking away at the deadline
+*would* let `withTimeout` return on time. It would also leave work running with
+nobody awaiting it, nobody cancelling it and nowhere for its error to go — the
+`Task { }`-in-a-loop that `ConcurrentMap` exists to argue against. Being honest
+about the wait is cheaper than an unowned task.
+
+Two smaller decisions in the same function are worth naming. `cancelAll()` runs
+on the *success* path too, not only on the timeout path: without it the sleeping
+child is still pending when the closure returns, the group waits for it, and a
+5ms request under a 10-second budget takes 10 seconds. And the children are
+added with `addTask` rather than `addTaskUnlessCancelled` — the opposite of
+`ConcurrentMap`'s choice, for the opposite reason. There, the point is not to
+start work in a cancelled group. Here, declining both children would leave
+`next()` with nothing to hand back; started-and-already-cancelled is what turns
+an already-cancelled caller into a `CancellationError` rather than a fabricated
+timeout.
+
+The two combinators know nothing about each other and compose anyway:
+`Retry.run { try await withTimeout(.seconds(5)) { … } }` gives each attempt its
+own deadline while the policy owns the budget of attempts.
+
 ## What enforces all of this
 
-Nine gates, none of which depend on anyone remembering the rules:
+Twelve gates, none of which depend on anyone remembering the rules:
 
 - **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
@@ -814,6 +923,26 @@ Nine gates, none of which depend on anyone remembering the rules:
   `storageIdentity` for `CopyOnWriteBox`, buffer base addresses for `Array` —
   and the `with(_:)` transform's promise that a field it was not asked about
   survives the edit, which is the bug it was introduced to fix.
+- **`Tests/ViewModelTests/BackoffTests.swift`**. Measures the herd rather than
+  asserting that jitter helps: a thousand simulated clients, bucketed by arrival
+  instant, run through `.none` and `.full`. The schedule is a pure function of
+  the attempt number and an injected random source, so this needs no clock and
+  no tolerance — and a seeded generator makes the distribution itself
+  reproducible, which is what lets a statistical claim be a unit test at all. It
+  also pins the ceiling against an exponent large enough to overflow to
+  infinity, which is a trap rather than a wrong answer.
+- **`Tests/ViewModelTests/RetryTests.swift`**. Counts the sleeps rather than
+  timing them, so "never after the final attempt" is an observation. It asserts
+  that cancellation survives a policy that retries *everything*, in both of the
+  shapes it arrives in — `CancellationError` and `URLError(.cancelled)` — and
+  that a cancellation landing during a backoff is delivered at once instead of
+  after the delay.
+- **`Tests/ViewModelTests/TimeoutTests.swift`**. Runs the caveat: a 600ms
+  operation that ignores cancellation, under a 100ms deadline, with the elapsed
+  time asserted from below. It also separates the three ways out — the deadline,
+  the operation's own error, and the caller being cancelled — which arrive
+  through the same task group and must not collapse into one error, because only
+  one of them is worth retrying.
 - **`.github/scripts/assert-no-warnings.py`**. Fails the build on any warning
   from this package's own sources, so a concurrency diagnostic cannot accumulate
   in a log nobody reads. That is how the five that had been doing exactly that
