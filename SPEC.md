@@ -209,7 +209,7 @@ are the source of truth for this repo, as items 1 and 2 also concluded.
 - [x] `AsyncSequence`/`AsyncStream` wrapping a delegate-based API with backpressure notes — the repo already had this bridge in `CameraService` and it was wrong in both of the ways the item is about: a synchronous delegate can be offered no backpressure at all, so the buffering policy is the only bound and `AsyncStream`'s default is `.unbounded`; and clearing the stored continuation from the termination handler let a superseded stream detach the one that replaced it (PR #28)
 - [x] Global actors and custom executors for a serial background domain — a global actor is for a *domain*, not a type: `DiagnosticJournal` admits a record only if `DiagnosticBudget` has room, and as two actors that check-then-act would be split by an `await`, which is the non-atomicity `SingleFlightCache` exists to close reintroduced by nothing but a choice of isolation. The custom executor buys none of what it is usually reached for — every actor is already serial, and neither executor orders independently created tasks — it buys a thread that is *allowed to block*, which the cooperative pool is not, for a domain whose terminal operation is a `write(2)` (PR #29)
 - [x] Immutability: value semantics, `let`-first modelling, and copy-on-write inspection — `struct` is a syntax and value semantics is a property, and the version that has the first without the second compiles with no warning and is not a data race; `User` never needed the four `var`s it carried, and the `with(_:)` that replaces them fixes a live field-dropping bug in `MockUserRepository`; copy-on-write is inspected through storage identity and buffer base addresses rather than believed (PR #30)
-- [ ] Async retry with exponential backoff and jitter, plus a timeout combinator
+- [x] Async retry with exponential backoff and jitter, plus a timeout combinator — backoff on its own does not spread a herd, it synchronises one, so `Jitter.none` is kept as the control in a measurement rather than offered as a setting; and a timeout does not stop work, it stops waiting, and a task group waits for its children, so it does not even do that for an operation that never checks for cancellation (PR #31)
 
 Item 7 complete as of PR #30 (2026-08-10). All four checks green on the first
 round; the build emitted no warnings in 50s and the test phase ran in 139s.
@@ -542,6 +542,49 @@ shape item 1 found can be starved by pool pressure; keep new task groups narrow.
 Every gap item 1 recorded is still open — the audit is still hand-maintained,
 coverage is still reported rather than gated, `testflight-deploy.yml` is still
 unpromoted, and CLAUDE.md still names `-scheme App`.
+
+Item 8 complete as of PR #31 (2026-08-11). All four checks green on the first
+round; the build emitted no warnings in 66s and 402 tests passed in 27s. Library
+line coverage is 38.13%, up from the 26.07% first measured at PR #22.
+
+**Backoff lowers the request rate and does nothing to the peak.** Delays of 1s,
+2s, 4s are the same delays for every client, so a thousand callers that failed
+together retry together and arrive together the moment the service recovers.
+`BackoffTests` buckets a thousand simulated clients by arrival instant: `.none`
+puts the whole herd in one 10ms bucket, by construction, against roughly a
+hundred for `.full`. That is why `Jitter.none` is in the enum — it is the control
+in that measurement, not a setting. The schedule is a pure function of the
+attempt number and an injected `@Sendable () -> Double`, so the suite asserts
+exact delays with no clock, no sleeping and no tolerance, and a seeded SplitMix64
+makes the distribution itself reproducible.
+
+**A timeout stops waiting, not working — and not even that, sometimes.**
+`withTimeout` races the operation against a sleep in a task group, and a task
+group waits for its children before returning, so an operation that never checks
+for cancellation is neither stopped nor abandoned: the call returns whenever that
+operation finishes, carrying a `TimedOutError` for a deadline it had no power to
+enforce. `TimeoutTests` runs that rather than describing it — a 600ms
+uncancellable operation under a 100ms deadline, elapsed time asserted from below,
+and it passed *after 0.600 seconds*. The unstructured-`Task` escape hatch would
+have made the call return on time and was rejected: it leaves work with nobody
+awaiting it, nobody cancelling it and nowhere for its error to go.
+
+The three defects the retry loop exists to remove are each invisible on the happy
+path: a bare `catch` retries `CancellationError` (and `URLError(.cancelled)`,
+which is how task cancellation actually reaches a `URLSession` caller, so the
+check is on `Task.isCancelled` as well as on the type); a bare `catch` retries a
+401 that cannot succeed; and a loop that sleeps at the bottom sleeps after the
+final attempt, adding a whole cap of latency to a decided failure.
+
+Known gaps carried into Phase 8: **`Retry-After` is not honoured** — a 429
+carrying it should override the computed schedule, and it cannot be read from
+here because `APIError.httpError` carries the status and body, not the response;
+that is a change to `APIError`, not to the status table. **Nothing in the package
+calls either combinator yet** — `URLSessionAPIClient` is untouched, because
+wiring in a policy is a decision about which endpoints are idempotent.
+`withTimeout` takes no `Clock`, so it measures on `ContinuousClock` via
+`Task.sleep` with no seam for a test clock; the suite uses short real durations
+instead. Every gap item 1 recorded is still open.
 
 ## Phase 8 — Architecture & Patterns
 - [ ] SOLID audit of the repository/service layers documented in `docs/solid.md`
