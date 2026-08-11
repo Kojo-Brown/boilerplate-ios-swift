@@ -129,8 +129,18 @@ struct SendableConformanceTests {
             auditSendable(DiagnosticBudget.self),
             auditSendable(InMemoryDiagnosticSink.self),
             auditSendable(FileDiagnosticSink.self),
+            // The retry combinators. `Policy` and `Schedule` both store a
+            // closure, and a closure is `Sendable` only while it is spelled
+            // `@Sendable` — dropping that annotation from either one compiles
+            // fine in place and only fails wherever the value is next sent,
+            // which for `Policy` is every call to `Retry.run`.
+            auditSendable(Backoff.self),
+            auditSendable(Backoff.Jitter.self),
+            auditSendable(Backoff.Schedule.self),
+            auditSendable(Retry.Policy.self),
+            auditSendable(TimedOutError.self),
         ]
-        expectAudit(audited, count: 16)
+        expectAudit(audited, count: 21)
     }
 
     /// The service layer: the protocols that cross isolation boundaries, and
