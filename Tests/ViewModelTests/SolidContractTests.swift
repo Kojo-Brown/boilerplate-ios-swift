@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 import Testing
 @testable import BoilerplateiOSSwift
 
@@ -66,8 +65,9 @@ struct SolidSurfaceTests {
     /// leaving the page describing dead code that is gone.
     ///
     /// `SwiftDataUserPersistenceService` is the one row of the table missing
-    /// here: it needs a `ModelContext` to exist at all, so it is pinned in
-    /// `SolidSubstitutabilityTests`, which is the suite that builds a container.
+    /// here: it needs a `ModelContext` to exist at all, so it is pinned by
+    /// `swiftDataStoreStillConforms` in `UserPersistenceTests`, which is the
+    /// only suite in this target that builds a container.
     @Test("Every abstraction in docs/solid.md still has its live implementation")
     func liveImplementationsStillConform() {
         let client: any APIClient = URLSessionAPIClient.shared
@@ -195,54 +195,17 @@ struct SolidSurfaceTests {
 /// the repair and the edit to `docs/solid.md` then land together, instead of the
 /// page outliving the problem it documents.
 ///
-/// `.serialized` and the stored container follow `UserPersistenceTests`: a
-/// `ModelContext` does not keep its `ModelContainer` alive, and a container
-/// built inside a helper is deallocated before the test body runs, which
-/// SwiftData reports by trapping and taking the whole test process with it.
-@Suite("SOLID contract — substitutability", .serialized)
+/// **This suite deliberately builds no `ModelContainer`.** Finding 3 needs one,
+/// and it lives in `UserPersistenceTests` rather than here for that reason: a
+/// second container-building suite would be this repo's first two containers in
+/// flight at once, since Swift Testing serialises within a suite and not across
+/// them, and that file's own doc comment records concurrent containers as a
+/// suspicion that was never ruled out — only displaced by a lifetime bug that
+/// explained the crashes better. Placing two tests is not worth re-opening it.
+/// The pin for finding 3 is `saveDivergesBetweenImplementations`, over there.
+@Suite("SOLID contract — substitutability")
 @MainActor
 struct SolidSubstitutabilityTests {
-
-    private let container: ModelContainer
-    private let store: SwiftDataUserPersistenceService
-
-    init() throws {
-        container = try PersistenceController.makeInMemoryContainer()
-        store = SwiftDataUserPersistenceService(context: container.mainContext)
-    }
-
-    /// The row of the audited surface that `SolidSurfaceTests` cannot reach,
-    /// because the store does not exist without a `ModelContext`. Same pin as
-    /// every other row: the coercion to the existential is what the compiler
-    /// checks, and the assertion is only there to use the result.
-    @Test("The SwiftData store still satisfies UserPersistenceService")
-    func swiftDataStoreStillConforms() {
-        let persistence: any UserPersistenceService = store
-        let name = String(describing: type(of: persistence))
-        #expect(name == "SwiftDataUserPersistenceService")
-    }
-
-    /// Finding 3: `save(user:)` inserts in the store and upserts in the double.
-    ///
-    /// `UserEntity.id` carries no `@Attribute(.unique)` — see the comment on the
-    /// model for why that is the right call — so nothing collapses the second
-    /// row. The double keys a dictionary on `user.id`, so nothing preserves it.
-    /// Two rows against one entry is the whole finding.
-    @Test("save() is an insert in the store and an upsert in its double")
-    func saveDivergesBetweenImplementations() throws {
-        let user = User(email: "duplicate@example.invalid", name: "Duplicate")
-
-        try store.save(user: user)
-        try store.save(user: user)
-        let rows = try container.mainContext.fetch(FetchDescriptor<UserEntity>())
-
-        let double = MockUserPersistenceService()
-        try double.save(user: user)
-        try double.save(user: user)
-
-        #expect(rows.count == 2)
-        #expect(double.storage.count == 1)
-    }
 
     /// Finding 4: the two `UserRepository` implementations throw types that do
     /// not overlap.

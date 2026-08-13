@@ -152,7 +152,13 @@ store, not to the double, and it belongs with the offline-first item in Phase 9 
 give this store an actual caller.
 
 **Pin:** `saveDivergesBetweenImplementations` asserts two rows against one entry. It fails
-the moment either side is changed to agree with the other.
+the moment either side is changed to agree with the other. It is the one pin on this page
+that does not live in `SolidContractTests`: it needs a `ModelContainer`, and
+[`UserPersistenceTests`](../Tests/ViewModelTests/UserPersistenceTests.swift) is the only
+suite in the target that builds one. Adding a second container-building suite would put two
+containers in flight at once for the first time in this repo, which that file's own doc
+comment records as a suspicion never ruled out — only displaced by a lifetime bug that
+explained its crashes better. Two tests are not worth re-opening it.
 
 ### Finding 4 — the two `UserRepository` implementations throw disjoint error types
 

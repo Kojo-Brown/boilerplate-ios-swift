@@ -123,6 +123,57 @@ struct UserPersistenceTests {
     @Test func persistenceErrorDescriptionIsNonEmpty() {
         #expect(PersistenceError.userNotFound.errorDescription?.isEmpty == false)
     }
+
+    // MARK: - SOLID audit pins
+    //
+    // These two belong to `docs/solid.md` and not to this file's subject, and
+    // they live here anyway because they need a `ModelContainer`. They were
+    // written as their own `@Suite` in `SolidContractTests.swift`, which made
+    // this repo's second container-building suite — and Swift Testing serialises
+    // *within* a suite, not across them, so that put two `ModelContainer`s in
+    // flight at once for the first time. The doc comment at the top of this file
+    // records that concurrent containers were already suspected once here and
+    // never ruled out, only displaced by a lifetime bug that explained the
+    // crashes better. Rather than re-open that question to place two tests, they
+    // are placed where a container already exists and is already serialised.
+
+    /// The row of `docs/solid.md`'s audited surface that needs a context to
+    /// exist. Same pin as every other row: the coercion to the existential is
+    /// what the compiler checks, and the assertion only uses the result.
+    @Test("The SwiftData store still satisfies UserPersistenceService")
+    func swiftDataStoreStillConforms() {
+        let persistence: any UserPersistenceService = service
+        let name = String(describing: type(of: persistence))
+        #expect(name == "SwiftDataUserPersistenceService")
+    }
+
+    /// `docs/solid.md` finding 3: `save(user:)` inserts in the store and upserts
+    /// in the double, so the same user saved twice is two rows against one entry.
+    ///
+    /// Read as an ordinary test this looks backwards. It asserts that the two
+    /// implementations **disagree**, so it fails when the divergence is
+    /// repaired — which is the point, because then the repair and the edit to
+    /// `docs/solid.md` land together instead of the page outliving the problem
+    /// it documents. Do not "fix" this test; fix the finding and rewrite both.
+    ///
+    /// `UserEntity.id` carries no `@Attribute(.unique)` — see the comment on the
+    /// model for why that is the right call — so nothing collapses the second
+    /// row. The double keys a dictionary on `user.id`, so nothing preserves it.
+    @Test("save() is an insert in the store and an upsert in its double")
+    func saveDivergesBetweenImplementations() throws {
+        let user = User(email: "duplicate@example.invalid", name: "Duplicate")
+
+        try service.save(user: user)
+        try service.save(user: user)
+        let rows = try container.mainContext.fetch(FetchDescriptor<UserEntity>())
+
+        let double = MockUserPersistenceService()
+        try double.save(user: user)
+        try double.save(user: user)
+
+        #expect(rows.count == 2)
+        #expect(double.storage.count == 1)
+    }
 }
 
 // MARK: - MockUserPersistenceService tests
