@@ -587,13 +587,29 @@ wiring in a policy is a decision about which endpoints are idempotent.
 instead. Every gap item 1 recorded is still open.
 
 ## Phase 8 — Architecture & Patterns
-- [ ] SOLID audit of the repository/service layers documented in `docs/solid.md`
+- [x] SOLID audit of the repository/service layers documented in `docs/solid.md` — the headline finding is that the layer being audited has no callers: `LiveUserRepository` and `SwiftDataUserPersistenceService` are never constructed outside the test target, the `ModelContainer` is installed and never read, and `HomeViewModel` fabricates its list with a `Task.sleep`. Seven more across DIP, LSP, SRP, ISP and OCP, pinned by `SolidContractTests` (PR #32)
 - [ ] Protocol-oriented dependency inversion with a lightweight DI container
 - [ ] Factory + Strategy: pluggable `SyncStrategy` resolved at composition root
 - [ ] Decorator pattern: repository wrappers adding cache, retry, and telemetry
 - [ ] Observer pattern: typed event bus on `AsyncStream`
 - [ ] Unidirectional data flow: single `State` + `Action` + `Effect` contract per feature
 - [ ] Swift Package modularisation: `Core`, `Networking`, `Features` targets with boundaries
+
+Item 1 complete as of PR #32 (2026-08-13). [`docs/solid.md`](./docs/solid.md) audits all
+twelve types between a view model and the outside world and names, for each of its eight
+findings, the later item that is its fix — so the next three items on this list arrive with
+their problem already written down. Item 2 (DI container) is findings 1 and 2: there is no
+composition root, only ten initialisers that each default to a concrete collaborator, and
+`TokenStore` and `CameraService` have no abstraction at all. Item 4 (decorators) is finding
+7: the 401-refresh-retry policy is welded into `URLSessionAPIClient`, which is why Phase 7's
+`Retry` and `withTimeout` still have no caller. Item 3 and Phase 9 item 1 are finding 6,
+because neither can be written without giving the repository layer a caller.
+
+Two of the pins in `SolidContractTests` are **expected to fail** when those items land, and
+that is deliberate: `zeroArgumentConstructionStillCompiles` stops compiling the moment the
+DI container removes the default arguments, and the three differential tests fail when the
+divergence they describe is repaired. Rewrite the finding and the pin together; do not relax
+the test. Each one says so in its own doc comment.
 
 ## Phase 9 — Offline-First & Data
 - [ ] Offline-first repository: SwiftData as source of truth with a network refresh policy
