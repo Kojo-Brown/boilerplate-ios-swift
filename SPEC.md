@@ -588,7 +588,7 @@ instead. Every gap item 1 recorded is still open.
 
 ## Phase 8 — Architecture & Patterns
 - [x] SOLID audit of the repository/service layers documented in `docs/solid.md` — the headline finding is that the layer being audited has no callers: `LiveUserRepository` and `SwiftDataUserPersistenceService` are never constructed outside the test target, the `ModelContainer` is installed and never read, and `HomeViewModel` fabricates its list with a `Task.sleep`. Seven more across DIP, LSP, SRP, ISP and OCP, pinned by `SolidContractTests` (PR #32)
-- [ ] Protocol-oriented dependency inversion with a lightweight DI container
+- [x] Protocol-oriented dependency inversion with a lightweight DI container — `AppContainer` is a struct of eleven abstractions plus a `CameraService` factory, not a type-keyed registry: a registry has to answer "what if nothing is registered?" and every answer rebuilds finding 1 one indirection away, where stored properties make it a compile error at the only place that can fix it. Ten initialisers lost their default arguments, `URLSessionAPIClient.shared` and `TokenStore.shared` are gone, and the container is threaded down the view tree by initialiser rather than through `@Environment`, whose mandatory `defaultValue` would have done the same. `TokenStoring` closes finding 2's consequential half; `CameraService` stays concrete, as the audit argued, but its *lifetime* decision moved into the root (PR #33)
 - [ ] Factory + Strategy: pluggable `SyncStrategy` resolved at composition root
 - [ ] Decorator pattern: repository wrappers adding cache, retry, and telemetry
 - [ ] Observer pattern: typed event bus on `AsyncStream`
@@ -605,11 +605,18 @@ composition root, only ten initialisers that each default to a concrete collabor
 `Retry` and `withTimeout` still have no caller. Item 3 and Phase 9 item 1 are finding 6,
 because neither can be written without giving the repository layer a caller.
 
-Two of the pins in `SolidContractTests` are **expected to fail** when those items land, and
-that is deliberate: `zeroArgumentConstructionStillCompiles` stops compiling the moment the
-DI container removes the default arguments, and the three differential tests fail when the
-divergence they describe is repaired. Rewrite the finding and the pin together; do not relax
-the test. Each one says so in its own doc comment.
+Item 2 is complete as of PR #33, and it did what this section predicted:
+`zeroArgumentConstructionStillCompiles` stopped compiling the moment the default arguments
+came off, and was rewritten — into `liveContainerBindsTheLiveGraph` and
+`previewContainerBindsTheDoubles` — rather than relaxed, with findings 1 and 2 of
+`docs/solid.md` rewritten alongside it. The design is in
+[`docs/dependency-injection.md`](./docs/dependency-injection.md), including the note that
+nothing stops a *new* default argument: the container tests assert what `live()` binds, not
+that no other type could bind anything.
+
+The three differential pins in `SolidContractTests` are still **expected to fail** when
+findings 3, 4 and 5 are repaired, and that is deliberate. Rewrite the finding and the pin
+together; do not relax the test. Each one says so in its own doc comment.
 
 ## Phase 9 — Offline-First & Data
 - [ ] Offline-first repository: SwiftData as source of truth with a network refresh policy
