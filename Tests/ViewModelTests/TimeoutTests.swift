@@ -152,39 +152,73 @@ struct TimeoutTests {
 
     @Test("the deadline bounds the wait only as far as the operation is cancellable")
     func anUncancellableOperationOutlastsItsOwnDeadline() async throws {
-        let clock = ContinuousClock()
-        let start = clock.now
+        let gate = TaskGate()
+        let witness = CancellationWitness()
+        let returned = LockedCounter()
 
-        await #expect(throws: TimedOutError.self) {
-            try await withTimeout(.milliseconds(100)) {
-                await Self.workIgnoringCancellation(for: .milliseconds(600))
+        let call = Task {
+            defer { returned.increment() }
+            try await withTimeout(.milliseconds(50)) {
+                await Self.parkIgnoringCancellation(until: gate, noticing: witness)
             }
         }
 
-        let elapsed = clock.now - start
+        // Cancellation reaching the operation is the deadline firing, observed
+        // rather than timed: `withTimeout` cancels the group only after
+        // `next()` has handed it a result, and a parked operation cannot be
+        // that result. So this poll returning means the sleeper won.
+        try await AsyncPoll.until("the operation never observed cancellation") {
+            await witness.count == 1
+        }
 
-        // Compiled and run rather than described, for the reason
-        // `ConcurrentMapTests` keeps its unbounded task group: a caveat nothing
-        // executes is folklore. A 100ms deadline over a 600ms operation that
-        // never checks for cancellation returns in 600ms, with a
-        // `TimedOutError` faithfully reporting a deadline it could not enforce.
-        //
-        // The number is asserted from below only. It is a floor on how long an
-        // uncancellable operation makes the caller wait, and CI load can only
-        // push it up.
-        #expect(elapsed > .milliseconds(400))
+        // The whole finding, and now a fact rather than a floor on a stopwatch:
+        // the deadline has passed, the operation has been told to stop, and the
+        // call has *still* not returned — because a task group waits for its
+        // children and this one will not stop until the gate opens. That is
+        // what bounding an uncancellable operation costs.
+        #expect(returned.calls == 0)
+
+        await gate.open(0)
+
+        // And when it finally does return, it reports the deadline it could not
+        // enforce.
+        await #expect(throws: TimedOutError.self) {
+            try await call.value
+        }
+        #expect(returned.calls == 1)
     }
 
-    /// Burns `duration` of wall clock without ever observing cancellation.
+    /// Waits for `gate` without ever letting cancellation out, recording in
+    /// `witness` the first time it notices it has been cancelled.
     ///
     /// Stands in for the callback-based APIs this package bridges: a task parked
     /// on a delegate callback has no suspension point for cancellation to be
     /// delivered to, so it runs to completion regardless. `try?` is what makes
     /// this loop that — after cancellation `Task.sleep` returns immediately, so
-    /// it spins rather than sleeps, which is deliberate and lasts 600ms.
-    private static func workIgnoringCancellation(for duration: Duration) async {
-        let deadline = ContinuousClock.now + duration
-        while ContinuousClock.now < deadline {
+    /// it spins rather than sleeps, which is deliberate and lasts only until the
+    /// caller opens the gate on the line after it asserts.
+    ///
+    /// This replaces a fixed 600ms burn under a 100ms deadline, which asserted
+    /// `elapsed > 400ms` and read as a 6× margin. It was not one. The claim
+    /// needs the sleeping child to win a race against a cooperative loop, and on
+    /// run #49 it lost: the operation ran its full 600ms, `next()` handed back
+    /// *its* value, and the call returned no error at all on a runner where 400+
+    /// tests share a small cooperative pool and a 100ms timer's continuation can
+    /// be scheduled late. Driving the ordering removes the race rather than
+    /// widening the margin — and asserts more than the elapsed time could, since
+    /// "had not returned yet at the moment cancellation landed" is the actual
+    /// caveat, where a stopwatch reading only implied it.
+    private static func parkIgnoringCancellation(
+        until gate: TaskGate,
+        noticing witness: CancellationWitness
+    ) async {
+        var noticed = false
+        while true {
+            if await gate.isOpen(0) { return }
+            if !noticed, Task.isCancelled {
+                noticed = true
+                await witness.record()
+            }
             try? await Task.sleep(for: .milliseconds(5))
         }
     }

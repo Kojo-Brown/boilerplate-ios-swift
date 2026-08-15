@@ -107,6 +107,16 @@ actor TaskGate {
         opened.insert(index)
     }
 
+    /// Whether `index` has been released yet.
+    ///
+    /// For work that has to keep doing something *while* it waits — checking its
+    /// own cancellation, say — rather than only waiting. Those callers own their
+    /// loop and ask the gate each time round instead of parking inside
+    /// `waitForOpening(at:)`.
+    func isOpen(_ index: Int) -> Bool {
+        opened.contains(index)
+    }
+
     func collect() {
         collectedCount += 1
     }

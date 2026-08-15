@@ -40,8 +40,10 @@ private enum Raced<Value: Sendable>: Sendable {
 /// deadline that did nothing to enforce itself.
 ///
 /// `TimeoutTests` compiles and runs that case rather than describing it: an
-/// operation written to ignore cancellation is put under a 100ms timeout and the
-/// elapsed time is measured. It is not a bug to be fixed here. It is what
+/// operation written to ignore cancellation is put under a 50ms timeout, and the
+/// test waits for that operation to *observe* its own cancellation — which is
+/// the deadline firing — and then asserts that the call has still not returned.
+/// It is not a bug to be fixed here. It is what
 /// bounding an uncancellable operation costs, and the fix is at the other end —
 /// `CancellableContinuation` is how a callback-based API in this package is made
 /// stoppable, and the six bridges it documents are exactly the ones a timeout
