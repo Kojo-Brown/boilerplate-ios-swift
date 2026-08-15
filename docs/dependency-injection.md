@@ -113,7 +113,8 @@ BoilerplateApp → RootView → AppNavigationView → HomeView
                                               → BarcodeScannerView
 ```
 
-Four `container:` arguments, and forgetting one is a build error.
+Six views take a `container:` argument, and forgetting to pass one is a build
+error.
 
 ## Views and view models
 

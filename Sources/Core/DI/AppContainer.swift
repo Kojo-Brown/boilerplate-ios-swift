@@ -48,7 +48,7 @@ import Foundation
 /// `defaultValue`, so a view that is never handed a container silently gets one
 /// anyway — an invisible default resolving to a concrete graph, which is the
 /// exact shape of the finding this type exists to remove. Threading it by hand
-/// costs four `container:` arguments and makes forgetting one a build error.
+/// costs six `container:` arguments and makes forgetting one a build error.
 struct AppContainer: Sendable {
 
     // MARK: - Collaborators

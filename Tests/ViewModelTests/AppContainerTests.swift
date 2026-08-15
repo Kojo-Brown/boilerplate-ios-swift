@@ -234,7 +234,11 @@ struct TokenStoringSeamTests {
     @Test("The double stores, returns and clears a pair")
     func doubleStoresAndClears() async throws {
         let store = InMemoryTokenStore()
-        try await store.setTokens(
+        // No `try`: the protocol requirement is `async throws`, but this
+        // conformer's `setTokens` is neither — a non-throwing method witnesses a
+        // throwing requirement, and calling the *concrete* type gets the
+        // concrete signature. `currentToken()` below does throw, on both.
+        await store.setTokens(
             TokenPair(accessToken: "mock-access-token", refreshToken: "mock-refresh-token")
         )
         let token = try await store.currentToken()
