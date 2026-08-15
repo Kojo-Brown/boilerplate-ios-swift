@@ -29,7 +29,7 @@ struct ScannerOverlayView_Previews: PreviewProvider {
 struct BarcodeScannerView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
-            BarcodeScannerView()
+            BarcodeScannerView(container: .preview)
                 .environment(AppCoordinator())
         }
         .previewDisplayName("Barcode Scanner")

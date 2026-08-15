@@ -8,9 +8,14 @@ import SwiftUI
 /// while regular (iPad) switches to an `AdaptiveGrid` whose column count is
 /// determined by `GeometryReader` + size classes.
 struct HomeView: View {
-    @State private var viewModel = HomeViewModel()
+    @State private var viewModel: HomeViewModel
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    @MainActor
+    init(container: AppContainer) {
+        _viewModel = State(wrappedValue: container.makeHomeViewModel())
+    }
 
     var body: some View {
         content
@@ -170,7 +175,7 @@ private struct HomeItemCard: View {
 
 #Preview {
     NavigationStack {
-        HomeView()
+        HomeView(container: .preview)
             .environment(AppCoordinator())
     }
 }

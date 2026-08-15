@@ -6,10 +6,24 @@ import UIKit
 /// Login screen with email/password, social sign-in, and biometric options.
 /// Backed by `LoginViewModel`, `SocialLoginViewModel`, and `BiometricAuthViewModel`.
 struct LoginView: View {
-    @State private var viewModel = LoginViewModel()
-    @State private var socialViewModel = SocialLoginViewModel()
-    @State private var biometricViewModel = BiometricAuthViewModel()
+    @State private var viewModel: LoginViewModel
+    @State private var socialViewModel: SocialLoginViewModel
+    @State private var biometricViewModel: BiometricAuthViewModel
     @Environment(AppState.self) private var appState
+
+    /// The three view models this screen owns come from the container, so the
+    /// view never names an auth service, an identity provider or a token store.
+    ///
+    /// `State(wrappedValue:)` rather than a stored default: SwiftUI keeps the
+    /// value produced by the first initialisation and discards the rest, so a
+    /// re-init from a parent body evaluation costs three allocations and does
+    /// not reset the screen's state.
+    @MainActor
+    init(container: AppContainer) {
+        _viewModel = State(wrappedValue: container.makeLoginViewModel())
+        _socialViewModel = State(wrappedValue: container.makeSocialLoginViewModel())
+        _biometricViewModel = State(wrappedValue: container.makeBiometricAuthViewModel())
+    }
 
     var body: some View {
         NavigationStack {
@@ -177,6 +191,6 @@ struct LoginView: View {
 // MARK: - Preview
 
 #Preview {
-    LoginView()
+    LoginView(container: .preview)
         .environment(AppState())
 }

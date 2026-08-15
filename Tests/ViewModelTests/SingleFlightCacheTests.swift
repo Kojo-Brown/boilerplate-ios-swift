@@ -275,18 +275,45 @@ struct SingleFlightCacheTests {
     /// when its key was invalidated must not fill the cache when it finishes.
     /// Writing the result back unconditionally would resurrect the entry the
     /// caller had just dropped — with the stale value it dropped it for.
+    ///
+    /// The ordering this needs — invalidate strictly after the load registers
+    /// and strictly before it returns — is driven by a `TaskGate` rather than
+    /// inferred from sleeps, the same way `TimeoutTests` and
+    /// `CancellableContinuationTests` drive theirs.
+    ///
+    /// It used to be a 40ms sleep against a 200ms load, and that margin is what
+    /// `AsyncPoll`'s own doc comment warns about: on a loaded runner the two
+    /// sleeps invert, the load completes and publishes *before* `invalidate`
+    /// runs, and the caller gets a value where the test demanded a
+    /// `CancellationError`. That is what happened on run #47 of this branch —
+    /// the test took 9.7 seconds for ~240ms of intended work and failed on the
+    /// `caught` assertion alone, while the other two still passed, which is the
+    /// signature of the load having finished early rather than of a defect in
+    /// `SingleFlightCache`. No assertion below is changed; only the handshake
+    /// is, so the mid-flight window is now guaranteed on every run instead of
+    /// raced for.
     @Test("a load invalidated mid-flight does not fill the cache afterwards")
     func invalidateDuringLoadDoesNotPublishResult() async throws {
         let recorder = LoadRecorder()
+        let gate = TaskGate()
         let cache = SingleFlightCache<String, Int> { key in
             await recorder.record(key)
-            try await Task.sleep(for: .milliseconds(200))
+            // Park until the test has invalidated the key, ignoring the
+            // cancellation here so that it is observed at the check below —
+            // where this load would have published — rather than from inside
+            // the parking spot.
+            await gate.waitForOpeningIgnoringCancellation(at: 0)
+            try Task.checkCancellation()
             return key.count
         }
 
         let caller = Task { try await cache.value(for: "alpha") }
-        try await Task.sleep(for: .milliseconds(40))
+
+        try await AsyncPoll.until("the load never reached the gate") {
+            await gate.arrivedCount == 1
+        }
         await cache.invalidate("alpha")
+        await gate.open(0)
 
         var caught: (any Error)?
         do {

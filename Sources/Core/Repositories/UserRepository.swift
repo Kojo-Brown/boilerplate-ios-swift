@@ -31,7 +31,7 @@ enum UserRepositoryError: LocalizedError, Equatable {
 struct LiveUserRepository: UserRepository {
     private let client: any APIClient
 
-    init(client: any APIClient = URLSessionAPIClient.shared) {
+    init(client: any APIClient) {
         self.client = client
     }
 

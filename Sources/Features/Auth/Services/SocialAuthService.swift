@@ -18,12 +18,9 @@ protocol SocialAuthExchangeService: Sendable {
 
 struct LiveSocialAuthExchangeService: SocialAuthExchangeService {
     private let client: any APIClient
-    private let tokenStore: TokenStore
+    private let tokenStore: any TokenStoring
 
-    init(
-        client: any APIClient = URLSessionAPIClient.shared,
-        tokenStore: TokenStore = .shared
-    ) {
+    init(client: any APIClient, tokenStore: any TokenStoring) {
         self.client = client
         self.tokenStore = tokenStore
     }

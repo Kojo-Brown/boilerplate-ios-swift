@@ -11,18 +11,23 @@ import Foundation
 struct URLSessionAPIClient: APIClient {
     let baseURL: URL
     private let session: URLSession
-    private let tokenStore: TokenStore
+    private let tokenStore: any TokenStoring
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
-    static let shared = URLSessionAPIClient(
-        baseURL: URL(string: "https://api.example.com/v1")!
-    )
-
+    /// `baseURL` and `tokenStore` carry no defaults: they are the two things
+    /// that decide *which server* this talks to and *whose tokens* it sends,
+    /// and both are the composition root's to answer — see `AppContainer`.
+    ///
+    /// `session`, `decoder` and `encoder` keep theirs. They are configuration
+    /// rather than collaborators: none of them appears in the audited surface
+    /// of `docs/solid.md`, substituting one changes how a request is encoded
+    /// rather than who answers it, and `.shared`/`.apiDecoder` are the only
+    /// answers this package has ever wanted.
     init(
         baseURL: URL,
+        tokenStore: any TokenStoring,
         session: URLSession = .shared,
-        tokenStore: TokenStore = .shared,
         decoder: JSONDecoder = .apiDecoder,
         encoder: JSONEncoder = .apiEncoder
     ) {

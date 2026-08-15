@@ -28,9 +28,11 @@ final class SocialLoginViewModel {
     private let googleProvider: any SocialAuthProvider
     private let exchangeService: any SocialAuthExchangeService
 
+    /// Built by `AppContainer.makeSocialLoginViewModel()`; no defaults, so the
+    /// identity provider that runs is named in one place rather than here.
     init(
-        googleProvider: any SocialAuthProvider = GoogleSignInService(),
-        exchangeService: any SocialAuthExchangeService = LiveSocialAuthExchangeService()
+        googleProvider: any SocialAuthProvider,
+        exchangeService: any SocialAuthExchangeService
     ) {
         self.googleProvider = googleProvider
         self.exchangeService = exchangeService

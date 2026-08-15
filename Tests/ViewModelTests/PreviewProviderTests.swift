@@ -158,7 +158,7 @@ struct AuthPreviewProviderTests {
     func loginViewCanBeInstantiated() {
         // LoginView reads AppState from @Environment at body-evaluation time,
         // so we verify instantiation only — not body rendering — in a unit-test context.
-        let view = LoginView()
+        let view = LoginView(container: .preview)
         _ = view
     }
 
@@ -211,7 +211,7 @@ struct HomePreviewProviderTests {
     @Test("HomeView can be instantiated")
     func homeViewCanBeInstantiated() {
         // HomeView reads AppCoordinator from @Environment at body-evaluation time.
-        let view = HomeView()
+        let view = HomeView(container: .preview)
         _ = view
     }
 
@@ -247,7 +247,7 @@ struct BarcodeScannerPreviewProviderTests {
 
     @Test("BarcodeScannerView can be instantiated")
     func barcodeScannerViewCanBeInstantiated() {
-        let view = BarcodeScannerView()
+        let view = BarcodeScannerView(container: .preview)
         _ = view
     }
 
@@ -264,7 +264,7 @@ struct TextRecognitionPreviewProviderTests {
 
     @Test("TextRecognitionView can be instantiated")
     func textRecognitionViewCanBeInstantiated() {
-        let view = TextRecognitionView()
+        let view = TextRecognitionView(container: .preview)
         _ = view
     }
 

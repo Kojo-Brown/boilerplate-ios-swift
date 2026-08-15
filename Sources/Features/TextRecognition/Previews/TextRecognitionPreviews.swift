@@ -8,13 +8,13 @@ struct TextRecognitionView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
             NavigationStack {
-                TextRecognitionView()
+                TextRecognitionView(container: .preview)
                     .environment(AppCoordinator())
             }
             .previewDisplayName("Text Scanner")
 
             NavigationStack {
-                TextRecognitionView()
+                TextRecognitionView(container: .preview)
                     .environment(AppCoordinator())
             }
             .preferredColorScheme(.dark)

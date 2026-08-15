@@ -12,8 +12,10 @@ test double through the same script and assert they disagree. The second kind fa
 finding is **fixed**, which is the point: a repair cannot quietly leave this page describing
 a problem that is gone.
 
-Nothing on this page is repaired here. Each finding names the Phase 8 item that is its fix,
-and the audit is deliberately the whole of this change.
+Findings 1 and 2 are **fixed** as of Phase 8 item 2, and their sections have been rewritten
+to say what replaced them rather than left describing a problem that is gone — see
+[`docs/dependency-injection.md`](./dependency-injection.md) for the design. Findings 3 to 8
+still stand, and each names the item that is its fix.
 
 ## The surface that was audited
 
@@ -22,30 +24,37 @@ camera, identity providers. Twelve types carry that role, and the audit is the w
 
 | Collaborator | Abstraction | Live implementation | Double | Constructed in production by |
 | --- | --- | --- | --- | --- |
-| HTTP transport | `APIClient` | `URLSessionAPIClient` | `MockAPIClient` | default arguments only |
-| User data | `UserRepository` | `LiveUserRepository` | `MockUserRepository` | **nothing** |
+| HTTP transport | `APIClient` | `URLSessionAPIClient` | `MockAPIClient` | `AppContainer.live()` |
+| User data | `UserRepository` | `LiveUserRepository` | `MockUserRepository` | `AppContainer.live()` |
 | Local store | `UserPersistenceService` | `SwiftDataUserPersistenceService` | `MockUserPersistenceService` | **nothing** |
-| Password login | `AuthServiceProtocol` | `LiveAuthService` | `MockAuthService` | `LoginViewModel` default |
-| Social identity | `SocialAuthProvider` | `GoogleSignInService` | `MockSocialAuthProvider` | `SocialLoginViewModel` default |
+| Password login | `AuthServiceProtocol` | `LiveAuthService` | `MockAuthService` | `AppContainer.live()` |
+| Social identity | `SocialAuthProvider` | `GoogleSignInService` | `MockSocialAuthProvider` | `AppContainer.live()` |
 | Social identity | `SocialAuthProvider` | `AppleSignInService` | — | **nothing** |
-| Credential exchange | `SocialAuthExchangeService` | `LiveSocialAuthExchangeService` | `MockSocialAuthExchangeService` | `SocialLoginViewModel` default |
-| Biometrics | `BiometricAuthProvider` | `LiveBiometricAuthService` | `MockBiometricAuthService` | `BiometricAuthViewModel` default |
-| Text recognition | `TextRecognizing` | `LiveTextRecognitionService` | `MockTextRecognitionService` | `TextRecognitionViewModel` default |
-| Barcode scanning | `BarcodeScanning` | `LiveBarcodeScannerService` | `MockBarcodeScannerService` | `BarcodeScannerViewModel` default |
-| Keychain | `KeychainStoring` | `KeychainWrapper` | `InMemoryKeychain` (test target) | `TokenStore` default |
-| Token state | **none — a concrete `actor`** | `TokenStore` | — | `.shared`, via defaults |
-| Camera session | **none — a concrete `class`** | `CameraService` | — | two view-model defaults |
+| Credential exchange | `SocialAuthExchangeService` | `LiveSocialAuthExchangeService` | `MockSocialAuthExchangeService` | `AppContainer.live()` |
+| Biometrics | `BiometricAuthProvider` | `LiveBiometricAuthService` | `MockBiometricAuthService` | `AppContainer.live()` |
+| Text recognition | `TextRecognizing` | `LiveTextRecognitionService` | `MockTextRecognitionService` | `AppContainer.live()` |
+| Barcode scanning | `BarcodeScanning` | `LiveBarcodeScannerService` | `MockBarcodeScannerService` | `AppContainer.live()` |
+| Keychain | `KeychainStoring` | `KeychainWrapper` | `InMemoryKeychain` | `AppContainer.live()` |
+| Token state | `TokenStoring` | `TokenStore` | `InMemoryTokenStore` | `AppContainer.live()` |
+| Camera session | **none — a concrete `class`** | `CameraService` | — | `AppContainer.makeCameraService` |
 
-Ten of the twelve get the shape right: a `Sendable` protocol, one live conformer, a
+Eleven of the twelve now get the shape right: a `Sendable` protocol, one live conformer, a
 hand-written double, and — since Phase 7 — a double whose mutable state lives inside a lock
-rather than under `@unchecked Sendable`. That is genuinely good, and most of what follows is
-about what the abstractions are *attached to*, not about the abstractions themselves.
+rather than under `@unchecked Sendable`. The twelfth, `CameraService`, is unabstracted on
+purpose; finding 2 below says why.
+
+The right-hand column is the part item 2 changed. It used to read "default arguments only",
+"`LoginViewModel` default", "`.shared`, via defaults" — twelve rows and no two of them
+naming the same place.
 
 ## Dependency inversion
 
-### Finding 1 — the composition root is a pile of default arguments
+### Finding 1 — the composition root is a pile of default arguments — **fixed**
 
-There is no composition root. Every type in the table above knows how to build its own
+*Fixed by Phase 8 item 2 (PR #33). The description below is what was found; the repair
+follows it.*
+
+There was no composition root. Every type in the table above knew how to build its own
 collaborator, spelled as a default argument on its initialiser:
 
 ```swift
@@ -53,13 +62,13 @@ init(client: any APIClient = URLSessionAPIClient.shared,
      tokenStore: TokenStore = .shared) { ... }
 ```
 
-and every view starts one of these chains from a `@State` property:
+and every view started one of those chains from a `@State` property:
 
 ```swift
 @State private var viewModel = LoginViewModel()
 ```
 
-which resolves, entirely through defaults, to:
+which resolved, entirely through defaults, to:
 
 ```
 LoginView → LoginViewModel() → LiveAuthService() → URLSessionAPIClient.shared
@@ -67,49 +76,64 @@ LoginView → LoginViewModel() → LiveAuthService() → URLSessionAPIClient.sha
 ```
 
 Five construction decisions, none of them written down anywhere, each taken by the type that
-happens to sit one level above. The high-level policy (`LoginViewModel`) does not depend on
-an abstraction here so much as it depends on an abstraction *and also knows the concrete
-type to reach for when nobody says otherwise* — which is the half of the D that matters,
+happened to sit one level above. The high-level policy (`LoginViewModel`) did not depend on
+an abstraction here so much as it depended on an abstraction *and also knew the concrete
+type to reach for when nobody said otherwise* — which is the half of the D that matters,
 because it is the half that decides what runs in the app.
 
-The defaults are why this is invisible in the test suite: every test passes a double
-explicitly, so every test exercises the injected path and nothing exercises the default
+The defaults were why this was invisible in the test suite: every test passes a double
+explicitly, so every test exercised the injected path and nothing exercised the default
 path. The default path is the one that ships.
 
-This is not an argument that the code is untestable — it very much is testable, and that is
-what the defaults were for. It is an argument that "which implementation runs" is currently
-a property of ten scattered initialisers rather than of one place a reader can look at.
+This was never an argument that the code was untestable — it very much was, and that is what
+the defaults were for. It was an argument that "which implementation runs" was a property of
+ten scattered initialisers rather than of one place a reader can look at.
 
-**Fix:** Phase 8 item 2, "Protocol-oriented dependency inversion with a lightweight DI
-container". The pin for this finding is `zeroArgumentConstructionStillCompiles`, which
-constructs `LoginViewModel`, `SocialLoginViewModel`, `BiometricAuthViewModel`,
-`LiveAuthService`, `LiveUserRepository` and `LiveSocialAuthExchangeService` with no
-arguments at all. When the container lands and those defaults come off, that test stops
-compiling — which is the signal to come back and edit this section.
+**Repair.** `AppContainer` is that place. Ten initialisers lost their default arguments,
+`URLSessionAPIClient.shared` and `TokenStore.shared` are gone, and the container is threaded
+from `BoilerplateApp` down the view tree by initialiser — not through `@Environment`, whose
+mandatory `defaultValue` would have rebuilt the finding one indirection away.
+[`docs/dependency-injection.md`](./dependency-injection.md) has the design and the two
+shapes it rejected.
 
-### Finding 2 — two collaborators have no abstraction at all
+**Pin:** was `zeroArgumentConstructionStillCompiles`, which constructed six types with no
+arguments at all and which this page predicted would stop compiling when the defaults came
+off. It did, and it was rewritten rather than relaxed — none of those six expressions is
+spellable now. `liveContainerBindsTheLiveGraph` and `previewContainerBindsTheDoubles`
+replace it, asserting the dynamic type behind each of the container's ten collaborators;
+`AppContainerTests` covers the behaviour those bindings are supposed to produce.
 
-`TokenStore` and `CameraService` are depended upon as concrete types.
+### Finding 2 — two collaborators have no abstraction at all — **fixed for one, declined for the other**
 
-`TokenStore` is the more consequential of the two. `URLSessionAPIClient`, `LiveAuthService`
-and `LiveSocialAuthExchangeService` all store `private let tokenStore: TokenStore` — the
-actor itself, not an existential. It is not unreachable in a test, because it takes an
-injectable `any KeychainStoring`, but the seam is one level lower than the one a caller
-wants: a test that needs "a store that reports the token as expired" has to build a fake
+`TokenStore` and `CameraService` were depended upon as concrete types.
+
+`TokenStore` was the consequential one. `URLSessionAPIClient`, `LiveAuthService`
+and `LiveSocialAuthExchangeService` all stored `private let tokenStore: TokenStore` — the
+actor itself, not an existential. It was not unreachable in a test, because it takes an
+injectable `any KeychainStoring`, but the seam sat one level lower than the one a caller
+wants: a test that needed "a store that reports the token as expired" had to build a fake
 Keychain and populate it, rather than passing a fake store. The refresh-coalescing logic in
 `refreshIfNeeded(using:)` is the most subtle code in the networking layer and the only way
-to substitute it is to not use it.
+to substitute it was to not use it.
 
-`CameraService` is the defensible one. It is a `final class` wrapping `AVCaptureSession`,
-held concretely by both camera view models, and `Tests/ViewModelTests/DelegateStreamTests.swift`
-already exercises it directly on a simulator that has no capture device — so the parts that
-can be pinned without hardware already are. Extracting a protocol from it would buy a
-substitutable preview layer and little else, and `previewLayer` is an
-`AVCaptureVideoPreviewLayer` either way. It is recorded here because the table should be
-complete, not because it is urgent.
+**Repair.** `TokenStoring` — four requirements, all `async`, which is every member anything
+outside the actor calls. All three collaborators now hold `any TokenStoring`, and
+`InMemoryTokenStore` is the double, itself an `actor` so that substituting it does not
+change isolation the way finding 5 describes. `TokenStoringSeamTests` is the suite that
+could not have been written before: it substitutes the store itself to assert that an
+authenticated request fails at the store rather than at the network, and that a request with
+no token throws instead of attempting a refresh.
 
-**Fix:** same item — a container is the natural moment to give `TokenStore` a protocol,
-because that is when something other than a default argument decides what gets stored.
+`CameraService` is the declined one, and the reason is the same one this page gave for
+calling it defensible. It is a `final class` wrapping `AVCaptureSession`, and
+`Tests/ViewModelTests/DelegateStreamTests.swift` already exercises it directly on a
+simulator that has no capture device — so the parts that can be pinned without hardware
+already are. Extracting a protocol would buy a substitutable preview layer and little else,
+and `previewLayer` is an `AVCaptureVideoPreviewLayer` either way. What it did need from the
+composition root was the *lifetime* decision, which was previously a side effect of two
+view-model default arguments both spelling `CameraService()`: the container vends it through
+a `@Sendable () -> CameraService` factory, one session per screen, pinned by
+`cameraFactoryVendsAFreshServicePerCall`.
 
 ## Liskov substitution
 
@@ -210,11 +234,10 @@ the build here instead of passing silently.
 
 This is the finding that reframes the rest of the page.
 
-`LiveUserRepository` and `SwiftDataUserPersistenceService` are never constructed outside the
-test target. No view model holds a `UserRepository`. No view model holds a
-`UserPersistenceService`. `BoilerplateApp` builds a `ModelContainer` and installs it in the
-environment, and nothing reads it — there is no `@Query` and no `modelContext` access
-anywhere in `Sources`. The screen that displays a list gets it from here:
+No view model holds a `UserRepository`. No view model holds a `UserPersistenceService`.
+`BoilerplateApp` builds a `ModelContainer` and installs it in the environment, and nothing
+reads it — there is no `@Query` and no `modelContext` access anywhere in `Sources`. The
+screen that displays a list gets it from here:
 
 ```swift
 private func fetchItems() async throws -> [HomeItem] {
@@ -225,6 +248,14 @@ private func fetchItems() async throws -> [HomeItem] {
 
 `HomeViewModel` fabricates its own data, in a private method, with a sleep standing in for
 latency. `HomeItem` is a separate type from `User` and does not come from any wire model.
+
+*Amended by Phase 8 item 2.* This finding used to open with "`LiveUserRepository` and
+`SwiftDataUserPersistenceService` are never constructed outside the test target", and half
+of that is no longer true: `AppContainer.live()` constructs a `LiveUserRepository`, so the
+repository is now built in production and still read by nobody. That is a smaller gap than
+it was and the same gap in kind — a layer with a constructor is not a layer with a caller.
+`SwiftDataUserPersistenceService` is not in the container at all, because it needs a
+non-`Sendable` `ModelContext` and wiring a store with no caller would mean inventing one.
 
 Everything above about substitutability and inversion is therefore, for these two types, a
 statement about code with no callers. That is worth saying plainly rather than burying: a
@@ -294,7 +325,10 @@ deliberate act that fails the build here first.
 There is no fat interface in this layer. `APIClient`, `TextRecognizing`, `BarcodeScanning`,
 `SocialAuthProvider`, `SocialAuthExchangeService` and `AuthServiceProtocol` have one
 requirement each; `BiometricAuthProvider` has three, all of which its single consumer uses;
-`KeychainStoring` has four and `TokenStore` uses all four.
+`KeychainStoring` has four and `TokenStore` uses all four. `TokenStoring`, added by Phase 8
+item 2, has four as well, and they are exactly the four members anything outside the actor
+calls — `accessToken` and `refreshToken` stayed off it for that reason, which is ISP
+answered at the moment the interface was written rather than audited afterwards.
 
 `UserPersistenceService` has five requirements and `UserRepository` has three, and neither
 has a client. **ISP cannot be evaluated against them at all** — the principle is about what a
@@ -354,14 +388,18 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
   page revisited by hand. There is no reflection over the module's type list to fall back on;
   Swift has no equivalent of reading the compiled output the way this repo's Android sibling
   does in its own `SolidContractTest`.
-- **"Nothing constructs this in production" is not pinned.** Finding 6 is the most important
-  one on the page and it is the one a test cannot hold: nothing fails when a new caller
-  appears, which is the direction the change will come from. It was established by searching
+- **"Nothing reads this in production" is not pinned.** Finding 6 is the most important one
+  on the page and it is the one a test cannot hold: nothing fails when a new caller appears,
+  which is the direction the change will come from. It was established by searching
   `Sources` for every reference to the two types and is true as of this commit.
-- **`CameraService` and the two camera view models are not in the construction pin.**
-  Constructing `TextRecognitionViewModel()` or `BarcodeScannerViewModel()` builds a
-  `CameraService`, and this suite does not touch capture hardware. Their default arguments
-  were read, not executed.
+- **Nothing stops a new default argument.** The container tests assert what
+  `AppContainer.live()` binds, not that no other type could bind anything. A collaborator
+  added tomorrow with `= LiveThing()` on its initialiser would rebuild finding 1 beside the
+  container and no test here would fail.
+- **The camera view models are now in a pin, but a shallow one.**
+  `cameraViewModelsUseTheFactoriesService` builds both and compares their preview layers,
+  which is enough to show each got its own service and nothing about capture, because the
+  suite still touches no hardware.
 - **Nothing here checks that the doc and the code agree in prose.** The pins assert
   structure. The paragraphs are still paragraphs.
 
@@ -369,8 +407,9 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 
 | Finding | Principle | Fixed by |
 | --- | --- | --- |
-| 1 — defaults are the composition root | DIP | Phase 8 item 2, DI container |
-| 2 — `TokenStore`/`CameraService` unabstracted | DIP | Phase 8 item 2, DI container |
+| 1 — defaults are the composition root | DIP | **fixed** — Phase 8 item 2, `AppContainer` |
+| 2 — `TokenStore` unabstracted | DIP | **fixed** — Phase 8 item 2, `TokenStoring` |
+| 2 — `CameraService` unabstracted | DIP | **declined** — vended as a factory, reasons above |
 | 3 — `save` diverges from its double | LSP | Phase 9 item 1, offline-first repository |
 | 4 — disjoint error types | LSP | Phase 8 item 4, decorators (error ownership) |
 | 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor |

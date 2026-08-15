@@ -31,9 +31,12 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
 
     // MARK: - Init
 
+    /// Built by `AppContainer.makeBarcodeScannerViewModel()`. See the note on
+    /// `TextRecognitionViewModel.init` for why the camera service is passed in
+    /// rather than defaulted.
     init(
-        cameraService: CameraService = CameraService(),
-        scannerService: any BarcodeScanning = LiveBarcodeScannerService()
+        cameraService: CameraService,
+        scannerService: any BarcodeScanning
     ) {
         self.cameraService = cameraService
         self.scannerService = scannerService
