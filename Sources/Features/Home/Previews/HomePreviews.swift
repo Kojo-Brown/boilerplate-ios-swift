@@ -7,20 +7,20 @@ struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
             NavigationStack {
-                HomeView()
+                HomeView(container: .preview)
                     .environment(AppCoordinator())
             }
             .previewDisplayName("Default")
 
             NavigationStack {
-                HomeView()
+                HomeView(container: .preview)
                     .environment(AppCoordinator())
             }
             .preferredColorScheme(.dark)
             .previewDisplayName("Dark Mode")
 
             NavigationStack {
-                HomeView()
+                HomeView(container: .preview)
                     .environment(AppCoordinator())
             }
             .previewDevice(PreviewDevice(rawValue: "iPad Pro (12.9-inch) (6th generation)"))

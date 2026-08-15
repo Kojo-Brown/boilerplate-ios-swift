@@ -156,6 +156,11 @@ struct SendableConformanceTests {
     /// The doubles are the reason this suite exists. Four of them asserted
     /// `@unchecked Sendable` over bare mutable stored properties, which is a
     /// data race the compiler had been instructed not to look at.
+    ///
+    /// `AppContainer` is here for the same reason as the existentials rather
+    /// than as a service: it stores one of nearly every protocol above, so its
+    /// conformance is the sum of theirs, and a collaborator that quietly stops
+    /// being `Sendable` takes the whole composition root down with it.
     @Test("Services, doubles, and their existentials are Sendable")
     func serviceLayerIsSendable() {
         let audited = [
@@ -163,6 +168,7 @@ struct SendableConformanceTests {
             auditSendable((any UserRepository).self),
             auditSendable((any UserPersistenceService).self),
             auditSendable((any KeychainStoring).self),
+            auditSendable((any TokenStoring).self),
             auditSendable((any BiometricAuthProvider).self),
             auditSendable((any AuthServiceProtocol).self),
             auditSendable((any SocialAuthProvider).self),
@@ -188,8 +194,12 @@ struct SendableConformanceTests {
             auditSendable(MockUserRepository.self),
             auditSendable(MockUserPersistenceService.self),
             auditSendable(SwiftDataUserPersistenceService.self),
+            auditSendable(KeychainWrapper.self),
+            auditSendable(InMemoryKeychain.self),
+            auditSendable(InMemoryTokenStore.self),
+            auditSendable(AppContainer.self),
         ]
-        expectAudit(audited, count: 29)
+        expectAudit(audited, count: 34)
     }
 
     /// The doubles this item converted off `@unchecked Sendable` are now

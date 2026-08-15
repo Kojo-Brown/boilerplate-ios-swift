@@ -6,16 +6,16 @@ import SwiftUI
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
-            LoginView()
+            LoginView(container: .preview)
                 .environment(AppState())
                 .previewDisplayName("Default")
 
-            LoginView()
+            LoginView(container: .preview)
                 .environment(AppState())
                 .preferredColorScheme(.dark)
                 .previewDisplayName("Dark Mode")
 
-            LoginView()
+            LoginView(container: .preview)
                 .environment(AppState())
                 .previewDevice(PreviewDevice(rawValue: "iPhone SE (3rd generation)"))
                 .previewDisplayName("iPhone SE")

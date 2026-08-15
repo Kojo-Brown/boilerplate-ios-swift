@@ -33,9 +33,13 @@ final class TextRecognitionViewModel: ViewModelProtocol {
 
     // MARK: - Init
 
+    /// Built by `AppContainer.makeTextRecognitionViewModel()`. The camera
+    /// service arrives from the container's factory rather than from a default
+    /// here, so two screens cannot silently end up sharing — or silently not
+    /// sharing — one `AVCaptureSession`.
     init(
-        cameraService: CameraService = CameraService(),
-        recognitionService: any TextRecognizing = LiveTextRecognitionService()
+        cameraService: CameraService,
+        recognitionService: any TextRecognizing
     ) {
         self.cameraService = cameraService
         self.recognitionService = recognitionService

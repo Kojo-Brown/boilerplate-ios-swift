@@ -7,8 +7,13 @@ import UIKit
 /// and displays the full recognized string in a scrollable panel at the bottom.
 /// Navigation entry point: `coordinator.push(.textRecognition)`.
 struct TextRecognitionView: View {
-    @State private var viewModel = TextRecognitionViewModel()
+    @State private var viewModel: TextRecognitionViewModel
     @Environment(AppCoordinator.self) private var coordinator
+
+    @MainActor
+    init(container: AppContainer) {
+        _viewModel = State(wrappedValue: container.makeTextRecognitionViewModel())
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -180,7 +185,7 @@ struct TextRecognitionView: View {
 
 #Preview {
     NavigationStack {
-        TextRecognitionView()
+        TextRecognitionView(container: .preview)
             .environment(AppCoordinator())
     }
 }

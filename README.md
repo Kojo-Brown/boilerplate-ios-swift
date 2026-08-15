@@ -41,5 +41,21 @@ the package `x86_64` under Rosetta links and then aborts at launch. Vision does
 the same job with no dependency, and additionally reports a per-observation
 confidence that ML Kit's iOS API does not expose.
 
+## Architecture
+
+`AppContainer` (`Sources/Core/DI/`) is the composition root: the only place that
+names a live implementation. It is built once in `BoilerplateApp` and threaded
+down the view tree, so no initialiser in the package carries a default
+collaborator and no view knows what is behind the protocol it uses.
+`AppContainer.preview` swaps the whole graph for hand-written doubles in one
+expression, which is what every `#Preview` and preview provider uses.
+
+- [docs/dependency-injection.md](./docs/dependency-injection.md) — the container,
+  and the two shapes it deliberately is not
+- [docs/solid.md](./docs/solid.md) — SOLID audit of the repository and service
+  layers, and which findings are still open
+- [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
+  utilities in `Sources/Core/Concurrency`
+
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

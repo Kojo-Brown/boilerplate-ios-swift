@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Security
 
 // MARK: - Keychain errors
@@ -112,5 +113,40 @@ struct KeychainWrapper: KeychainStoring {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unhandledError(status: status)
         }
+    }
+}
+
+// MARK: - Double for previews & tests
+
+/// Lock-protected in-memory `KeychainStoring` implementation.
+///
+/// Avoids a dependency on the Keychain daemon, which is unavailable in CI
+/// and simulators without entitlements.
+///
+/// It lives in `Sources` rather than in the test target because
+/// `AppContainer.preview` needs it: a preview graph that reached the real
+/// Keychain would be writing to the developer's own login items. That is the
+/// same place every other double in this package lives.
+///
+/// The storage lives inside the lock rather than beside it, which leaves this
+/// class with one `let` stored property of `Sendable` type and so a conformance
+/// the compiler checks instead of one it is told to assume.
+final class InMemoryKeychain: KeychainStoring, Sendable {
+    private let storage = OSAllocatedUnfairLock(initialState: [String: String]())
+
+    func string(forKey key: String) throws -> String? {
+        storage.withLock { $0[key] }
+    }
+
+    func set(_ value: String, forKey key: String) throws {
+        storage.withLock { $0[key] = value }
+    }
+
+    func remove(forKey key: String) throws {
+        storage.withLock { $0[key] = nil }
+    }
+
+    func removeAll() throws {
+        storage.withLock { $0.removeAll() }
     }
 }

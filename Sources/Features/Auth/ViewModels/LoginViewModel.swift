@@ -19,9 +19,12 @@ final class LoginViewModel: ViewModelProtocol {
             && email.contains("@")
     }
 
-    private let authService: AuthServiceProtocol
+    private let authService: any AuthServiceProtocol
 
-    init(authService: AuthServiceProtocol = LiveAuthService()) {
+    /// Built by `AppContainer.makeLoginViewModel()`. There is no default: a
+    /// view model that can name its own live collaborator is a second
+    /// composition root, and this package now has one.
+    init(authService: any AuthServiceProtocol) {
         self.authService = authService
     }
 
@@ -53,12 +56,9 @@ protocol AuthServiceProtocol: Sendable {
 
 struct LiveAuthService: AuthServiceProtocol {
     private let client: any APIClient
-    private let tokenStore: TokenStore
+    private let tokenStore: any TokenStoring
 
-    init(
-        client: any APIClient = URLSessionAPIClient.shared,
-        tokenStore: TokenStore = .shared
-    ) {
+    init(client: any APIClient, tokenStore: any TokenStoring) {
         self.client = client
         self.tokenStore = tokenStore
     }

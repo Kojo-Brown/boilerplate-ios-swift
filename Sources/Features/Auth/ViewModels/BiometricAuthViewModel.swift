@@ -17,7 +17,8 @@ final class BiometricAuthViewModel {
 
     private let service: any BiometricAuthProvider
 
-    init(service: any BiometricAuthProvider = LiveBiometricAuthService()) {
+    /// Built by `AppContainer.makeBiometricAuthViewModel()`; no default.
+    init(service: any BiometricAuthProvider) {
         self.service = service
     }
 

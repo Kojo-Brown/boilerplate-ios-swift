@@ -1,37 +1,6 @@
 import Foundation
-import os
 import Testing
 @testable import BoilerplateiOSSwift
-
-// MARK: - InMemoryKeychain (shared test double)
-
-/// Lock-protected in-memory `KeychainStoring` implementation for unit tests.
-///
-/// Avoids a dependency on the Keychain daemon, which is unavailable in CI
-/// and simulators without entitlements.
-///
-/// The storage lives inside the lock rather than beside it, which leaves this
-/// class with one `let` stored property of `Sendable` type and so a conformance
-/// the compiler checks instead of one it is told to assume.
-final class InMemoryKeychain: KeychainStoring, Sendable {
-    private let storage = OSAllocatedUnfairLock(initialState: [String: String]())
-
-    func string(forKey key: String) throws -> String? {
-        storage.withLock { $0[key] }
-    }
-
-    func set(_ value: String, forKey key: String) throws {
-        storage.withLock { $0[key] = value }
-    }
-
-    func remove(forKey key: String) throws {
-        storage.withLock { $0[key] = nil }
-    }
-
-    func removeAll() throws {
-        storage.withLock { $0.removeAll() }
-    }
-}
 
 // MARK: - KeychainWrapper unit tests (via InMemoryKeychain)
 

@@ -35,7 +35,12 @@ private func expectAudit(_ audited: [String], count: Int) {
 /// a global actor to `LiveUserRepository` breaks the build here instead of
 /// leaving the page describing an isolation split that is gone.
 private func makeLiveRepositoryOffTheMainActor() -> any UserRepository {
-    LiveUserRepository(client: URLSessionAPIClient.shared)
+    LiveUserRepository(
+        client: URLSessionAPIClient(
+            baseURL: AppContainer.defaultBaseURL,
+            tokenStore: InMemoryTokenStore()
+        )
+    )
 }
 
 /// Finding 8, compile-time half: conforming to `ViewModelProtocol` demands
@@ -70,24 +75,32 @@ struct SolidSurfaceTests {
     /// `SolidSubstitutabilityTests`, which is the suite that builds a container.
     @Test("Every abstraction in docs/solid.md still has its live implementation")
     func liveImplementationsStillConform() {
-        let client: any APIClient = URLSessionAPIClient.shared
+        let keychain: any KeychainStoring = KeychainWrapper()
+        let tokenStore: any TokenStoring = TokenStore(keychain: keychain)
+        let client: any APIClient = URLSessionAPIClient(
+            baseURL: AppContainer.defaultBaseURL,
+            tokenStore: tokenStore
+        )
         let repository: any UserRepository = LiveUserRepository(client: client)
-        let auth: any AuthServiceProtocol = LiveAuthService(client: client)
-        let exchange: any SocialAuthExchangeService = LiveSocialAuthExchangeService(client: client)
+        let auth: any AuthServiceProtocol = LiveAuthService(client: client, tokenStore: tokenStore)
+        let exchange: any SocialAuthExchangeService = LiveSocialAuthExchangeService(
+            client: client,
+            tokenStore: tokenStore
+        )
         let apple: any SocialAuthProvider = AppleSignInService()
         let google: any SocialAuthProvider = GoogleSignInService()
         let biometrics: any BiometricAuthProvider = LiveBiometricAuthService()
         let recognizer: any TextRecognizing = LiveTextRecognitionService()
         let scanner: any BarcodeScanning = LiveBarcodeScannerService()
-        let keychain: any KeychainStoring = KeychainWrapper()
 
         let bound: [Any] = [
-            client, repository, auth, exchange, apple,
+            client, tokenStore, repository, auth, exchange, apple,
             google, biometrics, recognizer, scanner, keychain,
         ]
 
         let audited = [
             audit(URLSessionAPIClient.self),
+            audit(TokenStore.self),
             audit(LiveUserRepository.self),
             audit(LiveAuthService.self),
             audit(LiveSocialAuthExchangeService.self),
@@ -99,7 +112,7 @@ struct SolidSurfaceTests {
             audit(KeychainWrapper.self),
         ]
 
-        expectAudit(audited, count: 10)
+        expectAudit(audited, count: 11)
         #expect(bound.count == audited.count)
     }
 
@@ -109,6 +122,8 @@ struct SolidSurfaceTests {
     @Test("Every abstraction still has its hand-written double")
     func doublesStillConform() {
         let client: any APIClient = MockAPIClient()
+        let tokenStore: any TokenStoring = InMemoryTokenStore()
+        let keychain: any KeychainStoring = InMemoryKeychain()
         let repository: any UserRepository = MockUserRepository()
         let persistence: any UserPersistenceService = MockUserPersistenceService()
         let auth: any AuthServiceProtocol = MockAuthService()
@@ -119,12 +134,14 @@ struct SolidSurfaceTests {
         let scanner: any BarcodeScanning = MockBarcodeScannerService()
 
         let bound: [Any] = [
-            client, repository, persistence, auth, provider,
+            client, tokenStore, keychain, repository, persistence, auth, provider,
             exchange, biometrics, recognizer, scanner,
         ]
 
         let audited = [
             audit(MockAPIClient.self),
+            audit(InMemoryTokenStore.self),
+            audit(InMemoryKeychain.self),
             audit(MockUserRepository.self),
             audit(MockUserPersistenceService.self),
             audit(MockAuthService.self),
@@ -135,40 +152,82 @@ struct SolidSurfaceTests {
             audit(MockBarcodeScannerService.self),
         ]
 
-        expectAudit(audited, count: 9)
+        expectAudit(audited, count: 11)
         #expect(bound.count == audited.count)
     }
 
-    /// Finding 1: there is no composition root, only default arguments.
+    /// Finding 1, as repaired: the composition root is `AppContainer`, and it
+    /// is the only place in the package that names a live implementation.
     ///
-    /// Every construction below takes no arguments, and each one resolves a
-    /// whole chain of collaborators through defaults —
-    /// `LoginViewModel()` alone reaches `LiveAuthService`,
-    /// `URLSessionAPIClient.shared`, `TokenStore.shared` and `KeychainWrapper`.
+    /// This replaces `zeroArgumentConstructionStillCompiles`, which constructed
+    /// `LoginViewModel()`, `SocialLoginViewModel()`, `BiometricAuthViewModel()`,
+    /// `LiveAuthService()`, `LiveUserRepository()` and
+    /// `LiveSocialAuthExchangeService()` with no arguments at all, and which the
+    /// audit predicted would stop compiling the moment a container took those
+    /// defaults off. It did, and it was rewritten rather than relaxed: none of
+    /// those six initialisers has a default argument any more, so none of those
+    /// six expressions is spellable.
     ///
-    /// **This test is expected to stop compiling.** Phase 8 item 2 introduces a
-    /// DI container, and a container that is worth having takes those defaults
-    /// off. When it does, the failure lands here, and the finding it pins should
-    /// be rewritten rather than the test relaxed.
+    /// What is pinned instead is the wiring. Asserting on the *dynamic* type of
+    /// each existential is what makes this a check rather than a restatement:
+    /// swapping `live()`'s `GoogleSignInService` for a double, or letting a
+    /// default creep back in under one of these properties, changes a name here.
     ///
-    /// The two camera view models are deliberately absent: constructing them
-    /// builds a `CameraService`, and this suite does not touch capture hardware.
-    /// `docs/solid.md` records that gap in the pin rather than papering it over.
-    @Test("Zero-argument construction still reaches the live graph")
-    func zeroArgumentConstructionStillCompiles() {
-        let viewModels: [AnyObject] = [
-            LoginViewModel(),
-            SocialLoginViewModel(),
-            BiometricAuthViewModel(),
-        ]
-        let services: [Any] = [
-            LiveAuthService(),
-            LiveUserRepository(),
-            LiveSocialAuthExchangeService(),
+    /// `AppleSignInService` has no row — it is constructed by nothing, in the
+    /// container or out of it, which is finding 8 and is pinned by
+    /// `liveImplementationsStillConform` above.
+    @Test("The container is the composition root, and it binds the live graph")
+    func liveContainerBindsTheLiveGraph() {
+        let container = AppContainer.live()
+
+        let bound = [
+            String(describing: type(of: container.apiClient)),
+            String(describing: type(of: container.tokenStore)),
+            String(describing: type(of: container.keychain)),
+            String(describing: type(of: container.userRepository)),
+            String(describing: type(of: container.authService)),
+            String(describing: type(of: container.socialAuthProvider)),
+            String(describing: type(of: container.socialAuthExchange)),
+            String(describing: type(of: container.biometricAuth)),
+            String(describing: type(of: container.textRecognizer)),
+            String(describing: type(of: container.barcodeScanner)),
         ]
 
-        #expect(viewModels.count == 3)
-        #expect(services.count == 3)
+        #expect(bound == [
+            "URLSessionAPIClient",
+            "TokenStore",
+            "KeychainWrapper",
+            "LiveUserRepository",
+            "LiveAuthService",
+            "GoogleSignInService",
+            "LiveSocialAuthExchangeService",
+            "LiveBiometricAuthService",
+            "LiveTextRecognitionService",
+            "LiveBarcodeScannerService",
+        ])
+    }
+
+    /// The other half of finding 1: substituting the whole graph is now one
+    /// expression, where it used to be ten arguments spread over six call sites.
+    @Test("The preview container binds the doubles instead")
+    func previewContainerBindsTheDoubles() {
+        let container = AppContainer.preview
+
+        let bound = [
+            String(describing: type(of: container.apiClient)),
+            String(describing: type(of: container.tokenStore)),
+            String(describing: type(of: container.keychain)),
+            String(describing: type(of: container.userRepository)),
+            String(describing: type(of: container.authService)),
+            String(describing: type(of: container.socialAuthProvider)),
+            String(describing: type(of: container.socialAuthExchange)),
+            String(describing: type(of: container.biometricAuth)),
+            String(describing: type(of: container.textRecognizer)),
+            String(describing: type(of: container.barcodeScanner)),
+        ]
+
+        #expect(bound.allSatisfy { $0.hasPrefix("Mock") || $0.hasPrefix("InMemory") })
+        #expect(bound.count == 10)
     }
 
     /// Finding 8: the conformance costs nothing to satisfy.

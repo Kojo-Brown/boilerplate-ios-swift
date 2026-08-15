@@ -7,8 +7,13 @@ import UIKit
 /// and a results panel at the bottom when a code is detected.
 /// Navigation entry point: `coordinator.push(.barcodeScanner)`.
 struct BarcodeScannerView: View {
-    @State private var viewModel = BarcodeScannerViewModel()
+    @State private var viewModel: BarcodeScannerViewModel
     @Environment(AppCoordinator.self) private var coordinator
+
+    @MainActor
+    init(container: AppContainer) {
+        _viewModel = State(wrappedValue: container.makeBarcodeScannerViewModel())
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -201,7 +206,7 @@ struct BarcodeScannerView: View {
 
 #Preview {
     NavigationStack {
-        BarcodeScannerView()
+        BarcodeScannerView(container: .preview)
             .environment(AppCoordinator())
     }
 }
