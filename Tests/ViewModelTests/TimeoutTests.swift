@@ -17,14 +17,30 @@ struct TimeoutTests {
         let clock = ContinuousClock()
         let start = clock.now
 
-        let value = try await withTimeout(.seconds(30)) { 7 }
+        // The budget is deliberately enormous, and that is the whole point.
+        // What this test asks is whether the success path abandons the pending
+        // sleeper or waits for it. `withTimeout` has no `Clock` seam — SPEC.md
+        // Phase 7 records that gap — so the only honest way to ask it is to
+        // make "waited for it" a duration nothing else could be mistaken for.
+        //
+        // It was `.seconds(30)` against a `< .seconds(5)` bound, a ratio of 6,
+        // and a loaded runner forged a failure through it on run #48 of the
+        // DI-container branch: 16.48s elapsed on a call that had in fact
+        // returned immediately — not the 30s the bug produces, just scheduling
+        // starvation in a suite that runs 400+ tests at once. Main's own last
+        // green run spent 7.6s inside this test against that 5s bound, so the
+        // margin was already nearly gone before anything was added to it.
+        let value = try await withTimeout(.seconds(3600)) { 7 }
+        let elapsed = clock.now - start
 
-        // The assertion is the elapsed time, not the value. Without
-        // `cancelAll()` on the success path the group would still be holding a
-        // pending sleeper, would wait for it, and this would take 30 seconds —
-        // a bug that is invisible in review and unmistakable in production.
+        // Without `cancelAll()` on the success path the group would still be
+        // holding a pending sleeper, would wait for it, and this would take an
+        // hour — a bug that is invisible in review and unmistakable in
+        // production. It now fails two ways rather than one: this expectation,
+        // and the suite's own `.timeLimit(.minutes(1))`, which no hour-long
+        // wait can survive and which reports by name rather than by margin.
         #expect(value == 7)
-        #expect(clock.now - start < .seconds(5))
+        #expect(elapsed < .seconds(30))
     }
 
     @Test("an operation that overruns throws TimedOutError and is cancelled")
