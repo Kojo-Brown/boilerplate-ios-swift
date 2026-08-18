@@ -283,7 +283,7 @@ struct SettingsPreviewProviderTests {
     func settingsViewCanBeInstantiated() {
         // SettingsView reads AppState from @Environment directly in body,
         // so we verify instantiation only in a unit-test context.
-        let view = SettingsView()
+        let view = SettingsView(container: .preview)
         _ = view
     }
 

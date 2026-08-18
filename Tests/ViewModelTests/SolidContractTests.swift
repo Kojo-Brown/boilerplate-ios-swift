@@ -73,6 +73,8 @@ struct SolidSurfaceTests {
     /// `SwiftDataUserPersistenceService` is the one row of the table missing
     /// here: it needs a `ModelContext` to exist at all, so it is pinned in
     /// `SolidSubstitutabilityTests`, which is the suite that builds a container.
+    /// The strategies below take a store, so they are handed the double for the
+    /// same reason — what is pinned here is their conformance, not their wiring.
     @Test("Every abstraction in docs/solid.md still has its live implementation")
     func liveImplementationsStillConform() {
         let keychain: any KeychainStoring = KeychainWrapper()
@@ -92,10 +94,26 @@ struct SolidSurfaceTests {
         let biometrics: any BiometricAuthProvider = LiveBiometricAuthService()
         let recognizer: any TextRecognizing = LiveTextRecognitionService()
         let scanner: any BarcodeScanning = LiveBarcodeScannerService()
+        let store: any UserPersistenceService = MockUserPersistenceService()
+        let syncFactory: any SyncStrategyFactory = LiveSyncStrategyFactory(
+            repository: repository,
+            store: store
+        )
+        let remoteOnly: any SyncStrategy = RemoteOnlySyncStrategy(repository: repository)
+        let remoteFirst: any SyncStrategy = RemoteFirstSyncStrategy(
+            repository: repository,
+            store: store
+        )
+        let cacheFirst: any SyncStrategy = CacheFirstSyncStrategy(
+            repository: repository,
+            store: store,
+            maxAge: .seconds(60)
+        )
 
         let bound: [Any] = [
             client, tokenStore, repository, auth, exchange, apple,
             google, biometrics, recognizer, scanner, keychain,
+            syncFactory, remoteOnly, remoteFirst, cacheFirst,
         ]
 
         let audited = [
@@ -110,9 +128,13 @@ struct SolidSurfaceTests {
             audit(LiveTextRecognitionService.self),
             audit(LiveBarcodeScannerService.self),
             audit(KeychainWrapper.self),
+            audit(LiveSyncStrategyFactory.self),
+            audit(RemoteOnlySyncStrategy.self),
+            audit(RemoteFirstSyncStrategy.self),
+            audit(CacheFirstSyncStrategy.self),
         ]
 
-        expectAudit(audited, count: 11)
+        expectAudit(audited, count: 15)
         #expect(bound.count == audited.count)
     }
 
@@ -132,10 +154,12 @@ struct SolidSurfaceTests {
         let biometrics: any BiometricAuthProvider = MockBiometricAuthService()
         let recognizer: any TextRecognizing = MockTextRecognitionService()
         let scanner: any BarcodeScanning = MockBarcodeScannerService()
+        let syncStrategy: any SyncStrategy = MockSyncStrategy()
+        let syncFactory: any SyncStrategyFactory = MockSyncStrategyFactory()
 
         let bound: [Any] = [
             client, tokenStore, keychain, repository, persistence, auth, provider,
-            exchange, biometrics, recognizer, scanner,
+            exchange, biometrics, recognizer, scanner, syncStrategy, syncFactory,
         ]
 
         let audited = [
@@ -150,9 +174,11 @@ struct SolidSurfaceTests {
             audit(MockBiometricAuthService.self),
             audit(MockTextRecognitionService.self),
             audit(MockBarcodeScannerService.self),
+            audit(MockSyncStrategy.self),
+            audit(MockSyncStrategyFactory.self),
         ]
 
-        expectAudit(audited, count: 11)
+        expectAudit(audited, count: 13)
         #expect(bound.count == audited.count)
     }
 
@@ -177,14 +203,20 @@ struct SolidSurfaceTests {
     /// container or out of it, which is finding 8 and is pinned by
     /// `liveImplementationsStillConform` above.
     @Test("The container is the composition root, and it binds the live graph")
-    func liveContainerBindsTheLiveGraph() {
-        let container = AppContainer.live()
+    func liveContainerBindsTheLiveGraph() throws {
+        let modelContainer = try PersistenceController.makeInMemoryContainer()
+        let container = AppContainer.live(
+            userStore: SwiftDataUserPersistenceService(context: modelContainer.mainContext)
+        )
 
         let bound = [
             String(describing: type(of: container.apiClient)),
             String(describing: type(of: container.tokenStore)),
             String(describing: type(of: container.keychain)),
             String(describing: type(of: container.userRepository)),
+            String(describing: type(of: container.userStore)),
+            String(describing: type(of: container.syncStrategyFactory)),
+            String(describing: type(of: container.syncStrategy)),
             String(describing: type(of: container.authService)),
             String(describing: type(of: container.socialAuthProvider)),
             String(describing: type(of: container.socialAuthExchange)),
@@ -198,6 +230,9 @@ struct SolidSurfaceTests {
             "TokenStore",
             "KeychainWrapper",
             "LiveUserRepository",
+            "SwiftDataUserPersistenceService",
+            "LiveSyncStrategyFactory",
+            "RemoteFirstSyncStrategy",
             "LiveAuthService",
             "GoogleSignInService",
             "LiveSocialAuthExchangeService",
@@ -218,6 +253,9 @@ struct SolidSurfaceTests {
             String(describing: type(of: container.tokenStore)),
             String(describing: type(of: container.keychain)),
             String(describing: type(of: container.userRepository)),
+            String(describing: type(of: container.userStore)),
+            String(describing: type(of: container.syncStrategyFactory)),
+            String(describing: type(of: container.syncStrategy)),
             String(describing: type(of: container.authService)),
             String(describing: type(of: container.socialAuthProvider)),
             String(describing: type(of: container.socialAuthExchange)),
@@ -227,7 +265,7 @@ struct SolidSurfaceTests {
         ]
 
         #expect(bound.allSatisfy { $0.hasPrefix("Mock") || $0.hasPrefix("InMemory") })
-        #expect(bound.count == 10)
+        #expect(bound.count == 13)
     }
 
     /// Finding 8: the conformance costs nothing to satisfy.

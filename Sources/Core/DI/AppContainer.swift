@@ -35,11 +35,10 @@ import Foundation
 ///
 /// ## What is deliberately absent
 ///
-/// `UserPersistenceService` is not here. It needs a `ModelContext`, which is
-/// not `Sendable`, and `docs/solid.md` finding 6 records that neither it nor
-/// `UserRepository` is on any data path today. Wiring a store that has no
-/// caller would be inventing a caller; that is Phase 9 item 1's job, and it is
-/// the item that will decide what isolation the store lives under.
+/// Nothing in the audited surface, as of Phase 8 item 3. `UserPersistenceService`
+/// used to be the exception and is now a stored property — see `userStore` for
+/// why the `ModelContext` objection did not survive the item that gave the
+/// store a caller.
 ///
 /// ## How it reaches a view
 ///
@@ -68,8 +67,35 @@ struct AppContainer: Sendable {
     /// wanting to clear credentials on sign-out has something to ask.
     let keychain: any KeychainStoring
 
-    /// User-profile data operations.
+    /// User-profile data operations against the API.
     let userRepository: any UserRepository
+
+    /// The local copy of the signed-in user.
+    ///
+    /// This used to be the entry in "what is deliberately absent": it needs a
+    /// `ModelContext`, which is not `Sendable`, and wiring a store with no
+    /// caller would have meant inventing one. Phase 8 item 3 is the item that
+    /// gave it a caller, so it is here now. The isolation question the earlier
+    /// note deferred has a small answer: `SwiftDataUserPersistenceService` is
+    /// `@MainActor`, a main-actor class is `Sendable`, and every requirement on
+    /// `UserPersistenceService` is `async`, so a nonisolated strategy reaches
+    /// it with a plain `await` and the `ModelContext` never crosses anything.
+    let userStore: any UserPersistenceService
+
+    /// Builds a `SyncStrategy` for a policy. Held alongside the resolved
+    /// strategy below, not instead of it: the root decides the app's default,
+    /// and a caller with a reason to depart from it — a refresh gesture that
+    /// must not be answered by a fresh cache — asks for the policy it needs
+    /// rather than for a type it would have to name.
+    let syncStrategyFactory: any SyncStrategyFactory
+
+    /// The app's declared read policy, resolved once, here.
+    ///
+    /// This is the Strategy half of Phase 8 item 3. Changing how every profile
+    /// read in the app behaves is the `syncPolicy:` argument to `live()` and
+    /// nothing else — no view model, no repository and no transport has an
+    /// opinion about caching.
+    let syncStrategy: any SyncStrategy
 
     /// Email/password sign-in.
     let authService: any AuthServiceProtocol
@@ -141,16 +167,34 @@ extension AppContainer {
     /// `URLSessionAPIClient` will later read, and that is true here because one
     /// `TokenStore` is passed to all three, not because three initialisers
     /// defaulted to the same static.
-    static func live(baseURL: URL = AppContainer.defaultBaseURL) -> AppContainer {
+    ///
+    /// `userStore` has no default. Building one needs a `ModelContext`, and a
+    /// composition root that opens a disk-backed SwiftData container as a
+    /// side effect of a default argument is finding 1 wearing a different hat —
+    /// so `BoilerplateApp` builds the `ModelContainer` and hands the store in,
+    /// and a test hands in one backed by `makeInMemoryContainer()`.
+    static func live(
+        baseURL: URL = AppContainer.defaultBaseURL,
+        userStore: any UserPersistenceService,
+        syncPolicy: SyncPolicy = .remoteFirst
+    ) -> AppContainer {
         let keychain = KeychainWrapper()
         let tokenStore = TokenStore(keychain: keychain)
         let apiClient = URLSessionAPIClient(baseURL: baseURL, tokenStore: tokenStore)
+        let userRepository = LiveUserRepository(client: apiClient)
+        let syncStrategyFactory = LiveSyncStrategyFactory(
+            repository: userRepository,
+            store: userStore
+        )
 
         return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
             keychain: keychain,
-            userRepository: LiveUserRepository(client: apiClient),
+            userRepository: userRepository,
+            userStore: userStore,
+            syncStrategyFactory: syncStrategyFactory,
+            syncStrategy: syncStrategyFactory.makeStrategy(for: syncPolicy),
             authService: LiveAuthService(client: apiClient, tokenStore: tokenStore),
             socialAuthProvider: GoogleSignInService(),
             socialAuthExchange: LiveSocialAuthExchangeService(
@@ -187,11 +231,20 @@ extension AppContainer {
     /// a mutable stored property and takes the main actor to make that
     /// `Sendable`, which is itself `docs/solid.md` finding 5.
     static var preview: AppContainer {
-        AppContainer(
+        // The factory vends the same stub the container resolved, so a preview
+        // that pulls to refresh sees the profile it was already showing. Two
+        // independent doubles here would make the refresh gesture change the
+        // data for no reason a reader could find.
+        let syncStrategy = MockSyncStrategy()
+
+        return AppContainer(
             apiClient: MockAPIClient(),
             tokenStore: InMemoryTokenStore(),
             keychain: InMemoryKeychain(),
             userRepository: MockUserRepository(),
+            userStore: MockUserPersistenceService(),
+            syncStrategyFactory: MockSyncStrategyFactory(stubbedStrategy: syncStrategy),
+            syncStrategy: syncStrategy,
             authService: MockAuthService(),
             socialAuthProvider: MockSocialAuthProvider(),
             socialAuthExchange: MockSocialAuthExchangeService(),
@@ -234,6 +287,13 @@ extension AppContainer {
     /// than a change to `HomeView`.
     func makeHomeViewModel() -> HomeViewModel {
         HomeViewModel()
+    }
+
+    /// The Settings account section. Takes the factory as well as the resolved
+    /// strategy, because its refresh gesture asks for a policy of its own —
+    /// see `ProfileViewModel`.
+    func makeProfileViewModel() -> ProfileViewModel {
+        ProfileViewModel(strategy: syncStrategy, strategyFactory: syncStrategyFactory)
     }
 
     func makeTextRecognitionViewModel() -> TextRecognitionViewModel {
