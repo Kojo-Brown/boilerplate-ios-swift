@@ -12,9 +12,10 @@ test double through the same script and assert they disagree. The second kind fa
 finding is **fixed**, which is the point: a repair cannot quietly leave this page describing
 a problem that is gone.
 
-Findings 1 and 2 are **fixed** as of Phase 8 item 2, and their sections have been rewritten
-to say what replaced them rather than left describing a problem that is gone — see
-[`docs/dependency-injection.md`](./dependency-injection.md) for the design. Findings 3 to 8
+Findings 1 and 2 are **fixed** as of Phase 8 item 2, and finding 6 as of Phase 8 item 3.
+Their sections have been rewritten to say what replaced them rather than left describing a
+problem that is gone — see [`docs/dependency-injection.md`](./dependency-injection.md) and
+[`docs/sync-strategy.md`](./sync-strategy.md) for the two designs. Findings 3, 4, 5, 7 and 8
 still stand, and each names the item that is its fix.
 
 ## The surface that was audited
@@ -26,7 +27,7 @@ camera, identity providers. Twelve types carry that role, and the audit is the w
 | --- | --- | --- | --- | --- |
 | HTTP transport | `APIClient` | `URLSessionAPIClient` | `MockAPIClient` | `AppContainer.live()` |
 | User data | `UserRepository` | `LiveUserRepository` | `MockUserRepository` | `AppContainer.live()` |
-| Local store | `UserPersistenceService` | `SwiftDataUserPersistenceService` | `MockUserPersistenceService` | **nothing** |
+| Local store | `UserPersistenceService` | `SwiftDataUserPersistenceService` | `MockUserPersistenceService` | `AppContainer.live()` |
 | Password login | `AuthServiceProtocol` | `LiveAuthService` | `MockAuthService` | `AppContainer.live()` |
 | Social identity | `SocialAuthProvider` | `GoogleSignInService` | `MockSocialAuthProvider` | `AppContainer.live()` |
 | Social identity | `SocialAuthProvider` | `AppleSignInService` | — | **nothing** |
@@ -37,11 +38,18 @@ camera, identity providers. Twelve types carry that role, and the audit is the w
 | Keychain | `KeychainStoring` | `KeychainWrapper` | `InMemoryKeychain` | `AppContainer.live()` |
 | Token state | `TokenStoring` | `TokenStore` | `InMemoryTokenStore` | `AppContainer.live()` |
 | Camera session | **none — a concrete `class`** | `CameraService` | — | `AppContainer.makeCameraService` |
+| Read policy | `SyncStrategy` | `RemoteOnly` / `RemoteFirst` / `CacheFirst` | `MockSyncStrategy` | `AppContainer.live()` |
+| Policy resolution | `SyncStrategyFactory` | `LiveSyncStrategyFactory` | `MockSyncStrategyFactory` | `AppContainer.live()` |
 
-Eleven of the twelve now get the shape right: a `Sendable` protocol, one live conformer, a
+Fourteen of the fifteen now get the shape right: a `Sendable` protocol, one live conformer
+(three, for `SyncStrategy` — that is the Strategy pattern rather than a divergence), a
 hand-written double, and — since Phase 7 — a double whose mutable state lives inside a lock
-rather than under `@unchecked Sendable`. The twelfth, `CameraService`, is unabstracted on
+rather than under `@unchecked Sendable`. The fifteenth, `CameraService`, is unabstracted on
 purpose; finding 2 below says why.
+
+The last two rows arrived with Phase 8 item 3 and are the reason the `UserPersistenceService`
+row's right-hand column changed: the store was constructed by nothing because nothing read
+it, and a policy object is something that reads it.
 
 The right-hand column is the part item 2 changed. It used to read "default arguments only",
 "`LoginViewModel` default", "`.shared`, via defaults" — twelve rows and no two of them
@@ -230,7 +238,10 @@ the build here instead of passing silently.
 
 ## Single responsibility
 
-### Finding 6 — the repository layer is not on any data path
+### Finding 6 — the repository layer is not on any data path — **fixed**
+
+*Fixed by Phase 8 item 3 (PR #34). The description below is what was found; the repair
+follows it.*
 
 This is the finding that reframes the rest of the page.
 
@@ -267,10 +278,24 @@ The auth path is the exception and the counter-example: `LoginView` → `LoginVi
 chain from a view to the Keychain, and every hop in it goes through a protocol. The shape
 this repo wants already exists; it exists once.
 
-**Fix:** Phase 8 item 3 ("Factory + Strategy: pluggable `SyncStrategy` resolved at
-composition root") and Phase 9 item 1 ("Offline-first repository: SwiftData as source of
-truth with a network refresh policy") are both items that cannot be written without giving
-these types a caller.
+**Repair.** `SyncStrategy` is the caller. `ProfileViewModel` holds one, `SettingsView`
+holds the view model, and the chain `SettingsView` → `ProfileViewModel` → `SyncStrategy` →
+`UserRepository` → `APIClient`, with a second leg into `UserPersistenceService`, is
+complete and goes through a protocol at every hop. `BoilerplateApp` now builds the
+`ModelContainer` first and hands its `mainContext` to a `SwiftDataUserPersistenceService`
+that `AppContainer.live()` takes as an argument, so the container that used to be installed
+and never read is on a data path. The design, and the four things the item deliberately did
+not do, are in [`docs/sync-strategy.md`](./sync-strategy.md).
+
+Two parts of the finding are **not** repaired and should not be read as covered.
+`HomeViewModel` still fabricates its list with a `Task.sleep`; that is a separate gap and it
+needs a list endpoint, not a policy. And Phase 9 item 1 is still ahead — this item makes the
+store a cache the API writes to, not the source of truth.
+
+**Pin:** `liveContainerBindsTheLiveGraph` now asserts thirteen bindings rather than ten, and
+`SwiftDataUserPersistenceService` is one of them. `ProfileViewModelTests` drives the caller.
+The direction this finding could regress in — the caller being deleted — fails there and in
+`SettingsView`'s initialiser, which no longer compiles without a container.
 
 ### Finding 7 — `URLSessionAPIClient.performRequest` carries five responsibilities
 
@@ -330,10 +355,14 @@ item 2, has four as well, and they are exactly the four members anything outside
 calls — `accessToken` and `refreshToken` stayed off it for that reason, which is ISP
 answered at the moment the interface was written rather than audited afterwards.
 
-`UserPersistenceService` has five requirements and `UserRepository` has three, and neither
-has a client. **ISP cannot be evaluated against them at all** — the principle is about what a
-client is forced to depend on, and there is no client. This is finding 6 arriving from a
-different direction, and it is the reason this section is short rather than absent.
+`UserPersistenceService` has five requirements and `UserRepository` has three, and until
+Phase 8 item 3 neither had a client — so ISP could not be evaluated against them at all,
+the principle being about what a client is forced to depend on. It can now, and the answer
+is that both are honest: the strategies call `fetchCurrentUser()` and `updateProfile(name:)`
+on the repository and leave `deleteAccount()` to a caller that wants it, and they reach the
+store through `update`, `save` and `fetchCurrentUser` — three of five, with `delete` and
+`deleteAll` belonging to a sign-out path that does not exist yet. Nothing is forced to
+depend on a member it does not use; nothing yet justifies splitting either protocol.
 
 The one interface worth a note is the opposite problem:
 
@@ -388,14 +417,20 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
   page revisited by hand. There is no reflection over the module's type list to fall back on;
   Swift has no equivalent of reading the compiled output the way this repo's Android sibling
   does in its own `SolidContractTest`.
-- **"Nothing reads this in production" is not pinned.** Finding 6 is the most important one
-  on the page and it is the one a test cannot hold: nothing fails when a new caller appears,
-  which is the direction the change will come from. It was established by searching
-  `Sources` for every reference to the two types and is true as of this commit.
+- **"Nothing reads this in production" was never pinned.** Finding 6 was the most important
+  one on the page and the one a test could not hold: nothing failed when a new caller
+  appeared, which is the direction the change came from. Now that the caller exists the
+  asymmetry is reversed and still only half-covered — `ProfileViewModelTests` and
+  `liveContainerBindsTheLiveGraph` fail if the wiring is removed, but no test would notice a
+  *second* layer being added and left unread.
 - **Nothing stops a new default argument.** The container tests assert what
   `AppContainer.live()` binds, not that no other type could bind anything. A collaborator
   added tomorrow with `= LiveThing()` on its initialiser would rebuild finding 1 beside the
   container and no test here would fail.
+- **The freshness window is the one piece of policy with no compile-time home.**
+  `CacheFirstSyncStrategy`'s `maxAge` is a `Duration` with a default on
+  `LiveSyncStrategyFactory`; nothing fails if it is set to a value that makes the cache
+  useless or permanent. `docs/sync-strategy.md` says what the default is for.
 - **The camera view models are now in a pin, but a shallow one.**
   `cameraViewModelsUseTheFactoriesService` builds both and compares their preview layers,
   which is enough to show each got its own service and nothing about capture, because the
@@ -413,6 +448,6 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 | 3 — `save` diverges from its double | LSP | Phase 9 item 1, offline-first repository |
 | 4 — disjoint error types | LSP | Phase 8 item 4, decorators (error ownership) |
 | 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor |
-| 6 — the layer has no callers | SRP | Phase 8 item 3 and Phase 9 item 1 |
+| 6 — the layer has no callers | SRP | **fixed** — Phase 8 item 3, `SyncStrategy` |
 | 7 — transport carries the retry policy | SRP / OCP | Phase 8 item 4, decorators |
 | 8 — dead `AppleSignInService`, duplicated nonce | SRP | not currently a spec item |

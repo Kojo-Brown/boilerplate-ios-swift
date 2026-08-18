@@ -54,6 +54,8 @@ expression, which is what every `#Preview` and preview provider uses.
   and the two shapes it deliberately is not
 - [docs/solid.md](./docs/solid.md) — SOLID audit of the repository and service
   layers, and which findings are still open
+- [docs/sync-strategy.md](./docs/sync-strategy.md) — the pluggable read policy
+  over the API and the local store, and what it left for Phase 9
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 

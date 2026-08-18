@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import SwiftData
 import Testing
 @testable import BoilerplateiOSSwift
 
@@ -111,13 +112,50 @@ struct AppContainerTests {
     @Test("live(baseURL:) threads the origin into the transport")
     func liveThreadsTheBaseURL() throws {
         let custom = URL(string: "https://api.example.invalid/v2")!
+        let store = try makeInMemoryUserStore()
+
         let client = try #require(
-            AppContainer.live(baseURL: custom).apiClient as? URLSessionAPIClient
+            AppContainer.live(baseURL: custom, userStore: store).apiClient as? URLSessionAPIClient
         )
         #expect(client.baseURL == custom)
 
-        let byDefault = try #require(AppContainer.live().apiClient as? URLSessionAPIClient)
+        let byDefault = try #require(
+            AppContainer.live(userStore: store).apiClient as? URLSessionAPIClient
+        )
         #expect(byDefault.baseURL == AppContainer.defaultBaseURL)
+    }
+
+    /// The Strategy half of Phase 8 item 3: the policy argument is the only
+    /// thing that decides how every profile read in the app behaves, and it is
+    /// read back off the object the root resolved rather than off its type name.
+    @Test("live(syncPolicy:) resolves the policy it was given", arguments: SyncPolicy.allCases)
+    func liveResolvesTheRequestedSyncPolicy(policy: SyncPolicy) throws {
+        let store = try makeInMemoryUserStore()
+        let container = AppContainer.live(userStore: store, syncPolicy: policy)
+        #expect(container.syncStrategy.policy == policy)
+    }
+
+    /// `remoteFirst` is the app's default because it is the conservative one:
+    /// a read costs a request, so the screen is never quietly older than this
+    /// call unless it says so through `SyncOrigin`.
+    @Test("The default sync policy is remoteFirst")
+    func liveDefaultsToRemoteFirst() throws {
+        let store = try makeInMemoryUserStore()
+        let container = AppContainer.live(userStore: store)
+        #expect(container.syncStrategy.policy == .remoteFirst)
+    }
+
+    /// The Factory half. A view model that needs a policy of its own asks the
+    /// root's factory rather than naming a strategy type, and the factory it
+    /// gets is bound to the same graph.
+    @Test("The container's factory builds strategies over the container's collaborators")
+    func factoryBuildsOverTheContainersGraph() throws {
+        let container = AppContainer.preview
+        let vended = try #require(
+            container.syncStrategyFactory.makeStrategy(for: .cacheFirst) as? MockSyncStrategy
+        )
+        let resolved = try #require(container.syncStrategy as? MockSyncStrategy)
+        #expect(vended === resolved)
     }
 
     // MARK: - View-model factories
@@ -177,11 +215,21 @@ struct AppContainerTests {
         apiClient: any APIClient,
         tokenStore: any TokenStoring
     ) -> AppContainer {
-        AppContainer(
+        let userRepository = LiveUserRepository(client: apiClient)
+        let userStore = MockUserPersistenceService()
+        let syncStrategyFactory = LiveSyncStrategyFactory(
+            repository: userRepository,
+            store: userStore
+        )
+
+        return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
             keychain: InMemoryKeychain(),
-            userRepository: LiveUserRepository(client: apiClient),
+            userRepository: userRepository,
+            userStore: userStore,
+            syncStrategyFactory: syncStrategyFactory,
+            syncStrategy: syncStrategyFactory.makeStrategy(for: .remoteFirst),
             authService: LiveAuthService(client: apiClient, tokenStore: tokenStore),
             socialAuthProvider: MockSocialAuthProvider(),
             socialAuthExchange: LiveSocialAuthExchangeService(
@@ -193,6 +241,14 @@ struct AppContainerTests {
             barcodeScanner: MockBarcodeScannerService(),
             makeCameraService: { CameraService() }
         )
+    }
+
+    /// A live graph needs a real `UserPersistenceService`, and building one
+    /// needs a `ModelContext`. In-memory rather than disk-backed so the suite
+    /// leaves nothing behind; `PersistenceController` already vends both.
+    private func makeInMemoryUserStore() throws -> any UserPersistenceService {
+        let modelContainer = try PersistenceController.makeInMemoryContainer()
+        return SwiftDataUserPersistenceService(context: modelContainer.mainContext)
     }
 }
 

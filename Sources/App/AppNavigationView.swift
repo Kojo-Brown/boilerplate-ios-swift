@@ -32,7 +32,7 @@ struct AppNavigationView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .settings:
-            SettingsView()
+            SettingsView(container: container)
         case .itemDetail(let id, let title):
             ItemDetailView(id: id, title: title)
         case .textRecognition:

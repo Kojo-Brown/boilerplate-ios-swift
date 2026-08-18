@@ -8,15 +8,32 @@ struct BoilerplateApp: App {
 
     /// The composition root, built once for the process. Everything below this
     /// line receives its collaborators; nothing below it names one.
-    private let dependencies = AppContainer.live()
+    private let dependencies: AppContainer
 
-    private let container: ModelContainer = {
+    private let container: ModelContainer
+
+    /// Spelled as an initialiser rather than as two property initialisers,
+    /// because the graph now depends on the store and a stored property's
+    /// default expression cannot read another stored property.
+    ///
+    /// The order is the point: the `ModelContainer` is opened first, its
+    /// `mainContext` becomes the `UserPersistenceService`, and that store is
+    /// handed to `AppContainer.live()`. Before Phase 8 item 3 the container was
+    /// installed in the environment and read by nothing — `docs/solid.md`
+    /// finding 6 — and this is the line that stops being true.
+    init() {
+        let modelContainer: ModelContainer
         do {
-            return try PersistenceController.makeContainer()
+            modelContainer = try PersistenceController.makeContainer()
         } catch {
             fatalError("SwiftData container failed to initialise: \(error)")
         }
-    }()
+
+        container = modelContainer
+        dependencies = AppContainer.live(
+            userStore: SwiftDataUserPersistenceService(context: modelContainer.mainContext)
+        )
+    }
 
     var body: some Scene {
         WindowGroup {

@@ -1,17 +1,29 @@
 import SwiftUI
 
-/// Settings screen — demonstrates colour-scheme switching via
-/// `@Environment(\.colorScheme)` and the `AppColorScheme` preference stored
-/// in `AppState`.
+/// Settings screen — colour-scheme switching via the `AppColorScheme`
+/// preference in `AppState`, and the account section that reads the signed-in
+/// user through `ProfileViewModel`.
+///
+/// The account section is where Phase 8 item 3 becomes visible: the email and
+/// name shown here come from a `SyncStrategy` the composition root resolved,
+/// and pull-to-refresh asks the factory for a policy that goes to the network.
+/// It used to read `appState.currentUserEmail`, which is set by the login
+/// response and never refreshed.
 struct SettingsView: View {
+    @State private var viewModel: ProfileViewModel
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+
+    @MainActor
+    init(container: AppContainer) {
+        _viewModel = State(wrappedValue: container.makeProfileViewModel())
+    }
 
     var body: some View {
         @Bindable var appState = appState
         List {
             Section("Account") {
-                LabeledContent("Email", value: appState.currentUserEmail ?? "—")
+                accountRows
                 Button("Sign Out", role: .destructive) {
                     appState.signOut()
                 }
@@ -32,6 +44,60 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
+        .task { await viewModel.onAppear() }
+        .refreshable { await viewModel.refresh() }
+    }
+
+    // MARK: - Account section
+
+    @ViewBuilder
+    private var accountRows: some View {
+        switch viewModel.state {
+        case .idle, .loading:
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Loading profile…")
+                    .foregroundStyle(.secondary)
+            }
+        case .failure(let error):
+            // The email from the login response is still the best thing on
+            // hand when the profile fetch fails, so the row keeps working and
+            // the failure is stated rather than swallowed.
+            LabeledContent("Email", value: appState.currentUserEmail ?? "—")
+            Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .success(let user):
+            LabeledContent("Email", value: user.email)
+            nameEditor
+            if viewModel.origin == .localCache {
+                Label("Showing a saved copy — you appear to be offline.", systemImage: "wifi.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if let message = viewModel.saveErrorMessage {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var nameEditor: some View {
+        HStack {
+            TextField("Name", text: $viewModel.draftName)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+            if viewModel.isSaving {
+                ProgressView()
+            } else {
+                Button("Save") {
+                    Task { await viewModel.saveName() }
+                }
+                .buttonStyle(.borderless)
+                .disabled(!viewModel.canSave)
+            }
+        }
     }
 
     // MARK: - Appearance section
@@ -78,7 +144,7 @@ private extension Bundle {
 
 #Preview("Light mode") {
     NavigationStack {
-        SettingsView()
+        SettingsView(container: .preview)
             .environment(AppState())
     }
     .preferredColorScheme(.light)
@@ -86,7 +152,7 @@ private extension Bundle {
 
 #Preview("Dark mode") {
     NavigationStack {
-        SettingsView()
+        SettingsView(container: .preview)
             .environment(AppState())
     }
     .preferredColorScheme(.dark)

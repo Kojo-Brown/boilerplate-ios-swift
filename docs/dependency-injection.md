@@ -178,10 +178,15 @@ on the calls instead.
 
 ## What is deliberately not in the container
 
-- **`UserPersistenceService`.** It needs a `ModelContext`, which is not
-  `Sendable`, and finding 6 records that neither it nor `UserRepository` is on
-  any data path. Wiring a store that has no caller would mean inventing one.
-  Phase 9 item 1 is the item that gives it a caller and decides its isolation.
+- ~~**`UserPersistenceService`.**~~ It was, until Phase 8 item 3 gave it a
+  caller. The `ModelContext` objection did not survive that: the store is
+  `@MainActor`, a main-actor class is `Sendable`, and every requirement on
+  `UserPersistenceService` is `async`, so a nonisolated strategy reaches it with
+  a plain `await` and the context never crosses an isolation boundary.
+  `BoilerplateApp` opens the `ModelContainer` and passes the store into
+  `live(userStore:)`, which has no default argument on purpose — a composition
+  root that opens a disk-backed store as a side effect of a default is finding 1
+  wearing a different hat. See [`docs/sync-strategy.md`](./sync-strategy.md).
 - **A protocol for `CameraService`.** Finding 2 lists it as unabstracted and
   argues it should stay that way: it wraps `AVCaptureSession`, its
   `previewLayer` is an `AVCaptureVideoPreviewLayer` on either side of a
@@ -204,7 +209,9 @@ on the calls instead.
 - **`live()` is constructed in tests but never exercised.** `KeychainWrapper`
   and `GoogleSignInService` are built and their types asserted; no test drives a
   request through the live graph, which would need a network and a signed-in
-  Google account.
+  Google account. The store is the exception — `live()` is handed one backed by
+  `PersistenceController.makeInMemoryContainer()`, and the strategy suites drive
+  the real `SwiftDataUserPersistenceService` through it.
 - **View construction is checked, view rendering is not.**
   `PreviewProviderTests` instantiates each screen with `.preview` and stops
   there, because the test target has no SwiftUI host to evaluate a body in.
