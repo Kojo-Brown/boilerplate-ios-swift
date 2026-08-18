@@ -589,7 +589,7 @@ instead. Every gap item 1 recorded is still open.
 ## Phase 8 — Architecture & Patterns
 - [x] SOLID audit of the repository/service layers documented in `docs/solid.md` — the headline finding is that the layer being audited has no callers: `LiveUserRepository` and `SwiftDataUserPersistenceService` are never constructed outside the test target, the `ModelContainer` is installed and never read, and `HomeViewModel` fabricates its list with a `Task.sleep`. Seven more across DIP, LSP, SRP, ISP and OCP, pinned by `SolidContractTests` (PR #32)
 - [x] Protocol-oriented dependency inversion with a lightweight DI container — `AppContainer` is a struct of eleven abstractions plus a `CameraService` factory, not a type-keyed registry: a registry has to answer "what if nothing is registered?" and every answer rebuilds finding 1 one indirection away, where stored properties make it a compile error at the only place that can fix it. Ten initialisers lost their default arguments, `URLSessionAPIClient.shared` and `TokenStore.shared` are gone, and the container is threaded down the view tree by initialiser rather than through `@Environment`, whose mandatory `defaultValue` would have done the same. `TokenStoring` closes finding 2's consequential half; `CameraService` stays concrete, as the audit argued, but its *lifetime* decision moved into the root (PR #33)
-- [ ] Factory + Strategy: pluggable `SyncStrategy` resolved at composition root
+- [x] Factory + Strategy: pluggable `SyncStrategy` resolved at composition root — the pattern is the title, but the item is `docs/solid.md` finding 6: the repository layer had a constructor and no caller, so everything the audit said about substituting it was a statement about code nothing ran. `SyncStrategy` is that caller and `ProfileViewModel` is the caller of the strategy — three policies differing in exactly three respects (who is asked first, whether the answer is written back, what happens offline), with only a transport failure allowed to fall back, because answering a 401 from the cache makes a signed-out app look signed in. The root holds the resolved strategy *and* the factory: a pull-to-refresh under `cacheFirst` would otherwise be answered by the very cache it is trying to get past. The write-through is an upsert spelled at the call site, so this item did not become the save-on-every-launch caller finding 3 predicted, and the freshness window is monotonic and in memory, so a schema change did not land inside an item about a design pattern (PR #34)
 - [ ] Decorator pattern: repository wrappers adding cache, retry, and telemetry
 - [ ] Observer pattern: typed event bus on `AsyncStream`
 - [ ] Unidirectional data flow: single `State` + `Action` + `Effect` contract per feature
@@ -613,6 +613,20 @@ came off, and was rewritten — into `liveContainerBindsTheLiveGraph` and
 [`docs/dependency-injection.md`](./docs/dependency-injection.md), including the note that
 nothing stops a *new* default argument: the container tests assert what `live()` binds, not
 that no other type could bind anything.
+
+Item 3 is complete as of PR #34, and it closed finding 6 — the one this page called the
+finding that reframes the rest of `docs/solid.md`. `BoilerplateApp` now opens the
+`ModelContainer` before the graph that needs it and hands its `mainContext` in, so the
+container that was installed and read by nothing is on a data path, and
+`SwiftDataUserPersistenceService` is in the composition root rather than in the list of
+things deliberately absent from it. Two parts of the finding are **not** closed and the doc
+says so rather than claiming otherwise: `HomeViewModel` still fabricates its list with a
+`Task.sleep`, which needs a list endpoint and not a policy, and Phase 9 item 1 has still to
+invert which side is authoritative — this item makes the store a cache the API writes to.
+Findings 3 and 4 also still stand, and both are visible in the new code: `writeThrough(_:)`
+exists because `save(user:)` inserts on one implementation and upserts on the other, and
+`SyncFailure.isOffline(_:)` matches two error vocabularies because nothing reconciles them
+yet. The design is in [`docs/sync-strategy.md`](./docs/sync-strategy.md).
 
 The three differential pins in `SolidContractTests` are still **expected to fail** when
 findings 3, 4 and 5 are repaired, and that is deliberate. Rewrite the finding and the pin
