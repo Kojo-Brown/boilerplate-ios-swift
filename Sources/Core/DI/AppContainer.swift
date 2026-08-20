@@ -68,6 +68,10 @@ struct AppContainer: Sendable {
     let keychain: any KeychainStoring
 
     /// User-profile data operations against the API.
+    ///
+    /// Not a bare `LiveUserRepository` since Phase 8 item 4: it is the outermost
+    /// link of a decorator chain, and `live()` below is where the chain and its
+    /// order are decided. `docs/decorators.md` says why the order is what it is.
     let userRepository: any UserRepository
 
     /// The local copy of the signed-in user.
@@ -148,6 +152,15 @@ extension AppContainer {
     /// not require the main actor; an immutable `Sendable` static needs no
     /// isolation to be safe.
     static let defaultBaseURL = URL(string: "https://api.example.com/v1")!
+
+    /// The unified-log subsystem the app's telemetry is filed under.
+    ///
+    /// A placeholder in the same spirit as `defaultBaseURL`, and deliberately
+    /// not `Bundle.main.bundleIdentifier`: an app built from this template
+    /// should say what its logs are called here, in the composition root, where
+    /// the rest of its wiring is — not inherit it from whatever bundle the code
+    /// happens to be running in, which for the test bundle is not the app.
+    static let logSubsystem = "com.example.boilerplate-ios-swift"
 }
 
 /// `@MainActor` because `GoogleSignInService` is: it drives `GIDSignIn`, whose
@@ -181,7 +194,23 @@ extension AppContainer {
         let keychain = KeychainWrapper()
         let tokenStore = TokenStore(keychain: keychain)
         let apiClient = URLSessionAPIClient(baseURL: baseURL, tokenStore: tokenStore)
-        let userRepository = LiveUserRepository(client: apiClient)
+
+        // Phase 8 item 4. Read inside out: the live repository talks to the
+        // API, the retry loop bounds and repeats what it does, the cache
+        // collapses repeated and concurrent reads of the result, and the
+        // telemetry measures what a caller waited for — retries and cache hits
+        // included, because that is the number a person describing a slow
+        // screen is describing. `docs/decorators.md` argues each of those
+        // positions, including the two that would be reasonable the other way
+        // round.
+        let userRepository = TelemetryUserRepository(
+            base: CachingUserRepository(
+                base: RetryingUserRepository(
+                    base: LiveUserRepository(client: apiClient)
+                )
+            ),
+            telemetry: OSLogRepositoryTelemetry(subsystem: AppContainer.logSubsystem)
+        )
         let syncStrategyFactory = LiveSyncStrategyFactory(
             repository: userRepository,
             store: userStore

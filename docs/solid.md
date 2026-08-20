@@ -12,11 +12,15 @@ test double through the same script and assert they disagree. The second kind fa
 finding is **fixed**, which is the point: a repair cannot quietly leave this page describing
 a problem that is gone.
 
-Findings 1 and 2 are **fixed** as of Phase 8 item 2, and finding 6 as of Phase 8 item 3.
-Their sections have been rewritten to say what replaced them rather than left describing a
-problem that is gone — see [`docs/dependency-injection.md`](./dependency-injection.md) and
-[`docs/sync-strategy.md`](./sync-strategy.md) for the two designs. Findings 3, 4, 5, 7 and 8
-still stand, and each names the item that is its fix.
+Findings 1 and 2 are **fixed** as of Phase 8 item 2, finding 6 as of Phase 8 item 3, and
+finding 7 as of Phase 8 item 4. Their sections have been rewritten to say what replaced them
+rather than left describing a problem that is gone — see
+[`docs/dependency-injection.md`](./dependency-injection.md),
+[`docs/sync-strategy.md`](./sync-strategy.md) and
+[`docs/decorators.md`](./decorators.md) for the three designs. Findings 3, 4, 5 and 8 still
+stand, and each names the item that is its fix — except finding 4, which named item 4 and no
+longer does: that item is done and deliberately did not take it on, for a reason recorded in
+its section below.
 
 ## The surface that was audited
 
@@ -210,9 +214,21 @@ untyped `throws` is a contract that says only "something may go wrong". Typed th
 (`throws(UserRepositoryError)`) exist in Swift 6 and would state it, at the cost of making
 the live implementation do the mapping the mock currently pretends is already happening.
 
-**Fix:** not a Phase 8 item — it is a change to `UserRepository` itself, and the natural
-moment is Phase 8 item 4, when the decorator wrappers start sitting between the client and
-the repository and something has to decide which layer owns error translation.
+**Fix:** not a Phase 8 item — it is a change to `UserRepository` itself. Item 4 was named as
+the natural moment for it, on the reasoning that once decorators sat between the client and
+the repository, something would have to decide which layer owned error translation. That
+item is done and the answer turned out to be "not a decorator", which is worth recording
+here rather than moving the expectation to the next item along:
+
+`RetryingUserRepository` decides whether a failure is worth another attempt by reading
+`APIError.httpError`'s status code and `URLError`'s code — a 503 is retryable, a 400 is not,
+and a `.notConnectedToInternet` is the one class of failure a non-idempotent write may be
+retried through. A translation into `UserRepositoryError`'s three cases placed *underneath*
+that policy erases exactly the evidence it runs on; placed *above* it, translation is fine
+and useful, but it then needs a target type that can carry a cause, and inventing that type
+is a change to this package's error vocabulary rather than a wrapper around its repository.
+The two things pull in opposite directions and the item that fixes this has to say which
+side of the retry policy it lands on. See [`docs/decorators.md`](./decorators.md).
 
 **Pin:** `repositoryErrorTypesAreDisjoint` drives both implementations into failure and
 asserts each throws its own type.
@@ -297,7 +313,10 @@ store a cache the API writes to, not the source of truth.
 The direction this finding could regress in — the caller being deleted — fails there and in
 `SettingsView`'s initialiser, which no longer compiles without a container.
 
-### Finding 7 — `URLSessionAPIClient.performRequest` carries five responsibilities
+### Finding 7 — `URLSessionAPIClient.performRequest` carries five responsibilities — **fixed**
+
+*Fixed by Phase 8 item 4 (PR #35). The description below is what was found; the repair
+follows it.*
 
 One private method builds the URL, attaches the bearer token, performs the transport,
 detects a 401, drives a token refresh, retries the original request with a new token, and
@@ -315,6 +334,38 @@ which is the open/closed principle failing for the same structural reason.
 telemetry". `APIClient` has exactly one requirement and is already the right shape to wrap;
 a `RetryingAPIClient(wrapping:)` is a dozen lines once something composes it, and the 401
 refresh becomes one decorator among several rather than a permanent feature of transport.
+
+**Repair.** Three decorators — `RetryingUserRepository`, `CachingUserRepository`,
+`TelemetryUserRepository` — composed in that order inside `AppContainer.live()`, so
+`Retry`, `Backoff` and `withTimeout` have a production caller for the first time and adding
+a fourth behaviour is a line in the composition root rather than an edit to transport. The
+policy this finding said had nowhere to live now has a name and a seam: reads and
+`deleteAccount` retry any transient failure, and `updateProfile` retries only failures that
+prove the request was never delivered, because a `PATCH` whose response was lost may have
+been applied. [`docs/decorators.md`](./decorators.md) is the design.
+
+The item's own title says "repository wrappers", and that is where these went — the
+decorators wrap `UserRepository`, not `APIClient`. Two consequences follow and neither is
+hidden:
+
+- **The 401 refresh is still in `URLSessionAPIClient`, by choice rather than by omission.**
+  This finding proposed moving it out. Moving it into a `UserRepository` decorator would put
+  it in exactly one of the several places that need it — `LiveAuthService` and
+  `LiveSocialAuthExchangeService` are `APIClient` callers too — and a token refresh is a
+  property of the credential a request carries, not of the profile operation being retried.
+  Splitting `performRequest` further is a transport change and a separate item; what this
+  finding got wrong was calling every one of the five responsibilities a decorator's job.
+- **`performRequest` is down one responsibility, not five.** The retry *policy* is no longer
+  welded in, which is the open/closed half of the finding. Building the URL, attaching the
+  token, refreshing it and validating the status are still in the same method.
+
+**Pin:** `decoratorChainIsTelemetryOverCacheOverRetry` walks
+`AppContainer.live().userRepository` through `UserRepositoryDecorator.base` and asserts all
+four names in order, so a reordering — which changes what the telemetry measures and what
+the cache costs — fails rather than passing quietly.
+`liveContainerBindsTheLiveGraph` asserts the outermost name alongside the other twelve
+bindings. `retryUsesTheCombinatorsThatHadNoCaller` is the direct pin on the sentence this
+finding turns on: it fails if the retry loop stops being reached.
 
 ### Finding 8 — `AppleSignInService` is dead, and the view model reimplements it
 
@@ -403,8 +454,11 @@ and `AppEvent` are closed enums extended through their operations. `Retry` and `
 free functions over a policy value. `Sources/Core/Concurrency` is, throughout, the part of
 this package that gets this right.
 
-**Where it does not.** Finding 7 is the open/closed failure that matters: behaviour is added
-to the network layer by editing it. `HTTPMethod` is a closed enum with five cases and no
+**Where it does not.** Finding 7 was the open/closed failure that mattered: behaviour was
+added to the network layer by editing it. Since Phase 8 item 4 the data layer takes a new
+behaviour as a wrapper and a line in `AppContainer.live()`, and the remaining edit-to-extend
+surface is transport itself — a sixth thing `performRequest` must do is still a change to
+`performRequest`. `HTTPMethod` is a closed enum with five cases and no
 `.head`, `.options` or `.trace`, which is a real limit and an entirely reasonable one for a
 JSON API boilerplate.
 
@@ -427,6 +481,11 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
   `AppContainer.live()` binds, not that no other type could bind anything. A collaborator
   added tomorrow with `= LiveThing()` on its initialiser would rebuild finding 1 beside the
   container and no test here would fail.
+- **Nothing reads the telemetry.** `decoratorChainIsTelemetryOverCacheOverRetry` asserts
+  that `OSLogRepositoryTelemetry` is in the live graph and the decorator suite asserts what
+  a sink is handed, but no test observes the unified log, so a `Logger` misconfigured into
+  silence would pass everything here. The seam is the mitigation: the sink is a protocol,
+  and every claim about *what* is recorded is made against the recording double.
 - **The freshness window is the one piece of policy with no compile-time home.**
   `CacheFirstSyncStrategy`'s `maxAge` is a `Duration` with a default on
   `LiveSyncStrategyFactory`; nothing fails if it is set to a value that makes the cache
@@ -446,8 +505,8 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 | 2 — `TokenStore` unabstracted | DIP | **fixed** — Phase 8 item 2, `TokenStoring` |
 | 2 — `CameraService` unabstracted | DIP | **declined** — vended as a factory, reasons above |
 | 3 — `save` diverges from its double | LSP | Phase 9 item 1, offline-first repository |
-| 4 — disjoint error types | LSP | Phase 8 item 4, decorators (error ownership) |
+| 4 — disjoint error types | LSP | no item — needs an error type, not a decorator (above) |
 | 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor |
 | 6 — the layer has no callers | SRP | **fixed** — Phase 8 item 3, `SyncStrategy` |
-| 7 — transport carries the retry policy | SRP / OCP | Phase 8 item 4, decorators |
+| 7 — transport carries the retry policy | SRP / OCP | **fixed** — Phase 8 item 4, decorators |
 | 8 — dead `AppleSignInService`, duplicated nonce | SRP | not currently a spec item |

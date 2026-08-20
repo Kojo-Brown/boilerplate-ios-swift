@@ -202,6 +202,14 @@ struct SolidSurfaceTests {
     /// `AppleSignInService` has no row — it is constructed by nothing, in the
     /// container or out of it, which is finding 8 and is pinned by
     /// `liveImplementationsStillConform` above.
+    ///
+    /// The `userRepository` row names `TelemetryUserRepository` as of Phase 8
+    /// item 4: the container binds a decorator chain rather than a bare
+    /// `LiveUserRepository`, and this row sees its outermost link. What is
+    /// *inside* it is a separate claim with its own pin —
+    /// `decoratorChainIsTelemetryOverCacheOverRetry` walks all four names in
+    /// order — because a row here would go green on any composition that
+    /// happened to end up with the same wrapper on the outside.
     @Test("The container is the composition root, and it binds the live graph")
     func liveContainerBindsTheLiveGraph() throws {
         let modelContainer = try PersistenceController.makeInMemoryContainer()
@@ -229,7 +237,7 @@ struct SolidSurfaceTests {
             "URLSessionAPIClient",
             "TokenStore",
             "KeychainWrapper",
-            "LiveUserRepository",
+            "TelemetryUserRepository",
             "SwiftDataUserPersistenceService",
             "LiveSyncStrategyFactory",
             "RemoteFirstSyncStrategy",
