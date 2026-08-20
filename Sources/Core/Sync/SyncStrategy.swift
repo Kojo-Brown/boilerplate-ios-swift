@@ -80,11 +80,20 @@ enum SyncFailure {
     /// `docs/solid.md` finding 4 records that `LiveUserRepository` surfaces
     /// `APIError` while `MockUserRepository` throws `UserRepositoryError`, and
     /// that nothing reconciles them — so this is the first production code to
-    /// pay for that, and it pays by knowing about both. The fix is not here:
-    /// Phase 8 item 4 puts a decorator between the client and the repository,
-    /// and that is the layer that gets to own error translation. Until then,
-    /// matching one type would mean the policy behaved differently under test
-    /// than in the app, which is worse than the duplication.
+    /// pay for that, and it pays by knowing about both. Matching one type would
+    /// mean the policy behaved differently under test than in the app, which is
+    /// worse than the duplication.
+    ///
+    /// Phase 8 item 4 was expected to fix it, by translating errors in the
+    /// decorator it put between the client and the repository. It did not, and
+    /// the reason is worth recording rather than deferring again:
+    /// `RetryingUserRepository` decides whether to try again by reading
+    /// `APIError.httpError`'s status code and `URLError`'s code, so a
+    /// translation into `UserRepositoryError`'s three cases *underneath* it
+    /// would erase the evidence the policy runs on. Translating above it is
+    /// possible and needs an error type that can carry a cause, which is a
+    /// change to this package's error vocabulary and not a decorator around its
+    /// repository. See `docs/decorators.md`.
     static func isOffline(_ error: any Error) -> Bool {
         if let apiError = error as? APIError, case .networkUnavailable = apiError {
             return true
@@ -107,9 +116,11 @@ enum SyncFailure {
 /// fallback branch and naming all three is three copies of the same handler.
 ///
 /// This keeps the one thing a screen needs, the localized message, and says so
-/// in the type rather than pretending a category was preserved. When Phase 8
-/// item 4 gives the repository layer a single error type, the honest change is
-/// to delete this and name it.
+/// in the type rather than pretending a category was preserved. It survives
+/// Phase 8 item 4, which added the decorator layer without unifying the error
+/// vocabulary — see `isOffline(_:)` above for why the two pull in opposite
+/// directions. Whichever item does unify them, the honest change here is to
+/// delete this type and name the one that replaced it.
 struct SyncErrorMessage: LocalizedError, Sendable, Equatable {
     let message: String
 

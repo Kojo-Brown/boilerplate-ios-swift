@@ -180,3 +180,38 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
         entries[key] = entry
     }
 }
+
+// MARK: - Freshness
+
+extension SingleFlightCache {
+
+    /// Returns the value for `key`, first dropping the cached one if `isFresh`
+    /// rejects it.
+    ///
+    /// Expiry is deliberately not a property of this cache. A time-to-live is
+    /// only one way for a cached value to go stale — an ETag, a version counter
+    /// and a push telling the app the resource changed are three others — and
+    /// each of them is knowledge the caller has and this type does not. What
+    /// this type has is the thing the caller cannot safely write itself: the
+    /// check and the drop happen in one uninterrupted stretch of actor
+    /// execution, so no other call can fill the slot between reading the
+    /// staleness and acting on it. That is the same check-then-act atomicity
+    /// `value(for:)` exists to provide, applied one level up.
+    ///
+    /// An entry still in flight is not offered to `isFresh`: `cachedValue(for:)`
+    /// reports only completed loads, so a caller arriving mid-load joins it and
+    /// receives a value that was, by definition, produced just now.
+    ///
+    /// - Parameters:
+    ///   - key: The entry to read.
+    ///   - isFresh: Whether the currently cached value may still answer. Called
+    ///     at most once, synchronously, with the value in the cache.
+    /// - Returns: The cached value if it was accepted, otherwise a newly loaded
+    ///   one.
+    func freshValue(for key: Key, isFresh: @Sendable (Value) -> Bool) async throws -> Value {
+        if let cached = cachedValue(for: key), !isFresh(cached) {
+            invalidate(key)
+        }
+        return try await value(for: key)
+    }
+}

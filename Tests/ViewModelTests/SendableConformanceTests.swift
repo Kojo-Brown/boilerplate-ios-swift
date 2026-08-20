@@ -198,8 +198,20 @@ struct SendableConformanceTests {
             auditSendable(InMemoryKeychain.self),
             auditSendable(InMemoryTokenStore.self),
             auditSendable(AppContainer.self),
+            // The decorator chain (Phase 8 item 4). Every link stores the
+            // repository it wraps as `any UserRepository`, so the same argument
+            // as the existentials above applies twice over: the conformance of
+            // a decorator is the conformance of the protocol it holds, and a
+            // chain is only as `Sendable` as its innermost link.
+            auditSendable((any UserRepositoryDecorator).self),
+            auditSendable(RetryingUserRepository.self),
+            auditSendable(CachingUserRepository.self),
+            auditSendable(TelemetryUserRepository.self),
+            auditSendable((any RepositoryTelemetry).self),
+            auditSendable(OSLogRepositoryTelemetry.self),
+            auditSendable(RecordingRepositoryTelemetry.self),
         ]
-        expectAudit(audited, count: 34)
+        expectAudit(audited, count: 41)
     }
 
     /// The doubles this item converted off `@unchecked Sendable` are now
