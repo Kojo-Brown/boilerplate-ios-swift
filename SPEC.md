@@ -590,7 +590,7 @@ instead. Every gap item 1 recorded is still open.
 - [x] SOLID audit of the repository/service layers documented in `docs/solid.md` — the headline finding is that the layer being audited has no callers: `LiveUserRepository` and `SwiftDataUserPersistenceService` are never constructed outside the test target, the `ModelContainer` is installed and never read, and `HomeViewModel` fabricates its list with a `Task.sleep`. Seven more across DIP, LSP, SRP, ISP and OCP, pinned by `SolidContractTests` (PR #32)
 - [x] Protocol-oriented dependency inversion with a lightweight DI container — `AppContainer` is a struct of eleven abstractions plus a `CameraService` factory, not a type-keyed registry: a registry has to answer "what if nothing is registered?" and every answer rebuilds finding 1 one indirection away, where stored properties make it a compile error at the only place that can fix it. Ten initialisers lost their default arguments, `URLSessionAPIClient.shared` and `TokenStore.shared` are gone, and the container is threaded down the view tree by initialiser rather than through `@Environment`, whose mandatory `defaultValue` would have done the same. `TokenStoring` closes finding 2's consequential half; `CameraService` stays concrete, as the audit argued, but its *lifetime* decision moved into the root (PR #33)
 - [x] Factory + Strategy: pluggable `SyncStrategy` resolved at composition root — the pattern is the title, but the item is `docs/solid.md` finding 6: the repository layer had a constructor and no caller, so everything the audit said about substituting it was a statement about code nothing ran. `SyncStrategy` is that caller and `ProfileViewModel` is the caller of the strategy — three policies differing in exactly three respects (who is asked first, whether the answer is written back, what happens offline), with only a transport failure allowed to fall back, because answering a 401 from the cache makes a signed-out app look signed in. The root holds the resolved strategy *and* the factory: a pull-to-refresh under `cacheFirst` would otherwise be answered by the very cache it is trying to get past. The write-through is an upsert spelled at the call site, so this item did not become the save-on-every-launch caller finding 3 predicted, and the freshness window is monotonic and in memory, so a schema change did not land inside an item about a design pattern (PR #34)
-- [ ] Decorator pattern: repository wrappers adding cache, retry, and telemetry
+- [x] Decorator pattern: repository wrappers adding cache, retry, and telemetry — three wrappers over `UserRepository`, composed telemetry-over-cache-over-retry in `AppContainer.live()`, which finally gives Phase 7's `Retry`, `Backoff` and `withTimeout` a production caller. The decision `docs/solid.md` finding 7 said had nowhere to live is the policy split: reads and `deleteAccount` are idempotent and retry any transient failure *plus* the per-attempt deadline — which `Retry.isTransient`, written before anything called `withTimeout`, classifies as not retryable, so composing them without saying so would have made the first slow attempt terminal. `updateProfile` is a `PATCH` whose lost response may mean the write landed, so it retries only failures that prove non-delivery (no internet, no host, no DNS, no connection); a 503, a timeout and a lost connection are all excluded because none of them says whether the server acted. The cache is a five-second de-duplication window, not a second copy of the SwiftData layer: failures are never memoised, writes drop the memo on the failure path too, and a test pins it at a sixtieth of `LiveSyncStrategyFactory.defaultCacheMaxAge`. Telemetry records bounded labels — `http(503)`, `transport(-1009)` — never `localizedDescription`, which for a `URLError` carries the failing URL and its query string. **Not** done, and recorded rather than deferred: the error vocabulary is not unified (finding 4 — the retry policy classifies by `APIError`'s status code, so translating underneath it erases the evidence it runs on) and the 401 refresh stays in transport (`LiveAuthService` and `LiveSocialAuthExchangeService` are `APIClient` callers too). See `docs/decorators.md` (PR #35)
 - [ ] Observer pattern: typed event bus on `AsyncStream`
 - [ ] Unidirectional data flow: single `State` + `Action` + `Effect` contract per feature
 - [ ] Swift Package modularisation: `Core`, `Networking`, `Features` targets with boundaries
@@ -627,6 +627,23 @@ Findings 3 and 4 also still stand, and both are visible in the new code: `writeT
 exists because `save(user:)` inserts on one implementation and upserts on the other, and
 `SyncFailure.isOffline(_:)` matches two error vocabularies because nothing reconciles them
 yet. The design is in [`docs/sync-strategy.md`](./docs/sync-strategy.md).
+
+Item 4 is complete as of PR #35, and it closed finding 7 — but not the way that finding
+proposed, and the difference is the item's own finding. The audit argued that `APIClient` was
+"already the right shape to wrap" and that the 401 refresh would become "one decorator among
+several"; the item's title says *repository* wrappers, and that is where these went, because
+a token refresh is a property of the credential a request carries rather than of the profile
+operation being retried — putting it in a `UserRepository` decorator would serve one of the
+three `APIClient` callers and leave the other two. So `performRequest` is down one
+responsibility, the retry *policy*, not five. Finding 4 came out the same way and is written
+up rather than moved along: the retry classifier reads `APIError.httpError`'s status code, so
+a translation into `UserRepositoryError`'s three cases underneath it erases the evidence the
+policy runs on, and translating above it needs an error type that can carry a cause — which
+is a change to the package's error vocabulary, not a wrapper. `SyncFailure.isOffline` and
+`SyncErrorMessage`, both of which pointed at this item for that fix, now say so instead. The
+design is in [`docs/decorators.md`](./docs/decorators.md), including the ordering argument:
+telemetry outermost measures what a caller waited for, and innermost it would count transport
+attempts — two different questions, and the composition root is what picks between them.
 
 The three differential pins in `SolidContractTests` are still **expected to fail** when
 findings 3, 4 and 5 are repaired, and that is deliberate. Rewrite the finding and the pin
