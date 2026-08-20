@@ -165,4 +165,3 @@ func chainNames(of repository: any UserRepository) -> [String] {
     }
     return names
 }
-
