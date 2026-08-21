@@ -81,6 +81,52 @@ struct AppContainerTests {
         #expect(stored == "mock-social-token")
     }
 
+    /// Two properties, one object. `eventPublisher` and `eventSubscriber` are
+    /// separate so that a collaborator gets the half it needs and not the other,
+    /// which means the graph has to be the thing that keeps them the same bus —
+    /// two `EventBus()` expressions in `live()` would compile, wire cleanly, and
+    /// deliver nothing.
+    @Test("Both halves of the event bus are the same object")
+    func bothHalvesOfTheBusAreTheSameObject() throws {
+        let store = try makeInMemoryUserStore()
+        let container = AppContainer.live(userStore: store)
+
+        let publisher = try #require(container.eventPublisher as? EventBus)
+        let subscriber = try #require(container.eventSubscriber as? EventBus)
+        #expect(publisher === subscriber)
+    }
+
+    /// And the same claim from the outside, through the graph the app runs on: a
+    /// sign-in announced by the container's own login view model reaches a
+    /// subscriber taken from the container's own subscribing half.
+    @Test("A view model's publication reaches a subscriber taken from the container")
+    func viewModelPublicationsReachTheContainersSubscribers() async throws {
+        let tokenStore = InMemoryTokenStore()
+        let client = MockAPIClient()
+        client.handler = { _ in
+            LoginResponse(
+                accessToken: "mock-access-token",
+                refreshToken: "mock-refresh-token",
+                user: User(email: "wired@example.invalid", name: "Wired")
+            )
+        }
+
+        let container = makeContainer(apiClient: client, tokenStore: tokenStore)
+        let stream = container.eventSubscriber.events(of: UserSignedIn.self)
+
+        let viewModel = container.makeLoginViewModel()
+        viewModel.email = "wired@example.invalid"
+        viewModel.password = "password123"
+        await viewModel.login()
+
+        let bus = try #require(container.eventPublisher as? EventBus)
+        bus.finish()
+
+        #expect(await collect(from: stream) == [
+            UserSignedIn(method: .password, email: "wired@example.invalid"),
+        ])
+    }
+
     // MARK: - Lifetimes
 
     /// Both camera screens used to default to `CameraService()`, so each got its
@@ -222,10 +268,14 @@ struct AppContainerTests {
             store: userStore
         )
 
+        let eventBus = EventBus()
+
         return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
             keychain: InMemoryKeychain(),
+            eventPublisher: eventBus,
+            eventSubscriber: eventBus,
             userRepository: userRepository,
             userStore: userStore,
             syncStrategyFactory: syncStrategyFactory,

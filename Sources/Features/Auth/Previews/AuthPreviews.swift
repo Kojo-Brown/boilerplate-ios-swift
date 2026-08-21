@@ -6,17 +6,19 @@ import SwiftUI
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
+            // No `.environment(AppState())` any more: `LoginView` stopped
+            // reading it when its three `.onChange` blocks became one
+            // publication on the event bus. An environment value a view does not
+            // read is a preview that keeps compiling after the dependency it
+            // was standing in for has gone.
             LoginView(container: .preview)
-                .environment(AppState())
                 .previewDisplayName("Default")
 
             LoginView(container: .preview)
-                .environment(AppState())
                 .preferredColorScheme(.dark)
                 .previewDisplayName("Dark Mode")
 
             LoginView(container: .preview)
-                .environment(AppState())
                 .previewDevice(PreviewDevice(rawValue: "iPhone SE (3rd generation)"))
                 .previewDisplayName("iPhone SE")
         }

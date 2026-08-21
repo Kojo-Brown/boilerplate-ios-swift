@@ -71,9 +71,12 @@ Two rules for using it:
   that took it, and a task resumed after a suspension may be on a different one.
   Read what you need out of the lock, then await. `MockAPIClient.send` and the
   social-auth doubles both snapshot first for this reason.
-- **Never call out while holding it.** `EventBus.emit` copies the continuations
-  under the lock and yields outside it, so a subscriber that re-enters `emit`
-  meets an unlocked bus instead of a deadlocked one.
+- **Never call out while holding it.** `EventBus.publish` copies the bucket of
+  subscriptions for the event's type under the lock and yields outside it, so a
+  subscriber that re-enters `publish` meets an unlocked bus instead of a
+  deadlocked one. `EventBus.finish` does the same for the other direction:
+  ending a stream runs its termination handler, and that handler comes straight
+  back in to deregister.
 
 **4. `@unchecked Sendable`, only where the other three are impossible.** This is
 an assertion, not a check: the compiler records it and stops looking, including

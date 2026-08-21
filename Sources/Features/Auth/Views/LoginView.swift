@@ -9,7 +9,10 @@ struct LoginView: View {
     @State private var viewModel: LoginViewModel
     @State private var socialViewModel: SocialLoginViewModel
     @State private var biometricViewModel: BiometricAuthViewModel
-    @Environment(AppState.self) private var appState
+
+    /// The announcing half of the event bus, for the one flow whose view model
+    /// does not announce its own result — see `biometricSection`.
+    private let events: any EventPublishing
 
     /// The three view models this screen owns come from the container, so the
     /// view never names an auth service, an identity provider or a token store.
@@ -23,6 +26,7 @@ struct LoginView: View {
         _viewModel = State(wrappedValue: container.makeLoginViewModel())
         _socialViewModel = State(wrappedValue: container.makeSocialLoginViewModel())
         _biometricViewModel = State(wrappedValue: container.makeBiometricAuthViewModel())
+        events = container.eventPublisher
     }
 
     var body: some View {
@@ -47,17 +51,17 @@ struct LoginView: View {
             }
             .navigationTitle("Sign In")
             .navigationBarTitleDisplayMode(.large)
-            .onChange(of: viewModel.isAuthenticated) { _, authenticated in
-                if authenticated { appState.isAuthenticated = true }
-            }
-            .onChange(of: socialViewModel.isAuthenticated) { _, authenticated in
-                if authenticated { appState.isAuthenticated = true }
-            }
-            .onChange(of: biometricViewModel.isAuthenticated) { _, authenticated in
-                if authenticated { appState.isAuthenticated = true }
-            }
         }
     }
+
+    // Three `.onChange` blocks used to sit here, one per sign-in flow, each
+    // copying a view model's `isAuthenticated` into `AppState`'s — and the
+    // biometric one duplicated the button callback below, which did the same
+    // assignment on the same success. That is the observer pattern written by
+    // hand at the call site: this screen watched three flags and was, by being
+    // the watcher, the only thing that could act on them. It acted on one
+    // consequence and missed two, both of which `SessionObserver` now carries.
+    // The screen no longer reads `AppState` at all.
 
     // MARK: - Subviews
 
@@ -140,7 +144,14 @@ struct LoginView: View {
 
     private var biometricSection: some View {
         BiometricAuthButton(viewModel: biometricViewModel) {
-            appState.isAuthenticated = true
+            // The one flow that announces from the screen rather than from its
+            // view model. A successful evaluation means "this is the device's
+            // owner", and what that *implies* depends on who asked:
+            // `BiometricAuthButton` is also used on its own to re-authenticate
+            // somebody already signed in, where `UserSignedIn` would be a lie.
+            // Here it means a session began, so here is where it is said — with
+            // no email, because the evaluation returns a yes and not an identity.
+            events.publish(UserSignedIn(method: .biometric, email: nil))
         }
         .disabled(viewModel.isLoading || socialViewModel.isLoading)
     }
@@ -192,5 +203,4 @@ struct LoginView: View {
 
 #Preview {
     LoginView(container: .preview)
-        .environment(AppState())
 }

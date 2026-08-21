@@ -20,12 +20,14 @@ final class LoginViewModel: ViewModelProtocol {
     }
 
     private let authService: any AuthServiceProtocol
+    private let events: any EventPublishing
 
     /// Built by `AppContainer.makeLoginViewModel()`. There is no default: a
     /// view model that can name its own live collaborator is a second
     /// composition root, and this package now has one.
-    init(authService: any AuthServiceProtocol) {
+    init(authService: any AuthServiceProtocol, events: any EventPublishing) {
         self.authService = authService
+        self.events = events
     }
 
     func login() async {
@@ -35,7 +37,26 @@ final class LoginViewModel: ViewModelProtocol {
         defer { isLoading = false }
 
         do {
-            isAuthenticated = try await authService.login(email: email, password: password)
+            let succeeded = try await authService.login(email: email, password: password)
+            isAuthenticated = succeeded
+
+            // `isAuthenticated` says what happened on *this screen*; the event
+            // says what happened to the app. `LoginView` used to bridge the two
+            // with an `.onChange` that assigned `appState.isAuthenticated`,
+            // which made the screen responsible for every consequence of a
+            // sign-in and left `currentUserEmail` unset because that one did not
+            // occur to it. Announcing instead leaves the consequences to
+            // `SessionObserver`.
+            //
+            // The address published is the one the request was made with,
+            // untrimmed, so the event says what was authenticated rather than a
+            // tidied version of it. The response's `User` would be the better
+            // source and is unreachable: `AuthServiceProtocol.login` returns
+            // `Bool`, discarding the `LoginResponse.user` that `LiveAuthService`
+            // already has in hand. Widening that contract is its own change.
+            if succeeded {
+                events.publish(UserSignedIn(method: .password, email: email))
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

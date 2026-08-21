@@ -221,6 +221,8 @@ struct SolidSurfaceTests {
             String(describing: type(of: container.apiClient)),
             String(describing: type(of: container.tokenStore)),
             String(describing: type(of: container.keychain)),
+            String(describing: type(of: container.eventPublisher)),
+            String(describing: type(of: container.eventSubscriber)),
             String(describing: type(of: container.userRepository)),
             String(describing: type(of: container.userStore)),
             String(describing: type(of: container.syncStrategyFactory)),
@@ -237,6 +239,8 @@ struct SolidSurfaceTests {
             "URLSessionAPIClient",
             "TokenStore",
             "KeychainWrapper",
+            "EventBus",
+            "EventBus",
             "TelemetryUserRepository",
             "SwiftDataUserPersistenceService",
             "LiveSyncStrategyFactory",
@@ -274,6 +278,14 @@ struct SolidSurfaceTests {
 
         #expect(bound.allSatisfy { $0.hasPrefix("Mock") || $0.hasPrefix("InMemory") })
         #expect(bound.count == 13)
+
+        // `eventPublisher` and `eventSubscriber` are deliberately absent from
+        // that list, because they are the one pair the preview graph does not
+        // substitute — see `AppContainer.preview`. Asserted here rather than
+        // omitted, so that the exception is a stated one: a double appearing
+        // under either name later should have to change this line.
+        #expect(String(describing: type(of: container.eventPublisher)) == "EventBus")
+        #expect(String(describing: type(of: container.eventSubscriber)) == "EventBus")
     }
 
     /// Finding 8: the conformance costs nothing to satisfy.

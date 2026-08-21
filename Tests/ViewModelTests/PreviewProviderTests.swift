@@ -156,8 +156,9 @@ struct AuthPreviewProviderTests {
 
     @Test("LoginView can be instantiated")
     func loginViewCanBeInstantiated() {
-        // LoginView reads AppState from @Environment at body-evaluation time,
-        // so we verify instantiation only — not body rendering — in a unit-test context.
+        // LoginView no longer reads AppState — it publishes to the event bus
+        // instead — but its body is still a SwiftUI tree, so this verifies
+        // instantiation only, not body rendering, in a unit-test context.
         let view = LoginView(container: .preview)
         _ = view
     }

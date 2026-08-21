@@ -24,8 +24,11 @@ struct SettingsView: View {
         List {
             Section("Account") {
                 accountRows
+                // Was `appState.signOut()`, which cleared two booleans and left
+                // both tokens in the Keychain. The view model announces instead
+                // and `SessionObserver` does both halves — see `docs/events.md`.
                 Button("Sign Out", role: .destructive) {
-                    appState.signOut()
+                    viewModel.signOut()
                 }
             }
 

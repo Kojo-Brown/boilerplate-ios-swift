@@ -17,7 +17,11 @@ final class SocialLoginViewModelXCTests: XCTestCase {
         googleProvider: MockSocialAuthProvider = MockSocialAuthProvider(),
         exchangeService: MockSocialAuthExchangeService = MockSocialAuthExchangeService()
     ) -> SocialLoginViewModel {
-        SocialLoginViewModel(googleProvider: googleProvider, exchangeService: exchangeService)
+        SocialLoginViewModel(
+            googleProvider: googleProvider,
+            exchangeService: exchangeService,
+            events: EventBus()
+        )
     }
 
     // MARK: - Initial state
