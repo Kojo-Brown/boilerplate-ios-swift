@@ -449,10 +449,18 @@ Reported as observations rather than findings, because nothing here is currently
 anything.
 
 **Where it holds.** `APIEndpoint` is extended by static factories rather than by cases in a
-switch, so a new endpoint touches no existing code. `LoadingState`, `FieldUpdate`, `Route`
-and `AppEvent` are closed enums extended through their operations. `Retry` and `Backoff` are
+switch, so a new endpoint touches no existing code. `LoadingState`, `FieldUpdate` and `Route`
+are closed enums extended through their operations. `Retry` and `Backoff` are
 free functions over a policy value. `Sources/Core/Concurrency` is, throughout, the part of
 this package that gets this right.
+
+`AppEvent` was in that list as a fourth closed enum and is no longer an enum at all. Phase 8
+item 5 made it a protocol, which moves it from "closed and extended through its operations"
+to open outright: a new event is a new type, and adding one is a file, not an edit to a type
+two features already depend on. The reason it was worth changing is on the other side of the
+bus — a single enum forced every subscriber to receive every case and `switch` back to the
+one it wanted, so the closure that read well here was paid for at each consumer. See
+[`docs/events.md`](./events.md).
 
 **Where it does not.** Finding 7 was the open/closed failure that mattered: behaviour was
 added to the network layer by editing it. Since Phase 8 item 4 the data layer takes a new

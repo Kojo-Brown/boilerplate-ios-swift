@@ -22,6 +22,7 @@ final class ProfileViewModel: ViewModelProtocol {
 
     private let strategy: any SyncStrategy
     private let strategyFactory: any SyncStrategyFactory
+    private let events: any EventPublishing
 
     private(set) var state: LoadingState<User> = .idle
 
@@ -38,9 +39,14 @@ final class ProfileViewModel: ViewModelProtocol {
     /// a refresh that lands underneath it.
     var draftName = ""
 
-    init(strategy: any SyncStrategy, strategyFactory: any SyncStrategyFactory) {
+    init(
+        strategy: any SyncStrategy,
+        strategyFactory: any SyncStrategyFactory,
+        events: any EventPublishing
+    ) {
         self.strategy = strategy
         self.strategyFactory = strategyFactory
+        self.events = events
     }
 
     // MARK: - Derived state
@@ -75,6 +81,21 @@ final class ProfileViewModel: ViewModelProtocol {
     /// the cache only when the device cannot reach it.
     func refresh() async {
         await load(using: strategyFactory.makeStrategy(for: .remoteFirst))
+    }
+
+    /// Ends the session.
+    ///
+    /// The Sign Out button used to call `appState.signOut()` from its action,
+    /// which made the Settings screen the place that had to know every
+    /// consequence of signing out — and it knew one of the two. Announcing it
+    /// leaves the consequences to `SessionObserver`, which clears the app state
+    /// *and* the tokens the old path left sitting in the Keychain.
+    ///
+    /// Nothing is awaited and nothing changes on this screen: the sign-out is
+    /// finished by whoever subscribed, and `RootView` swaps the whole subtree
+    /// away the moment it lands.
+    func signOut() {
+        events.publish(UserSignedOut())
     }
 
     func saveName() async {

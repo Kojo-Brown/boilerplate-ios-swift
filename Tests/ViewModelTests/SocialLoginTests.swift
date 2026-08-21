@@ -109,13 +109,55 @@ struct SocialLoginViewModelTests {
         #expect(sut.errorMessage == nil)
     }
 
+    // MARK: - Announcing
+
+    /// The exchange has always answered with the signed-in `User`, and the view
+    /// model used to discard it with `_ =`. Publishing the address it carries is
+    /// half of why `AppState.currentUserEmail` is no longer always `nil`.
+    @Test func googleSignInPublishesTheAddressTheExchangeReturned() async {
+        let bus = EventBus()
+        let stream = bus.events(of: UserSignedIn.self)
+        let exchange = MockSocialAuthExchangeService()
+        exchange.response = LoginResponse(
+            accessToken: "mock-access-token",
+            refreshToken: "mock-refresh-token",
+            user: User(email: "grace@example.invalid", name: "Grace")
+        )
+        let sut = makeSUT(exchangeService: exchange, events: bus)
+
+        await sut.signInWithGoogle(anchor: ASPresentationAnchor())
+        bus.finish()
+
+        #expect(await collect(from: stream) == [
+            UserSignedIn(method: .google, email: "grace@example.invalid"),
+        ])
+    }
+
+    @Test func googleSignInFailurePublishesNothing() async {
+        let bus = EventBus()
+        let stream = bus.events(of: UserSignedIn.self)
+        let provider = MockSocialAuthProvider()
+        provider.shouldThrow = SocialAuthError.invalidCredential
+        let sut = makeSUT(googleProvider: provider, events: bus)
+
+        await sut.signInWithGoogle(anchor: ASPresentationAnchor())
+        bus.finish()
+
+        #expect(await collect(from: stream).isEmpty)
+    }
+
     // MARK: - Factory
 
     private func makeSUT(
         googleProvider: MockSocialAuthProvider = MockSocialAuthProvider(),
-        exchangeService: MockSocialAuthExchangeService = MockSocialAuthExchangeService()
+        exchangeService: MockSocialAuthExchangeService = MockSocialAuthExchangeService(),
+        events: any EventPublishing = EventBus()
     ) -> SocialLoginViewModel {
-        SocialLoginViewModel(googleProvider: googleProvider, exchangeService: exchangeService)
+        SocialLoginViewModel(
+            googleProvider: googleProvider,
+            exchangeService: exchangeService,
+            events: events
+        )
     }
 }
 

@@ -80,7 +80,8 @@ struct ProfileViewModelTests {
         let factory = MockSyncStrategyFactory()
         let viewModel = ProfileViewModel(
             strategy: MockSyncStrategy(),
-            strategyFactory: factory
+            strategyFactory: factory,
+            events: EventBus()
         )
 
         await viewModel.refresh()
@@ -199,12 +200,33 @@ struct ProfileViewModelTests {
         #expect(strategy.loadCount == 1)
     }
 
+    // MARK: - Signing out
+
+    /// The button used to call `appState.signOut()` from its action, which
+    /// cleared two properties and left both tokens in the Keychain. Announcing
+    /// it is what lets `SessionObserver` do the half the screen never did.
+    @Test("signOut announces the end of the session")
+    func signOutAnnouncesTheEndOfTheSession() async {
+        let bus = EventBus()
+        let stream = bus.events(of: UserSignedOut.self)
+        let viewModel = makeViewModel(strategy: MockSyncStrategy(), events: bus)
+
+        viewModel.signOut()
+        bus.finish()
+
+        #expect(await collect(from: stream) == [UserSignedOut()])
+    }
+
     // MARK: - Helpers
 
-    private func makeViewModel(strategy: MockSyncStrategy) -> ProfileViewModel {
+    private func makeViewModel(
+        strategy: MockSyncStrategy,
+        events: any EventPublishing = EventBus()
+    ) -> ProfileViewModel {
         ProfileViewModel(
             strategy: strategy,
-            strategyFactory: MockSyncStrategyFactory(stubbedStrategy: strategy)
+            strategyFactory: MockSyncStrategyFactory(stubbedStrategy: strategy),
+            events: events
         )
     }
 }

@@ -5,13 +5,20 @@ import SwiftUI
 /// Renders the correct SF Symbol for the available biometric modality and
 /// delegates to `BiometricAuthViewModel` for all auth logic.
 ///
-/// Usage:
+/// `onSuccess` fires after a successful evaluation, and what that *means* is
+/// deliberately the caller's to decide. A successful Face ID prompt says "this
+/// is the device's owner"; whether that begins a session or merely re-confirms
+/// one already in progress depends on which screen put the button there. On
+/// `LoginView` it begins one:
+///
 /// ```swift
 /// BiometricAuthButton(viewModel: biometricVM) {
-///     // Called after successful authentication
-///     appState.isAuthenticated = true
+///     events.publish(UserSignedIn(method: .biometric, email: nil))
 /// }
 /// ```
+///
+/// Somewhere guarding a destructive action, the same success would unlock that
+/// action and announce nothing.
 struct BiometricAuthButton: View {
     let viewModel: BiometricAuthViewModel
     var reason = "Authenticate to access your account"

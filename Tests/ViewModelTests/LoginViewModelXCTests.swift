@@ -13,7 +13,7 @@ final class LoginViewModelXCTests: XCTestCase {
     // MARK: - Initial state
 
     func testInitialStateIsEmpty() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         XCTAssertTrue(sut.email.isEmpty)
         XCTAssertTrue(sut.password.isEmpty)
         XCTAssertFalse(sut.isLoading)
@@ -22,56 +22,56 @@ final class LoginViewModelXCTests: XCTestCase {
     }
 
     func testEmptyFormIsInvalid() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         XCTAssertFalse(sut.isFormValid)
     }
 
     // MARK: - Form validation
 
     func testInvalidEmailFormatFailsValidation() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "notanemail"
         sut.password = "password123"
         XCTAssertFalse(sut.isFormValid)
     }
 
     func testEmailWithoutAtSignFailsValidation() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "userexample.com"
         sut.password = "password123"
         XCTAssertFalse(sut.isFormValid)
     }
 
     func testWhitespaceOnlyEmailFailsValidation() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "   "
         sut.password = "password123"
         XCTAssertFalse(sut.isFormValid)
     }
 
     func testPasswordUnderEightCharsFailsValidation() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@example.com"
         sut.password = "abc"
         XCTAssertFalse(sut.isFormValid)
     }
 
     func testPasswordExactlyEightCharsIsValid() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@example.com"
         sut.password = "12345678"
         XCTAssertTrue(sut.isFormValid)
     }
 
     func testValidCredentialsPassValidation() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
         XCTAssertTrue(sut.isFormValid)
     }
 
     func testEmailWithSubdomainIsValid() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@mail.example.com"
         sut.password = "password123"
         XCTAssertTrue(sut.isFormValid)
@@ -82,7 +82,7 @@ final class LoginViewModelXCTests: XCTestCase {
     func testSuccessfulLoginSetsAuthenticated() async {
         let service = MockAuthService()
         service.shouldSucceed = true
-        let sut = LoginViewModel(authService: service)
+        let sut = LoginViewModel(authService: service, events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
 
@@ -95,7 +95,7 @@ final class LoginViewModelXCTests: XCTestCase {
     func testIsLoadingIsFalseAfterSuccessfulLogin() async {
         let service = MockAuthService()
         service.shouldSucceed = true
-        let sut = LoginViewModel(authService: service)
+        let sut = LoginViewModel(authService: service, events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
 
@@ -109,7 +109,7 @@ final class LoginViewModelXCTests: XCTestCase {
     func testFailedLoginSetsErrorMessage() async {
         let service = MockAuthService()
         service.shouldSucceed = false
-        let sut = LoginViewModel(authService: service)
+        let sut = LoginViewModel(authService: service, events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
 
@@ -122,7 +122,7 @@ final class LoginViewModelXCTests: XCTestCase {
 
     func testInvalidFormSkipsNetworkCall() async {
         let service = MockAuthService()
-        let sut = LoginViewModel(authService: service)
+        let sut = LoginViewModel(authService: service, events: EventBus())
         // Leave credentials empty — form is invalid
 
         await sut.login()
@@ -136,7 +136,7 @@ final class LoginViewModelXCTests: XCTestCase {
     func testClearErrorNilsErrorMessage() async {
         let service = MockAuthService()
         service.shouldSucceed = false
-        let sut = LoginViewModel(authService: service)
+        let sut = LoginViewModel(authService: service, events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
         await sut.login()
@@ -148,7 +148,7 @@ final class LoginViewModelXCTests: XCTestCase {
     }
 
     func testClearErrorIsNoOpWhenThereIsNoError() {
-        let sut = LoginViewModel(authService: MockAuthService())
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.clearError()
         XCTAssertNil(sut.errorMessage)
     }

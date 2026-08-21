@@ -27,15 +27,18 @@ final class SocialLoginViewModel {
 
     private let googleProvider: any SocialAuthProvider
     private let exchangeService: any SocialAuthExchangeService
+    private let events: any EventPublishing
 
     /// Built by `AppContainer.makeSocialLoginViewModel()`; no defaults, so the
     /// identity provider that runs is named in one place rather than here.
     init(
         googleProvider: any SocialAuthProvider,
-        exchangeService: any SocialAuthExchangeService
+        exchangeService: any SocialAuthExchangeService,
+        events: any EventPublishing
     ) {
         self.googleProvider = googleProvider
         self.exchangeService = exchangeService
+        self.events = events
     }
 
     // MARK: - Apple Sign-In
@@ -73,8 +76,13 @@ final class SocialLoginViewModel {
                 nonce: appleNonce,
                 fullName: credential.fullName
             )
-            _ = try await exchangeService.exchange(socialCredential)
+            // Bound rather than discarded. The exchange has always answered with
+            // a `LoginResponse` carrying the signed-in `User`, and `_ =` threw
+            // it away — which is half of why `AppState.currentUserEmail` was
+            // never set by anything.
+            let session = try await exchangeService.exchange(socialCredential)
             isAuthenticated = true
+            events.publish(UserSignedIn(method: .apple, email: session.user.email))
         } catch let error as ASAuthorizationError where error.code == .canceled {
             // User dismissed — no error message needed.
         } catch {
@@ -92,8 +100,9 @@ final class SocialLoginViewModel {
 
         do {
             let credential = try await googleProvider.signIn(anchor: anchor)
-            _ = try await exchangeService.exchange(credential)
+            let session = try await exchangeService.exchange(credential)
             isAuthenticated = true
+            events.publish(UserSignedIn(method: .google, email: session.user.email))
         } catch let error as SocialAuthError where error == .userCancelled {
             // User dismissed — no error message needed.
         } catch {

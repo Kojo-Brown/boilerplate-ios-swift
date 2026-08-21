@@ -3,7 +3,7 @@ import SwiftData
 
 @main
 struct BoilerplateApp: App {
-    @State private var appState = AppState()
+    @State private var appState: AppState
     @State private var coordinator = AppCoordinator()
 
     /// The composition root, built once for the process. Everything below this
@@ -11,6 +11,16 @@ struct BoilerplateApp: App {
     private let dependencies: AppContainer
 
     private let container: ModelContainer
+
+    /// The app's one subscriber to its own session events.
+    ///
+    /// Held for the life of the process rather than attached to a view, because
+    /// what it applies must happen whether or not the screen that announced it
+    /// is still on screen — and `RootView` swaps its entire subtree on the very
+    /// state this observer sets, so a `.task` on either branch would be torn
+    /// down by the event it had just delivered. `consumers` holds `self` weakly,
+    /// so this stored property is also what keeps it alive.
+    private let session: SessionObserver
 
     /// Spelled as an initialiser rather than as two property initialisers,
     /// because the graph now depends on the store and a stored property's
@@ -29,10 +39,21 @@ struct BoilerplateApp: App {
             fatalError("SwiftData container failed to initialise: \(error)")
         }
 
-        container = modelContainer
-        dependencies = AppContainer.live(
+        let state = AppState()
+        let graph = AppContainer.live(
             userStore: SwiftDataUserPersistenceService(context: modelContainer.mainContext)
         )
+
+        // Subscribed here, before a single view exists, which is what makes the
+        // first event unmissable: `EventBus` registers synchronously, so the app
+        // is listening before anything can be tapped. See `SessionObserver`.
+        let observer = graph.makeSessionObserver(appState: state)
+        observer.start()
+
+        container = modelContainer
+        dependencies = graph
+        session = observer
+        _appState = State(wrappedValue: state)
     }
 
     var body: some Scene {

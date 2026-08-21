@@ -67,6 +67,20 @@ struct AppContainer: Sendable {
     /// wanting to clear credentials on sign-out has something to ask.
     let keychain: any KeychainStoring
 
+    /// The announcing half of the app's event bus.
+    ///
+    /// Two properties for one object, on purpose. `EventPublishing` and
+    /// `EventSubscribing` are separate protocols because nothing in the app does
+    /// both, and binding them separately here is what carries that split down to
+    /// the call sites: a view model is handed `eventPublisher` and cannot
+    /// subscribe, `SessionObserver` is handed `eventSubscriber` and cannot
+    /// announce. `live()` and `preview` both pass the same `EventBus` to both,
+    /// which is the property that makes a publication reach a subscriber at all.
+    let eventPublisher: any EventPublishing
+
+    /// The listening half of the same bus. See `eventPublisher`.
+    let eventSubscriber: any EventSubscribing
+
     /// User-profile data operations against the API.
     ///
     /// Not a bare `LiveUserRepository` since Phase 8 item 4: it is the outermost
@@ -195,6 +209,11 @@ extension AppContainer {
         let tokenStore = TokenStore(keychain: keychain)
         let apiClient = URLSessionAPIClient(baseURL: baseURL, tokenStore: tokenStore)
 
+        // One bus, bound to both halves below. Two `EventBus()` expressions
+        // would compile, wire cleanly, and deliver nothing — publishers would
+        // announce into one and subscribers would wait on the other.
+        let eventBus = EventBus()
+
         // Phase 8 item 4. Read inside out: the live repository talks to the
         // API, the retry loop bounds and repeats what it does, the cache
         // collapses repeated and concurrent reads of the result, and the
@@ -220,6 +239,8 @@ extension AppContainer {
             apiClient: apiClient,
             tokenStore: tokenStore,
             keychain: keychain,
+            eventPublisher: eventBus,
+            eventSubscriber: eventBus,
             userRepository: userRepository,
             userStore: userStore,
             syncStrategyFactory: syncStrategyFactory,
@@ -266,10 +287,19 @@ extension AppContainer {
         // data for no reason a reader could find.
         let syncStrategy = MockSyncStrategy()
 
+        // The real bus, not a double, and it is the one row in this list that is
+        // not one. There is nothing here to stub: `EventBus` has no I/O, no
+        // policy and no failure mode, so a `MockEventBus` would be a second copy
+        // of a broadcast a preview wants to actually work. Substituting it would
+        // buy a preview that announces sign-ins nothing receives.
+        let eventBus = EventBus()
+
         return AppContainer(
             apiClient: MockAPIClient(),
             tokenStore: InMemoryTokenStore(),
             keychain: InMemoryKeychain(),
+            eventPublisher: eventBus,
+            eventSubscriber: eventBus,
             userRepository: MockUserRepository(),
             userStore: MockUserPersistenceService(),
             syncStrategyFactory: MockSyncStrategyFactory(stubbedStrategy: syncStrategy),
@@ -296,18 +326,41 @@ extension AppContainer {
 extension AppContainer {
 
     func makeLoginViewModel() -> LoginViewModel {
-        LoginViewModel(authService: authService)
+        LoginViewModel(authService: authService, events: eventPublisher)
     }
 
     func makeSocialLoginViewModel() -> SocialLoginViewModel {
         SocialLoginViewModel(
             googleProvider: socialAuthProvider,
-            exchangeService: socialAuthExchange
+            exchangeService: socialAuthExchange,
+            events: eventPublisher
         )
     }
 
+    /// The one auth view model that is not given the publisher.
+    ///
+    /// A successful Face ID evaluation means "this is the device's owner", not
+    /// "a session began" — `BiometricAuthButton` is also used on its own to
+    /// re-authenticate somebody who is already signed in, where announcing
+    /// `UserSignedIn` would be false. What the evaluation *means* is the calling
+    /// screen's to say, so `LoginView` publishes it and this stays a view model
+    /// that answers a yes/no question. See `docs/events.md`.
     func makeBiometricAuthViewModel() -> BiometricAuthViewModel {
         BiometricAuthViewModel(service: biometricAuth)
+    }
+
+    /// The app's one subscriber to the session events.
+    ///
+    /// Takes `AppState` rather than holding it: the state is SwiftUI's — a
+    /// `@State` on `BoilerplateApp`, installed in the environment — and a
+    /// composition root that owned a copy would be a second answer to "is
+    /// anybody signed in?".
+    func makeSessionObserver(appState: AppState) -> SessionObserver {
+        SessionObserver(
+            appState: appState,
+            tokenStore: tokenStore,
+            subscriber: eventSubscriber
+        )
     }
 
     /// `HomeViewModel` has no collaborators yet — it fabricates its list with a
@@ -322,7 +375,11 @@ extension AppContainer {
     /// strategy, because its refresh gesture asks for a policy of its own —
     /// see `ProfileViewModel`.
     func makeProfileViewModel() -> ProfileViewModel {
-        ProfileViewModel(strategy: syncStrategy, strategyFactory: syncStrategyFactory)
+        ProfileViewModel(
+            strategy: syncStrategy,
+            strategyFactory: syncStrategyFactory,
+            events: eventPublisher
+        )
     }
 
     func makeTextRecognitionViewModel() -> TextRecognitionViewModel {

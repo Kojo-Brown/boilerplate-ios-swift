@@ -67,7 +67,13 @@ struct SendableConformanceTests {
             auditSendable(DetectedBarcode.self),
             auditSendable(ScanResult.self),
             auditSendable(AppColorScheme.self),
-            auditSendable(AppEvent.self),
+            // One row per event type, where there used to be one for the enum
+            // that held all of them. `AppEvent` itself has no row: it is a
+            // protocol now, and `Sendable` is its only requirement, so a row for
+            // it would audit the declaration against itself.
+            auditSendable(AuthMethod.self),
+            auditSendable(UserSignedIn.self),
+            auditSendable(UserSignedOut.self),
             auditSendable(BiometricType.self),
             auditSendable(BiometricAuthError.self),
             auditSendable(KeychainError.self),
@@ -80,7 +86,7 @@ struct SendableConformanceTests {
             // widened to every payload.
             auditSendable(CopyOnWriteBox<[Int]>.self),
         ]
-        expectAudit(audited, count: 33)
+        expectAudit(audited, count: 35)
     }
 
     /// Types that are `Sendable` only by inference — nothing in their
