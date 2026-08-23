@@ -15,7 +15,10 @@ import Testing
 private enum CounterFeature: Feature {
 
     struct State: Sendable, Equatable {
-        var count = 0
+        /// Named `value` rather than `count`: SwiftLint's `empty_count` rule
+        /// matches on the name, so a plain counter compared against zero reads
+        /// to it as a collection that should have been asked `isEmpty`.
+        var value = 0
         var isWorking = false
         var trail: [String] = []
     }
@@ -42,16 +45,16 @@ private enum CounterFeature: Feature {
     static func reduce(_ state: inout State, on action: Action) -> Effect? {
         switch action {
         case .incremented:
-            state.count += 1
+            state.value += 1
             return nil
 
         case .loadRequested:
             state.isWorking = true
             return .load
 
-        case .loaded(let value):
+        case .loaded(let loaded):
             state.isWorking = false
-            state.count = value
+            state.value = loaded
             return nil
 
         case .chainRequested:
@@ -133,7 +136,7 @@ struct StoreTests {
         var state = CounterFeature.State()
 
         #expect(CounterFeature.reduce(&state, on: .incremented) == nil)
-        #expect(state.count == 1)
+        #expect(state.value == 1)
     }
 
     // MARK: - Sending
@@ -145,7 +148,7 @@ struct StoreTests {
 
         await store.send(.loadRequested)
 
-        #expect(store.state.count == 7)
+        #expect(store.state.value == 7)
         #expect(!store.state.isWorking)
         #expect(effects.performed == [.load])
     }
@@ -159,7 +162,7 @@ struct StoreTests {
 
         store.send(.incremented)
 
-        #expect(store.state.count == 1)
+        #expect(store.state.value == 1)
     }
 
     /// What a `Button` action does, and how a test waits for it.
@@ -170,11 +173,11 @@ struct StoreTests {
 
         tap(.loadRequested, on: store)
         #expect(store.state.isWorking, "the reduction happens before send returns")
-        #expect(store.state.count == 0, "the effect has not been performed yet")
+        #expect(store.state.value == 0, "the effect has not been performed yet")
 
         await store.settled()
 
-        #expect(store.state.count == 9)
+        #expect(store.state.value == 9)
         #expect(!store.state.isWorking)
     }
 
@@ -213,7 +216,7 @@ struct StoreTests {
 
         await store.send(.incremented)
 
-        #expect(store.state.count == 1)
+        #expect(store.state.value == 1)
         #expect(effects.performed.isEmpty)
     }
 
