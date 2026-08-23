@@ -39,7 +39,7 @@ struct SyncedUser: Sendable, Equatable {
 /// `docs/solid.md` finding 6 is the reason this protocol exists at all: the
 /// repository layer had a constructor and no caller, so everything the audit
 /// said about substituting it was a statement about code nothing ran. A
-/// strategy is a caller, and `ProfileViewModel` is a caller of the strategy.
+/// strategy is a caller, and `ProfileEffectHandler` is a caller of the strategy.
 /// See `docs/sync-strategy.md`.
 protocol SyncStrategy: Sendable {
     /// The policy this object implements, readable back off the object the

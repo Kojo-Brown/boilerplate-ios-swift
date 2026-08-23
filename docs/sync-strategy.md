@@ -25,7 +25,8 @@ So there are two things to get right, and only one of them is a design pattern.
 
 ```
 SettingsView
-  → ProfileViewModel                 (the caller)
+  → ProfileFeature                   (the caller; a Store since Phase 8 item 6)
+    → ProfileEffectHandler           (where the strategy is actually held)
     → SyncStrategy                   (the policy: which side answers)
       → UserRepository → APIClient   (the network leg)
       → UserPersistenceService       (the local leg)
@@ -93,8 +94,9 @@ That is not redundancy. Two callers want different things:
   one it needs. There is exactly one such caller today and it is the reason the
   seam exists: **pull-to-refresh**. Under `cacheFirst`, the container's strategy
   would answer a refresh gesture from the very cache the gesture is trying to get
-  past. `ProfileViewModel.refresh()` asks for `.remoteFirst` — "go to the server,
-  but do not fail if I am offline" — without knowing which type implements that.
+  past. `ProfileFeature`'s `.refreshProfile` effect asks for `.remoteFirst` — "go to
+  the server, but do not fail if I am offline" — without knowing which type
+  implements that.
 
 `SyncPolicy` is a closed enum rather than an open registry, for the same reason
 `AppContainer` is a struct of stored properties rather than a type-keyed
@@ -191,8 +193,8 @@ Phase 8 item 4 adds — not hardcoded here, which is the shape of finding 7.
 | Each policy resolves to a strategy that reports it | `SyncStrategyFactoryTests.everyPolicyResolves` |
 | The root resolves the policy it was given | `AppContainerTests.liveResolvesTheRequestedSyncPolicy` |
 | `remoteFirst` is the default | `AppContainerTests.liveDefaultsToRemoteFirst` |
-| A cached answer is reported as cached | `ProfileViewModelTests.cachedAnswerIsReportedAsCached` |
-| Refresh asks for a network-going policy | `ProfileViewModelTests.refreshAsksTheFactoryForRemoteFirst` |
+| A cached answer is reported as cached | `ProfileFeatureTests.cachedAnswerIsReportedAsCached` |
+| Refresh asks for a network-going policy | `ProfileFeatureTests.refreshAsksTheFactoryForRemoteFirst` |
 | An expired session is not answered from the cache | `RemoteFirstSyncStrategyTests.expiredSessionIsNotAnsweredFromTheCache` |
 | Repeated reads leave one row in SwiftData | `RemoteFirstSyncStrategyTests.repeatedReadsDoNotAccumulateRows` |
 | The freshness window opens, holds and expires | `CacheFirstSyncStrategyTests` |
