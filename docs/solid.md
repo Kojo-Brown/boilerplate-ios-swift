@@ -309,7 +309,9 @@ needs a list endpoint, not a policy. And Phase 9 item 1 is still ahead — this 
 store a cache the API writes to, not the source of truth.
 
 **Pin:** `liveContainerBindsTheLiveGraph` now asserts thirteen bindings rather than ten, and
-`SwiftDataUserPersistenceService` is one of them. `ProfileViewModelTests` drives the caller.
+`SwiftDataUserPersistenceService` is one of them. `ProfileFeatureTests` drives the caller
+(it was `ProfileViewModelTests` until Phase 8 item 6 replaced the view model with a `Store` —
+see [`docs/unidirectional-data-flow.md`](./unidirectional-data-flow.md)).
 The direction this finding could regress in — the caller being deleted — fails there and in
 `SettingsView`'s initialiser, which no longer compiles without a container.
 
@@ -482,7 +484,7 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 - **"Nothing reads this in production" was never pinned.** Finding 6 was the most important
   one on the page and the one a test could not hold: nothing failed when a new caller
   appeared, which is the direction the change came from. Now that the caller exists the
-  asymmetry is reversed and still only half-covered — `ProfileViewModelTests` and
+  asymmetry is reversed and still only half-covered — `ProfileFeatureTests` and
   `liveContainerBindsTheLiveGraph` fail if the wiring is removed, but no test would notice a
   *second* layer being added and left unread.
 - **Nothing stops a new default argument.** The container tests assert what

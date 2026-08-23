@@ -56,6 +56,9 @@ expression, which is what every `#Preview` and preview provider uses.
   layers, and which findings are still open
 - [docs/sync-strategy.md](./docs/sync-strategy.md) — the pluggable read policy
   over the API and the local store, and what it left for Phase 9
+- [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
+  `State` + `Action` + `Effect` contract, the store that runs it, and the screen
+  it replaced five stored properties on
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 

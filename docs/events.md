@@ -158,7 +158,7 @@ is the claim that these do not have one.
 | `UserSignedIn(method: .password, email:)` | `LoginViewModel.login()` | `SessionObserver` |
 | `UserSignedIn(method: .apple/.google, email:)` | `SocialLoginViewModel` | `SessionObserver` |
 | `UserSignedIn(method: .biometric, email: nil)` | `LoginView`'s biometric button | `SessionObserver` |
-| `UserSignedOut()` | `ProfileViewModel.signOut()` | `SessionObserver` |
+| `UserSignedOut()` | `ProfileFeature`'s `.announceSignOut` effect | `SessionObserver` |
 
 Three of the four are announced by the view model that did the work. The
 biometric one is announced by the *screen*, and that is deliberate: a successful

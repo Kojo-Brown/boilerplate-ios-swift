@@ -371,14 +371,23 @@ extension AppContainer {
         HomeViewModel()
     }
 
-    /// The Settings account section. Takes the factory as well as the resolved
-    /// strategy, because its refresh gesture asks for a policy of its own —
-    /// see `ProfileViewModel`.
-    func makeProfileViewModel() -> ProfileViewModel {
-        ProfileViewModel(
-            strategy: syncStrategy,
-            strategyFactory: syncStrategyFactory,
-            events: eventPublisher
+    /// The Settings account section — a `Store`, not a view model, since Phase
+    /// 8 item 6.
+    ///
+    /// The collaborators go to the effect handler rather than to the thing the
+    /// view holds, which is the shape the whole pattern turns on: the store
+    /// owns state and the handler owns the graph, and neither can do the
+    /// other's job. The handler takes the factory as well as the resolved
+    /// strategy, because the refresh gesture asks for a policy of its own — see
+    /// `ProfileEffectHandler`.
+    func makeProfileStore() -> Store<ProfileFeature> {
+        Store(
+            initialState: ProfileFeature.State(),
+            effects: ProfileEffectHandler(
+                strategy: syncStrategy,
+                strategyFactory: syncStrategyFactory,
+                events: eventPublisher
+            )
         )
     }
 
