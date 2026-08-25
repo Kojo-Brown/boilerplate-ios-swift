@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 /// Home screen driven by `HomeViewModel` via the Observation framework.
@@ -7,17 +8,17 @@ import SwiftUI
 /// Layout adapts to the horizontal size class: compact (iPhone) renders a `List`
 /// while regular (iPad) switches to an `AdaptiveGrid` whose column count is
 /// determined by `GeometryReader` + size classes.
-struct HomeView: View {
+package struct HomeView: View {
     @State private var viewModel: HomeViewModel
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @MainActor
-    init(container: AppContainer) {
-        _viewModel = State(wrappedValue: container.makeHomeViewModel())
+    package init(dependencies: any HomeDependencies) {
+        _viewModel = State(wrappedValue: dependencies.makeHomeViewModel())
     }
 
-    var body: some View {
+    package var body: some View {
         content
             .navigationTitle("Home")
             .searchable(text: $viewModel.searchQuery, prompt: "Search items")
@@ -175,7 +176,7 @@ private struct HomeItemCard: View {
 
 #Preview {
     NavigationStack {
-        HomeView(container: .preview)
+        HomeView(dependencies: PreviewHomeDependencies())
             .environment(AppCoordinator())
     }
 }

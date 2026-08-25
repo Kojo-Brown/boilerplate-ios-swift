@@ -15,12 +15,12 @@ import Foundation
 ///     self.items = items
 /// }
 /// ```
-enum PollingStream {
+package enum PollingStream {
     /// Creates an `AsyncStream<Value>` that re-polls at `interval`.
     /// - Parameters:
     ///   - interval: Time to wait between successive `fetch` calls.
     ///   - fetch: Async throwing closure that produces a value each poll cycle.
-    static func make<Value: Sendable>(
+    package static func make<Value: Sendable>(
         interval: Duration,
         fetch: @Sendable @escaping () async throws -> Value
     ) -> AsyncStream<Value> {

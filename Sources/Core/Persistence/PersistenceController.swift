@@ -6,16 +6,16 @@ import Foundation
 /// ```swift
 /// .modelContainer(try PersistenceController.makeContainer())
 /// ```
-enum PersistenceController {
+package enum PersistenceController {
     /// Disk-backed container for production use.
-    static func makeContainer() throws -> ModelContainer {
+    package static func makeContainer() throws -> ModelContainer {
         let schema = Schema([UserEntity.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         return try ModelContainer(for: schema, configurations: [config])
     }
 
     /// In-memory container for tests and SwiftUI previews.
-    static func makeInMemoryContainer() throws -> ModelContainer {
+    package static func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([UserEntity.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContainer(for: schema, configurations: [config])

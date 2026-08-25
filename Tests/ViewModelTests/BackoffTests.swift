@@ -1,6 +1,9 @@
 import Foundation
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 /// Growth, the ceiling, what each jitter strategy is allowed to produce — and
 /// the herd that `.none` produces and `.full` does not.

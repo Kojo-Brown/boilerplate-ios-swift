@@ -1,6 +1,9 @@
 import Foundation
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 /// The screen-side half of Phase 8 item 3, rewritten for item 6.
 ///

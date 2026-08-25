@@ -10,14 +10,14 @@ import Security
 /// callbacks via `MainActor.assumeIsolated` — the system always calls those
 /// callbacks on the main thread.
 @MainActor
-final class AppleSignInService: NSObject, SocialAuthProvider {
+package final class AppleSignInService: NSObject, SocialAuthProvider {
     private var continuation: CheckedContinuation<SocialAuthCredential, Error>?
     private var currentNonce: String?
     private var _presentationAnchor: ASPresentationAnchor?
 
     // MARK: - SocialAuthProvider
 
-    func signIn(anchor: ASPresentationAnchor) async throws -> SocialAuthCredential {
+    package func signIn(anchor: ASPresentationAnchor) async throws -> SocialAuthCredential {
         _presentationAnchor = anchor
 
         let nonce = Self.generateNonce()
@@ -65,7 +65,7 @@ final class AppleSignInService: NSObject, SocialAuthProvider {
 // MARK: - ASAuthorizationControllerDelegate
 
 extension AppleSignInService: ASAuthorizationControllerDelegate {
-    nonisolated func authorizationController(
+    package nonisolated func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
@@ -95,7 +95,7 @@ extension AppleSignInService: ASAuthorizationControllerDelegate {
         }
     }
 
-    nonisolated func authorizationController(
+    package nonisolated func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
@@ -116,7 +116,7 @@ extension AppleSignInService: ASAuthorizationControllerDelegate {
 
 extension AppleSignInService: ASAuthorizationControllerPresentationContextProviding {
     // Called synchronously on the main thread before the auth sheet appears.
-    nonisolated func presentationAnchor(
+    package nonisolated func presentationAnchor(
         for controller: ASAuthorizationController
     ) -> ASPresentationAnchor {
         MainActor.assumeIsolated { _presentationAnchor ?? ASPresentationAnchor() }

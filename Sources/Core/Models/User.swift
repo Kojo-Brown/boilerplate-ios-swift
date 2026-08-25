@@ -14,15 +14,15 @@ import Foundation
 /// are `==` stay `==`, so it is safe as a SwiftUI identity or a dictionary key.
 /// And an edit has to be spelled as a derivation, which is where `with(_:)`
 /// comes in — see `FieldUpdate` for why its parameters are not plain optionals.
-struct User: Identifiable, Codable, Sendable, Equatable {
-    let id: UUID
-    let email: String
-    let name: String
-    let avatarURL: URL?
-    let createdAt: Date?
-    let updatedAt: Date?
+package struct User: Identifiable, Codable, Sendable, Equatable {
+    package let id: UUID
+    package let email: String
+    package let name: String
+    package let avatarURL: URL?
+    package let createdAt: Date?
+    package let updatedAt: Date?
 
-    init(
+    package init(
         id: UUID = UUID(),
         email: String,
         name: String,
@@ -38,7 +38,7 @@ struct User: Identifiable, Codable, Sendable, Equatable {
         self.updatedAt = updatedAt
     }
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case id
         case email
         case name
@@ -64,7 +64,7 @@ extension User {
     /// silently discarded the avatar and both timestamps because the memberwise
     /// initialiser defaults them to `nil`. A transform cannot lose a field it
     /// was not asked about.
-    func with(
+    package func with(
         name: FieldUpdate<String> = .unchanged,
         avatarURL: FieldUpdate<URL?> = .unchanged,
         createdAt: FieldUpdate<Date?> = .unchanged,

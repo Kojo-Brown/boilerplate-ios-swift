@@ -1,9 +1,9 @@
 import Foundation
 
-enum PersistenceError: LocalizedError, Equatable {
+package enum PersistenceError: LocalizedError, Equatable {
     case userNotFound
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         "No user record found in local storage."
     }
 }

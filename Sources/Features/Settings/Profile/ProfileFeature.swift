@@ -1,4 +1,6 @@
+import Core
 import Foundation
+import Networking
 
 /// The Account section of Settings, as a `State` + `Action` + `Effect`
 /// contract.
@@ -38,14 +40,14 @@ import Foundation
 /// than widen that type or drop the requirement, the failure here carries
 /// `SyncErrorMessage` — the presentable box the strategies already produce —
 /// and the whole state becomes comparable in a test.
-enum ProfileFeature: Feature {
+package enum ProfileFeature: Feature {
 
     // MARK: - State
 
-    struct State: Sendable, Equatable {
+    package struct State: Sendable, Equatable {
 
         /// Where the profile read has got to.
-        enum Phase: Sendable, Equatable {
+        package enum Phase: Sendable, Equatable {
             case idle
             /// A read is in flight. `previous` is what the screen was showing
             /// when it started, so a refresh does not empty the rows.
@@ -54,25 +56,42 @@ enum ProfileFeature: Feature {
             case failed(SyncErrorMessage)
         }
 
-        var phase: Phase = .idle
+        package var phase: Phase = .idle
 
         /// The editable copy of the name. Separate from the loaded user because
         /// `User` is immutable by design, and because an in-flight edit has to
         /// survive a reload that lands underneath it.
-        var draftName: String = ""
+        package var draftName: String = ""
 
         /// Whether `draftName` is the reader's typing rather than a name
         /// adopted from a load. See the note above on what this replaced.
-        var isDraftEdited: Bool = false
+        package var isDraftEdited: Bool = false
 
-        var isSaving: Bool = false
+        package var isSaving: Bool = false
 
-        var saveErrorMessage: String?
+        package var saveErrorMessage: String?
+
+        /// Spelled out rather than synthesised. A `package` struct's memberwise
+        /// initialiser is not itself `package`, and the composition root — which
+        /// is a different module now — is the thing that builds the first state.
+        package init(
+            phase: Phase = .idle,
+            draftName: String = "",
+            isDraftEdited: Bool = false,
+            isSaving: Bool = false,
+            saveErrorMessage: String? = nil
+        ) {
+            self.phase = phase
+            self.draftName = draftName
+            self.isDraftEdited = isDraftEdited
+            self.isSaving = isSaving
+            self.saveErrorMessage = saveErrorMessage
+        }
     }
 
     // MARK: - Actions
 
-    enum Action: Sendable, Equatable {
+    package enum Action: Sendable, Equatable {
         /// The view appeared. Fires again on every re-appearance.
         case appeared
         /// The pull-to-refresh gesture.
@@ -92,7 +111,7 @@ enum ProfileFeature: Feature {
     /// Named for what the screen wants, not for how it is obtained: the
     /// difference between `loadProfile` and `refreshProfile` is a sync policy,
     /// and which policy that is belongs to `ProfileEffectHandler`.
-    enum Effect: Sendable, Equatable {
+    package enum Effect: Sendable, Equatable {
         /// Read under the policy the composition root resolved.
         case loadProfile
         /// Read in a way that will actually go to the network — the refresh
@@ -104,7 +123,7 @@ enum ProfileFeature: Feature {
 
     // MARK: - Reducer
 
-    static func reduce(_ state: inout State, on action: Action) -> Effect? {
+    package static func reduce(_ state: inout State, on action: Action) -> Effect? {
         switch action {
         case .appeared:
             // `.task` fires again on every re-appearance, so a screen that
@@ -191,7 +210,7 @@ extension ProfileFeature.State {
 
     /// The user on screen and where it came from, during a reload as well as
     /// after one.
-    var synced: SyncedUser? {
+    package var synced: SyncedUser? {
         switch phase {
         case .loaded(let value):
             return value
@@ -202,31 +221,31 @@ extension ProfileFeature.State {
         }
     }
 
-    var user: User? { synced?.user }
+    package var user: User? { synced?.user }
 
     /// Where the displayed user came from, or `nil` when there is nothing
     /// displayed. A screen showing a cached profile has to be able to say so —
     /// see `SyncOrigin`.
-    var origin: SyncOrigin? { synced?.origin }
+    package var origin: SyncOrigin? { synced?.origin }
 
-    var isLoading: Bool {
+    package var isLoading: Bool {
         if case .loading = phase { return true }
         return false
     }
 
-    var loadErrorMessage: String? {
+    package var loadErrorMessage: String? {
         if case .failed(let error) = phase { return error.message }
         return nil
     }
 
-    var trimmedDraftName: String {
+    package var trimmedDraftName: String {
         draftName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Saving is offered only for a change that is actually a change. A button
     /// that fires a request to rename "Ada" to "Ada" is a request the server
     /// answers and the reader learns nothing from.
-    var canSave: Bool {
+    package var canSave: Bool {
         guard let user, !isSaving else { return false }
         let candidate = trimmedDraftName
         return !candidate.isEmpty && candidate != user.name

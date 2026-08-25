@@ -1,11 +1,16 @@
 import SwiftUI
 
 /// Detail view for a `HomeItem`. Reached by pushing `.itemDetail` via `AppCoordinator`.
-struct ItemDetailView: View {
-    let id: UUID
-    let title: String
+package struct ItemDetailView: View {
+    package let id: UUID
+    package let title: String
 
-    var body: some View {
+    package init(id: UUID, title: String) {
+        self.id = id
+        self.title = title
+    }
+
+    package var body: some View {
         List {
             Section("Details") {
                 LabeledContent("Title", value: title)

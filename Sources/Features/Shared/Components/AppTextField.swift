@@ -1,0 +1,152 @@
+import SwiftUI
+
+// MARK: - Component
+
+/// Reusable design-system text field with label, error state, and secure-input variant.
+///
+/// Usage:
+/// ```swift
+/// // Plain text
+/// AppTextField("Email", text: $email, keyboardType: .emailAddress)
+///
+/// // Secure (password)
+/// AppTextField("Password", text: $password, isSecure: true)
+///
+/// // With error
+/// AppTextField("Email", text: $email, errorMessage: viewModel.emailError)
+/// ```
+package struct AppTextField: View {
+    package let label: String
+    @Binding package var text: String
+    package let isSecure: Bool
+    package let keyboardType: UIKeyboardType
+    package let textContentType: UITextContentType?
+    package let autocapitalization: TextInputAutocapitalization
+    package let autocorrectionDisabled: Bool
+    package let errorMessage: String?
+
+    @FocusState private var isFocused: Bool
+
+    /// The label is unlabelled at the call site — `AppTextField("Email", text: $email)` —
+    /// which the synthesised memberwise initialiser cannot express, so it is spelled out
+    /// here. Every call site and the usage docs above already assumed this shape.
+    package init(
+        _ label: String,
+        text: Binding<String>,
+        isSecure: Bool = false,
+        keyboardType: UIKeyboardType = .default,
+        textContentType: UITextContentType? = nil,
+        autocapitalization: TextInputAutocapitalization = .sentences,
+        autocorrectionDisabled: Bool = false,
+        errorMessage: String? = nil
+    ) {
+        self.label = label
+        _text = text
+        self.isSecure = isSecure
+        self.keyboardType = keyboardType
+        self.textContentType = textContentType
+        self.autocapitalization = autocapitalization
+        self.autocorrectionDisabled = autocorrectionDisabled
+        self.errorMessage = errorMessage
+    }
+
+    package var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(labelColor)
+
+            inputField
+                .textContentType(textContentType)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(autocapitalization)
+                .autocorrectionDisabled(autocorrectionDisabled)
+                .focused($isFocused)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(fieldBackground)
+                .overlay(fieldBorder)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
+                .animation(.easeInOut(duration: 0.15), value: errorMessage)
+
+            if let error = errorMessage {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .imageScale(.small)
+                    Text(error)
+                        .font(.caption)
+                }
+                .foregroundStyle(.red)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.default, value: errorMessage)
+    }
+
+    // MARK: - Private
+
+    @ViewBuilder
+    private var inputField: some View {
+        if isSecure {
+            SecureField(label, text: $text)
+        } else {
+            TextField(label, text: $text)
+        }
+    }
+
+    private var fieldBackground: some ShapeStyle {
+        if errorMessage != nil {
+            return AnyShapeStyle(Color.red.opacity(0.06))
+        }
+        return AnyShapeStyle(Material.regularMaterial)
+    }
+
+    private var fieldBorder: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(borderColor, lineWidth: isFocused ? 2 : 1)
+    }
+
+    private var borderColor: Color {
+        if errorMessage != nil { return .red }
+        if isFocused { return .accentColor }
+        return Color.secondary.opacity(0.2)
+    }
+
+    private var labelColor: Color {
+        if errorMessage != nil { return .red }
+        if isFocused { return .accentColor }
+        return .secondary
+    }
+}
+
+// MARK: - Previews
+
+#Preview("States") {
+    VStack(spacing: 24) {
+        AppTextField(
+            "Email",
+            text: .constant("user@example.com"),
+            keyboardType: .emailAddress,
+            autocapitalization: .never,
+            autocorrectionDisabled: true
+        )
+
+        AppTextField(
+            "Password",
+            text: .constant("secret"),
+            isSecure: true,
+            textContentType: .password
+        )
+
+        AppTextField(
+            "Email",
+            text: .constant("bad-email"),
+            keyboardType: .emailAddress,
+            autocapitalization: .never,
+            autocorrectionDisabled: true,
+            errorMessage: "Please enter a valid email address."
+        )
+    }
+    .padding()
+}

@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import Observation
 
@@ -7,25 +8,25 @@ import Observation
 /// triggering the system prompt.
 @Observable
 @MainActor
-final class BiometricAuthViewModel {
-    var isAuthenticated = false
-    var isLoading = false
-    var errorMessage: String?
+package final class BiometricAuthViewModel {
+    package var isAuthenticated = false
+    package var isLoading = false
+    package var errorMessage: String?
 
-    var biometricType: BiometricType { service.biometricType }
-    var isAvailable: Bool { service.isAvailable }
+    package var biometricType: BiometricType { service.biometricType }
+    package var isAvailable: Bool { service.isAvailable }
 
     private let service: any BiometricAuthProvider
 
     /// Built by `AppContainer.makeBiometricAuthViewModel()`; no default.
-    init(service: any BiometricAuthProvider) {
+    package init(service: any BiometricAuthProvider) {
         self.service = service
     }
 
     // MARK: - Actions
 
     /// Initiates the biometric evaluation with `reason` surfaced to the user.
-    func authenticate(reason: String = "Authenticate to access your account") async {
+    package func authenticate(reason: String = "Authenticate to access your account") async {
         guard isAvailable else {
             errorMessage = BiometricAuthError.notAvailable.localizedDescription
             return
@@ -46,11 +47,11 @@ final class BiometricAuthViewModel {
         }
     }
 
-    func clearError() {
+    package func clearError() {
         errorMessage = nil
     }
 
-    func reset() {
+    package func reset() {
         isAuthenticated = false
         errorMessage = nil
     }

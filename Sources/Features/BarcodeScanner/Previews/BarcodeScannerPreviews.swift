@@ -1,11 +1,12 @@
+import Core
 import SwiftUI
 
 // MARK: - ScannerOverlayView
 
 /// PreviewProvider-style catalogue for `ScannerOverlayView`.
 /// `BarcodeScannerView` requires a live camera, so its preview uses the overlay only.
-struct ScannerOverlayView_Previews: PreviewProvider {
-    static var previews: some View {
+package struct ScannerOverlayView_Previews: PreviewProvider {
+    package static var previews: some View {
         Group {
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -26,10 +27,10 @@ struct ScannerOverlayView_Previews: PreviewProvider {
 
 /// PreviewProvider for `BarcodeScannerView`.
 /// Renders within a NavigationStack to match the runtime embedding context.
-struct BarcodeScannerView_Previews: PreviewProvider {
-    static var previews: some View {
+package struct BarcodeScannerView_Previews: PreviewProvider {
+    package static var previews: some View {
         NavigationStack {
-            BarcodeScannerView(container: .preview)
+            BarcodeScannerView(dependencies: PreviewBarcodeScannerDependencies())
                 .environment(AppCoordinator())
         }
         .previewDisplayName("Barcode Scanner")

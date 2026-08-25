@@ -5,7 +5,7 @@ import os
 // MARK: - BiometricType
 
 /// The hardware biometric modality available on the device.
-enum BiometricType: Sendable, Equatable {
+package enum BiometricType: Sendable, Equatable {
     case faceID
     case touchID
     case none
@@ -13,7 +13,7 @@ enum BiometricType: Sendable, Equatable {
 
 // MARK: - BiometricAuthError
 
-enum BiometricAuthError: LocalizedError, Sendable, Equatable {
+package enum BiometricAuthError: LocalizedError, Sendable, Equatable {
     case notAvailable
     case notEnrolled
     case userCancelled
@@ -23,7 +23,7 @@ enum BiometricAuthError: LocalizedError, Sendable, Equatable {
     case lockout
     case failed(String)
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .notAvailable:       "Biometric authentication is not available on this device."
         case .notEnrolled:        "No biometrics are enrolled. Please set up Face ID or Touch ID in Settings."
@@ -40,7 +40,7 @@ enum BiometricAuthError: LocalizedError, Sendable, Equatable {
 // MARK: - BiometricAuthProvider
 
 /// Abstraction over `LAContext` to enable deterministic testing.
-protocol BiometricAuthProvider: Sendable {
+package protocol BiometricAuthProvider: Sendable {
     /// The type of biometric hardware available on this device.
     var biometricType: BiometricType { get }
 
@@ -55,8 +55,10 @@ protocol BiometricAuthProvider: Sendable {
 // MARK: - LiveBiometricAuthService
 
 /// Production implementation backed by `LAContext`.
-struct LiveBiometricAuthService: BiometricAuthProvider {
-    var biometricType: BiometricType {
+package struct LiveBiometricAuthService: BiometricAuthProvider {
+    package init() {}
+
+    package var biometricType: BiometricType {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
@@ -69,13 +71,13 @@ struct LiveBiometricAuthService: BiometricAuthProvider {
         }
     }
 
-    var isAvailable: Bool {
+    package var isAvailable: Bool {
         let context = LAContext()
         var error: NSError?
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    func authenticate(reason: String) async throws {
+    package func authenticate(reason: String) async throws {
         let context = LAContext()
         var canEvalError: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &canEvalError) else {
@@ -121,7 +123,9 @@ struct LiveBiometricAuthService: BiometricAuthProvider {
 /// also atomic now: the call count, the reason and the outcome are read and
 /// written in one critical section, so two concurrent `authenticate` calls
 /// cannot interleave into a lost increment.
-final class MockBiometricAuthService: BiometricAuthProvider {
+package final class MockBiometricAuthService: BiometricAuthProvider {
+    package init() {}
+
     private struct State: Sendable {
         var biometricType: BiometricType = .faceID
         var isAvailable = true
@@ -132,30 +136,30 @@ final class MockBiometricAuthService: BiometricAuthProvider {
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    var stubbedBiometricType: BiometricType {
+    package var stubbedBiometricType: BiometricType {
         get { state.withLock { $0.biometricType } }
         set { state.withLock { $0.biometricType = newValue } }
     }
 
-    var stubbedIsAvailable: Bool {
+    package var stubbedIsAvailable: Bool {
         get { state.withLock { $0.isAvailable } }
         set { state.withLock { $0.isAvailable = newValue } }
     }
 
-    var stubbedError: BiometricAuthError? {
+    package var stubbedError: BiometricAuthError? {
         get { state.withLock { $0.error } }
         set { state.withLock { $0.error = newValue } }
     }
 
     /// Read-only: these record what the double was asked to do, so nothing
     /// outside it has any business writing them.
-    var authenticateCallCount: Int { state.withLock { $0.authenticateCallCount } }
-    var lastReason: String? { state.withLock { $0.lastReason } }
+    package var authenticateCallCount: Int { state.withLock { $0.authenticateCallCount } }
+    package var lastReason: String? { state.withLock { $0.lastReason } }
 
-    var biometricType: BiometricType { stubbedBiometricType }
-    var isAvailable: Bool { stubbedIsAvailable }
+    package var biometricType: BiometricType { stubbedBiometricType }
+    package var isAvailable: Bool { stubbedIsAvailable }
 
-    func authenticate(reason: String) async throws {
+    package func authenticate(reason: String) async throws {
         let outcome: BiometricAuthError? = state.withLock { current in
             current.authenticateCallCount += 1
             current.lastReason = reason

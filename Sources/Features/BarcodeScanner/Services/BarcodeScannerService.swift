@@ -4,10 +4,10 @@ import Vision
 
 // MARK: - Error
 
-enum BarcodeScanError: Error, LocalizedError {
+package enum BarcodeScanError: Error, LocalizedError {
     case processingFailed(String)
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .processingFailed(let reason): return "Scan failed: \(reason)"
         }
@@ -17,7 +17,7 @@ enum BarcodeScanError: Error, LocalizedError {
 // MARK: - Protocol
 
 /// Abstracts the barcode recognizer so tests can inject a predictable mock.
-protocol BarcodeScanning: Sendable {
+package protocol BarcodeScanning: Sendable {
     func scan(frame: CapturedFrame) async throws -> ScanResult
 }
 
@@ -28,14 +28,16 @@ protocol BarcodeScanning: Sendable {
 /// Vision's bounding boxes are in a coordinate space with the origin at the bottom-left.
 /// `normalizedFrame` flips the Y-axis so overlays can be applied directly to the
 /// UIKit/SwiftUI preview layer, which uses a top-left origin.
-final class LiveBarcodeScannerService: BarcodeScanning {
+package final class LiveBarcodeScannerService: BarcodeScanning {
+    package init() {}
+
     private let supportedSymbologies: [VNBarcodeSymbology] = [
         .qr, .aztec, .code128, .code39, .code39Checksum, .code39FullASCII,
         .code93, .code93i, .dataMatrix, .ean13, .ean8,
         .i2of5, .itf14, .microQR, .pdf417, .upce,
     ]
 
-    func scan(frame: CapturedFrame) async throws -> ScanResult {
+    package func scan(frame: CapturedFrame) async throws -> ScanResult {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
             return ScanResult(barcodes: [])
         }
@@ -100,17 +102,19 @@ final class LiveBarcodeScannerService: BarcodeScanning {
 // MARK: - Mock implementation
 
 /// Test double that returns a predetermined result without Vision or camera hardware.
-struct MockBarcodeScannerService: BarcodeScanning {
-    var stubbedResult: ScanResult = ScanResult(barcodes: [
+package struct MockBarcodeScannerService: BarcodeScanning {
+    package init() {}
+
+    package var stubbedResult: ScanResult = ScanResult(barcodes: [
         DetectedBarcode(
             payload: "https://example.com",
             symbology: .qrCode,
             normalizedFrame: CGRect(x: 0.2, y: 0.25, width: 0.6, height: 0.5)
         ),
     ])
-    var stubbedError: (any Error & Sendable)?
+    package var stubbedError: (any Error & Sendable)?
 
-    func scan(frame _: CapturedFrame) async throws -> ScanResult {
+    package func scan(frame _: CapturedFrame) async throws -> ScanResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult

@@ -82,7 +82,7 @@ import Foundation
 /// only in the synchronous stretches between suspensions, so no two runs can
 /// interleave inside the claim itself.
 @MainActor
-final class LatestOnlyTask<Success: Sendable> {
+package final class LatestOnlyTask<Success: Sendable> {
     /// The run that has not yet been superseded, kept so a later call can cancel it.
     private var inFlight: Task<Success, any Error>?
 
@@ -94,9 +94,9 @@ final class LatestOnlyTask<Success: Sendable> {
     ///
     /// Suitable for driving a spinner: it goes `false` when the newest run
     /// finishes, and a superseded run finishing does not clear it.
-    var isRunning: Bool { inFlight != nil }
+    package var isRunning: Bool { inFlight != nil }
 
-    init() {}
+    package init() {}
 
     /// Runs `operation` off the main actor, superseding any run already in flight.
     ///
@@ -109,7 +109,7 @@ final class LatestOnlyTask<Success: Sendable> {
     /// - Throws: Whatever `operation` threw, but only while this run is still
     ///   the current one.
     @discardableResult
-    func run(
+    package func run(
         _ operation: @escaping @Sendable () async throws -> Success
     ) async throws -> Success? {
         // Claim, cancel and record: all synchronous, so no other call can
@@ -138,7 +138,7 @@ final class LatestOnlyTask<Success: Sendable> {
     ///
     /// The caller awaiting that run receives `nil`, the same as if a newer run
     /// had superseded it — which is what happened, minus the newer run.
-    func cancel() {
+    package func cancel() {
         inFlight?.cancel()
         inFlight = nil
         generation &+= 1

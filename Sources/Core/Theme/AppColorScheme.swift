@@ -6,14 +6,14 @@ import SwiftUI
 ///
 /// Persisted to `UserDefaults` via `AppState.colorSchemePreference`.
 /// The system default follows `@Environment(\.colorScheme)` at the OS level.
-enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
+package enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
     case system
     case light
     case dark
 
-    var id: String { rawValue }
+    package var id: String { rawValue }
 
-    var label: String {
+    package var label: String {
         switch self {
         case .system: "System"
         case .light:  "Light"
@@ -21,7 +21,7 @@ enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var systemImage: String {
+    package var systemImage: String {
         switch self {
         case .system: "circle.lefthalf.filled"
         case .light:  "sun.max"
@@ -30,7 +30,7 @@ enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Returns `nil` (follow the OS) for `.system`, or an explicit scheme otherwise.
-    var colorScheme: ColorScheme? {
+    package var colorScheme: ColorScheme? {
         switch self {
         case .system: nil
         case .light:  .light
@@ -38,5 +38,5 @@ enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    static let defaultsKey = "app.colorSchemePreference"
+    package static let defaultsKey = "app.colorSchemePreference"
 }

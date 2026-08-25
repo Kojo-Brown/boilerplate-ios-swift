@@ -95,6 +95,20 @@ jobs:
       - name: Audit the opt-outs from Sendable checking
         run: python3 .github/scripts/assert-sendable-audit.py "$GITHUB_WORKSPACE"
 
+      # Phase 8 item 7. The package is four targets now, and `.target(
+      # dependencies:)` is not by itself a boundary: widening it is a one-line
+      # edit, a file can lean on a module it never imported and still compile,
+      # and feature-to-feature coupling is invisible to the compiler because
+      # `Features` is one target. This checks all three against the graph
+      # written down in the script.
+      #
+      # It sits beside the Sendable audit for the same reason: it is syntactic,
+      # so it needs no toolchain, no resolved packages and no simulator, and it
+      # reports even when the build is broken. Both of these are the only gates
+      # in this repo the scheduled agent can also run on its Linux box.
+      - name: Audit the module boundaries
+        run: python3 Tools/assert-module-boundaries.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

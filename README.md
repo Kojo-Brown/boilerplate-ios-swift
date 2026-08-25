@@ -43,13 +43,31 @@ confidence that ML Kit's iOS API does not expose.
 
 ## Architecture
 
-`AppContainer` (`Sources/Core/DI/`) is the composition root: the only place that
+Four targets, in a straight line:
+
+```
+Core  <-  Networking  <-  Features  <-  BoilerplateiOSSwift
+  ^--------------------------------------/
+```
+
+| Target | Path | Holds |
+|--------|------|-------|
+| `Core` | `Sources/Core` | Models, errors, concurrency primitives, persistence, Keychain, theming, routes, the UDF contract |
+| `Networking` | `Sources/Networking` | API client, endpoints, token store, repository decorators, sync strategies |
+| `Features` | `Sources/Features` | The five screens and the components they share |
+| `BoilerplateiOSSwift` | `Sources/App` | `AppContainer`, `@main`, navigation host, session observer |
+
+`AppContainer` (`Sources/App/`) is the composition root: the only place that
 names a live implementation. It is built once in `BoilerplateApp` and threaded
 down the view tree, so no initialiser in the package carries a default
-collaborator and no view knows what is behind the protocol it uses.
-`AppContainer.preview` swaps the whole graph for hand-written doubles in one
-expression, which is what every `#Preview` and preview provider uses.
+collaborator and no view knows what is behind the protocol it uses. Each screen
+declares what it wants from it — `LoginDependencies`, `HomeDependencies` and so
+on — and the container conforms, so a feature names no other feature and can
+build its own previews from doubles it ships itself.
 
+- [docs/modularisation.md](./docs/modularisation.md) — the target graph, why the
+  shared code is `package` rather than `public`, and the script that keeps the
+  boundaries from drifting
 - [docs/dependency-injection.md](./docs/dependency-injection.md) — the container,
   and the two shapes it deliberately is not
 - [docs/solid.md](./docs/solid.md) — SOLID audit of the repository and service

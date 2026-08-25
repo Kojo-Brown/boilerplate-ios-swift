@@ -2,6 +2,9 @@ import Foundation
 import os
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - A feature that exists only here
 

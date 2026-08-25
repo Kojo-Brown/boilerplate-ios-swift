@@ -14,16 +14,18 @@ import UIKit
 /// ```
 /// The `CLIENT_ID` value comes from `GoogleService-Info.plist` (key: `CLIENT_ID`).
 @MainActor
-final class GoogleSignInService: SocialAuthProvider {
+package final class GoogleSignInService: SocialAuthProvider {
+    package init() {}
+
     // MARK: - Configuration
 
-    static func configure(clientID: String) {
+    package static func configure(clientID: String) {
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
     }
 
     // MARK: - SocialAuthProvider
 
-    func signIn(anchor: ASPresentationAnchor) async throws -> SocialAuthCredential {
+    package func signIn(anchor: ASPresentationAnchor) async throws -> SocialAuthCredential {
         guard
             let clientID = GIDSignIn.sharedInstance.configuration?.clientID,
             !clientID.isEmpty
@@ -59,7 +61,7 @@ final class GoogleSignInService: SocialAuthProvider {
     // MARK: - Session restoration
 
     /// Re-authenticates a previously signed-in Google user without showing the picker.
-    func restorePreviousSignIn() async throws -> SocialAuthCredential {
+    package func restorePreviousSignIn() async throws -> SocialAuthCredential {
         try await withCheckedThrowingContinuation { continuation in
             GIDSignIn.sharedInstance.restorePreviousSignIn { user, error in
                 if let error {

@@ -63,23 +63,23 @@ import Foundation
 /// `@Sendable` because it is handed to a `nonisolated` function and so crosses
 /// out of whatever isolation the caller has, not because it is run concurrently
 /// with anything.
-enum Retry {
+package enum Retry {
     /// How the loop waits between attempts.
     ///
     /// Injected so a test can assert the delays without spending them, and so
     /// the "no sleep after the last attempt" guarantee is observable rather than
     /// merely stated. `Retry.taskSleep` is the default and is what production
     /// uses.
-    typealias Sleep = @Sendable (Duration) async throws -> Void
+    package typealias Sleep = @Sendable (Duration) async throws -> Void
 
     /// What to retry, how often, and how long to wait.
-    struct Policy: Sendable {
+    package struct Policy: Sendable {
         /// Total attempts including the first. `1` disables retrying.
-        let maxAttempts: Int
+        package let maxAttempts: Int
         /// The delay schedule between attempts.
-        let backoff: Backoff
+        package let backoff: Backoff
         /// Whether a failure is worth another attempt.
-        let isRetryable: @Sendable (any Error) -> Bool
+        package let isRetryable: @Sendable (any Error) -> Bool
 
         /// - Parameters:
         ///   - maxAttempts: Total attempts including the first. Must be at least
@@ -87,7 +87,7 @@ enum Retry {
         ///     reads as either 3 or 4 calls depending on who wrote the loop.
         ///   - backoff: The delay schedule. Jittered by default.
         ///   - isRetryable: The classification. Defaults to `Retry.isTransient`.
-        init(
+        package init(
             maxAttempts: Int = 3,
             backoff: Backoff = Backoff(),
             isRetryable: @escaping @Sendable (any Error) -> Bool = Retry.isTransient
@@ -100,7 +100,7 @@ enum Retry {
     }
 
     /// The production sleep.
-    static let taskSleep: Sleep = { try await Task.sleep(for: $0) }
+    package static let taskSleep: Sleep = { try await Task.sleep(for: $0) }
 
     /// The default classification: `true` only for failures that a later attempt
     /// could plausibly answer differently.
@@ -110,7 +110,7 @@ enum Retry {
     /// write that already happened, and the cost of not retrying it is one
     /// avoidable failure, against a duplicated side effect for getting it wrong
     /// the other way.
-    static let isTransient: @Sendable (any Error) -> Bool = { Retry.transient($0) }
+    package static let isTransient: @Sendable (any Error) -> Bool = { Retry.transient($0) }
 
     /// Runs `operation`, retrying transient failures on a jittered backoff.
     ///
@@ -127,7 +127,7 @@ enum Retry {
     ///   around it, so `catch let error as APIError` still works at the call
     ///   site and the attempt count is not smuggled into the error type. Or
     ///   `CancellationError` if the caller was cancelled between attempts.
-    static func run<Value: Sendable>(
+    package static func run<Value: Sendable>(
         _ policy: Policy = Policy(),
         randomness: @escaping Backoff.UnitRandom = Backoff.systemRandom,
         sleep: @escaping Sleep = Retry.taskSleep,

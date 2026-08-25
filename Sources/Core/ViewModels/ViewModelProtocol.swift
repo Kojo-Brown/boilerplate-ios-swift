@@ -3,7 +3,7 @@ import Foundation
 /// Common interface for all ViewModels in the application.
 /// Conforming types should be marked `@Observable` and `@MainActor`.
 @MainActor
-protocol ViewModelProtocol: AnyObject {
+package protocol ViewModelProtocol: AnyObject {
     /// Called when the associated view appears on screen.
     func onAppear() async
 
@@ -12,6 +12,6 @@ protocol ViewModelProtocol: AnyObject {
 }
 
 extension ViewModelProtocol {
-    func onAppear() async {}
-    func onDisappear() {}
+    package func onAppear() async {}
+    package func onDisappear() {}
 }

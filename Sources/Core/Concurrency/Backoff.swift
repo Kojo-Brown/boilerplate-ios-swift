@@ -50,17 +50,17 @@ import Foundation
 /// All three are clamped to `cap`. Uncapped exponential growth is the other
 /// half of the same bug: attempt 20 of a `2×` schedule from 100ms is thirteen
 /// hours, which is not a retry, it is an abandonment nobody logged.
-struct Backoff: Sendable, Equatable {
+package struct Backoff: Sendable, Equatable {
     /// A source of uniform values in `0...1`.
     ///
     /// Injected rather than reached for so a test can assert the *schedule*
     /// exactly — the arithmetic is a pure function of the attempt number and
     /// this closure, so it needs no clock, no sleeping, and no tolerance.
     /// `Backoff.systemRandom` is the default and is what production uses.
-    typealias UnitRandom = @Sendable () -> Double
+    package typealias UnitRandom = @Sendable () -> Double
 
     /// How much of each delay is randomised.
-    enum Jitter: Sendable, Equatable, CaseIterable {
+    package enum Jitter: Sendable, Equatable, CaseIterable {
         /// No randomisation: every client on this policy waits the same delay.
         /// Present so the herd it produces can be measured, not to be selected.
         case none
@@ -73,13 +73,13 @@ struct Backoff: Sendable, Equatable {
     }
 
     /// The delay before the first retry, before growth and before jitter.
-    let base: Duration
+    package let base: Duration
     /// What each successive exponential term multiplies the last one by.
-    let multiplier: Double
+    package let multiplier: Double
     /// The ceiling on any single delay, applied before jitter.
-    let cap: Duration
+    package let cap: Duration
     /// How much of each delay is randomised.
-    let jitter: Jitter
+    package let jitter: Jitter
 
     /// - Parameters:
     ///   - base: The first exponential term. Must be positive.
@@ -88,7 +88,7 @@ struct Backoff: Sendable, Equatable {
     ///     is the load pattern backoff exists to prevent.
     ///   - cap: The ceiling on any single delay. Must be at least `base`.
     ///   - jitter: How much of each delay is randomised.
-    init(
+    package init(
         base: Duration = .milliseconds(100),
         multiplier: Double = 2,
         cap: Duration = .seconds(30),
@@ -109,19 +109,19 @@ struct Backoff: Sendable, Equatable {
     /// The returned value is a `struct` carrying its own attempt counter, so two
     /// concurrent retry loops sharing one `Backoff` do not share a position in
     /// the sequence — which they would if the counter lived on the policy.
-    func schedule(using random: @escaping UnitRandom = Backoff.systemRandom) -> Schedule {
+    package func schedule(using random: @escaping UnitRandom = Backoff.systemRandom) -> Schedule {
         Schedule(backoff: self, random: random)
     }
 
     /// The production randomness source.
-    static let systemRandom: UnitRandom = { Double.random(in: 0..<1) }
+    package static let systemRandom: UnitRandom = { Double.random(in: 0..<1) }
 
     /// One retry loop's position in the schedule.
     ///
     /// Deliberately a value type with a `mutating func`: it is advanced from a
     /// single task, between suspension points, and giving it reference semantics
     /// would invite exactly the sharing the doc comment above rules out.
-    struct Schedule: Sendable {
+    package struct Schedule: Sendable {
         private let backoff: Backoff
         private let random: UnitRandom
         /// How many delays have already been handed out, which is also the
@@ -144,7 +144,7 @@ struct Backoff: Sendable, Equatable {
         /// growth term has to be clamped to `cap` *before* it becomes a
         /// `Duration`. At attempt 40 of a `2×` schedule the unclamped term
         /// overflows to infinity, and `Duration.seconds(.infinity)` traps.
-        mutating func next() -> Duration {
+        package mutating func next() -> Duration {
             let baseSeconds = Backoff.secondsValue(backoff.base)
             let capSeconds = Backoff.secondsValue(backoff.cap)
             let growth = pow(backoff.multiplier, Double(retry))

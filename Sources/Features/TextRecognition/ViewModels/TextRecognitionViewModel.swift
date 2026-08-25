@@ -1,4 +1,5 @@
 import AVFoundation
+import Core
 import Foundation
 import Observation
 import UIKit
@@ -9,7 +10,7 @@ import UIKit
 /// Inject `recognitionService` in tests to avoid camera hardware and Vision.
 @Observable
 @MainActor
-final class TextRecognitionViewModel: ViewModelProtocol {
+package final class TextRecognitionViewModel: ViewModelProtocol {
     // MARK: - Published state
 
     private(set) var recognitionResult: RecognitionResult?
@@ -27,7 +28,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
 
     private var frameProcessingTask: Task<Void, Never>?
 
-    var previewLayer: AVCaptureVideoPreviewLayer {
+    package var previewLayer: AVCaptureVideoPreviewLayer {
         cameraService.previewLayer
     }
 
@@ -37,7 +38,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
     /// service arrives from the container's factory rather than from a default
     /// here, so two screens cannot silently end up sharing — or silently not
     /// sharing — one `AVCaptureSession`.
-    init(
+    package init(
         cameraService: CameraService,
         recognitionService: any TextRecognizing
     ) {
@@ -47,17 +48,17 @@ final class TextRecognitionViewModel: ViewModelProtocol {
 
     // MARK: - ViewModelProtocol
 
-    func onAppear() async {
+    package func onAppear() async {
         await requestPermissionAndStart()
     }
 
-    func onDisappear() {
+    package func onDisappear() {
         stop()
     }
 
     // MARK: - Public actions
 
-    func requestPermissionAndStart() async {
+    package func requestPermissionAndStart() async {
         let granted = await cameraService.requestPermission()
         guard granted else {
             permissionDenied = true
@@ -67,7 +68,7 @@ final class TextRecognitionViewModel: ViewModelProtocol {
         await startScanning()
     }
 
-    func startScanning() async {
+    package func startScanning() async {
         guard !isScanning else { return }
         errorMessage = nil
         do {
@@ -79,18 +80,18 @@ final class TextRecognitionViewModel: ViewModelProtocol {
         }
     }
 
-    func stop() {
+    package func stop() {
         frameProcessingTask?.cancel()
         frameProcessingTask = nil
         cameraService.stop()
         isScanning = false
     }
 
-    func clearResult() {
+    package func clearResult() {
         recognitionResult = nil
     }
 
-    func copyToClipboard() {
+    package func copyToClipboard() {
         guard let text = recognitionResult?.fullText, !text.isEmpty else { return }
         UIPasteboard.general.string = text
         didCopyToClipboard = true

@@ -1,12 +1,12 @@
 import Foundation
 
 /// Generic JSON envelope for APIs that wrap payloads in `{ "data": ..., "error": ..., "meta": ... }`.
-struct APIResponse<T: Decodable & Sendable>: Decodable, Sendable {
-    let data: T?
-    let error: APIResponseError?
-    let meta: ResponseMeta?
+package struct APIResponse<T: Decodable & Sendable>: Decodable, Sendable {
+    package let data: T?
+    package let error: APIResponseError?
+    package let meta: ResponseMeta?
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case data
         case error
         case meta
@@ -15,27 +15,27 @@ struct APIResponse<T: Decodable & Sendable>: Decodable, Sendable {
 
 // MARK: - Error body
 
-struct APIResponseError: Decodable, Sendable, LocalizedError, Equatable {
-    let code: String
-    let message: String
-    let details: [String: String]?
+package struct APIResponseError: Decodable, Sendable, LocalizedError, Equatable {
+    package let code: String
+    package let message: String
+    package let details: [String: String]?
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case code
         case message
         case details
     }
 
-    var errorDescription: String? { message }
+    package var errorDescription: String? { message }
 }
 
 // MARK: - Response metadata
 
-struct ResponseMeta: Decodable, Sendable, Equatable {
-    let requestID: String?
-    let version: String?
+package struct ResponseMeta: Decodable, Sendable, Equatable {
+    package let requestID: String?
+    package let version: String?
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case requestID = "request_id"
         case version
     }

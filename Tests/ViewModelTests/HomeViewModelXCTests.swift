@@ -1,5 +1,8 @@
 import XCTest
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 /// XCTest suite for `HomeViewModel` with `@MainActor` isolation.
 ///

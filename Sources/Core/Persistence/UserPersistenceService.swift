@@ -6,7 +6,7 @@ import Foundation
 /// Typed CRUD surface over the SwiftData `UserEntity` model.
 /// The `async` qualifier on each method lets non-`@MainActor` callers
 /// cross the actor boundary with a plain `await`.
-protocol UserPersistenceService: Sendable {
+package protocol UserPersistenceService: Sendable {
     func save(user: User) async throws
     func fetchCurrentUser() async throws -> User?
     func update(user: User) async throws
@@ -19,14 +19,14 @@ protocol UserPersistenceService: Sendable {
 /// SwiftData-backed implementation. Confined to `@MainActor` because `ModelContext`
 /// is not `Sendable` and must be accessed from a single concurrency domain.
 @MainActor
-final class SwiftDataUserPersistenceService: UserPersistenceService {
+package final class SwiftDataUserPersistenceService: UserPersistenceService {
     private let context: ModelContext
 
-    init(context: ModelContext) {
+    package init(context: ModelContext) {
         self.context = context
     }
 
-    func save(user: User) throws {
+    package func save(user: User) throws {
         context.insert(user.toEntity())
         try context.save()
     }
@@ -45,13 +45,13 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
     /// explicitly anyway — treating it as oldest, which the database sort could not
     /// express. `MockUserPersistenceService` already ordered it exactly this way; the
     /// two implementations now agree, where before only the mock was reachable.
-    func fetchCurrentUser() throws -> User? {
+    package func fetchCurrentUser() throws -> User? {
         try context.fetch(FetchDescriptor<UserEntity>())
             .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }?
             .toDomainUser()
     }
 
-    func update(user: User) throws {
+    package func update(user: User) throws {
         guard let entity = try entity(withID: user.id) else {
             throw PersistenceError.userNotFound
         }
@@ -61,7 +61,7 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
         try context.save()
     }
 
-    func delete(userId: UUID) throws {
+    package func delete(userId: UUID) throws {
         guard let entity = try entity(withID: userId) else {
             throw PersistenceError.userNotFound
         }
@@ -88,7 +88,7 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
             .first { $0.id == id }
     }
 
-    func deleteAll() throws {
+    package func deleteAll() throws {
         let all = try context.fetch(FetchDescriptor<UserEntity>())
         for entity in all { context.delete(entity) }
         try context.save()
@@ -98,10 +98,12 @@ final class SwiftDataUserPersistenceService: UserPersistenceService {
 // MARK: - Mock for previews and tests
 
 @MainActor
-final class MockUserPersistenceService: UserPersistenceService {
-    var storage: [UUID: User] = [:]
-    var shouldThrow = false
-    var stubbedError: PersistenceError = .userNotFound
+package final class MockUserPersistenceService: UserPersistenceService {
+    package init() {}
+
+    package var storage: [UUID: User] = [:]
+    package var shouldThrow = false
+    package var stubbedError: PersistenceError = .userNotFound
 
     private(set) var saveCallCount = 0
     private(set) var fetchCallCount = 0
@@ -109,34 +111,34 @@ final class MockUserPersistenceService: UserPersistenceService {
     private(set) var deleteCallCount = 0
     private(set) var deleteAllCallCount = 0
 
-    func save(user: User) throws {
+    package func save(user: User) throws {
         saveCallCount += 1
         if shouldThrow { throw stubbedError }
         storage[user.id] = user
     }
 
-    func fetchCurrentUser() throws -> User? {
+    package func fetchCurrentUser() throws -> User? {
         fetchCallCount += 1
         if shouldThrow { throw stubbedError }
         return storage.values
             .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
-    func update(user: User) throws {
+    package func update(user: User) throws {
         updateCallCount += 1
         if shouldThrow { throw stubbedError }
         guard storage[user.id] != nil else { throw PersistenceError.userNotFound }
         storage[user.id] = user
     }
 
-    func delete(userId: UUID) throws {
+    package func delete(userId: UUID) throws {
         deleteCallCount += 1
         if shouldThrow { throw stubbedError }
         guard storage[userId] != nil else { throw PersistenceError.userNotFound }
         storage.removeValue(forKey: userId)
     }
 
-    func deleteAll() throws {
+    package func deleteAll() throws {
         deleteAllCallCount += 1
         if shouldThrow { throw stubbedError }
         storage.removeAll()

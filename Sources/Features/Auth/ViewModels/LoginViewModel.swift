@@ -1,19 +1,21 @@
+import Core
 import Foundation
+import Networking
 import Observation
 import os
 
 /// Manages state and business logic for the login screen.
 @Observable
 @MainActor
-final class LoginViewModel: ViewModelProtocol {
-    var email = ""
-    var password = ""
-    var isLoading = false
-    var errorMessage: String?
-    var isAuthenticated = false
+package final class LoginViewModel: ViewModelProtocol {
+    package var email = ""
+    package var password = ""
+    package var isLoading = false
+    package var errorMessage: String?
+    package var isAuthenticated = false
 
     // Computed validation — automatically re-evaluated by Observation
-    var isFormValid: Bool {
+    package var isFormValid: Bool {
         !email.trimmingCharacters(in: .whitespaces).isEmpty
             && password.count >= 8
             && email.contains("@")
@@ -25,12 +27,12 @@ final class LoginViewModel: ViewModelProtocol {
     /// Built by `AppContainer.makeLoginViewModel()`. There is no default: a
     /// view model that can name its own live collaborator is a second
     /// composition root, and this package now has one.
-    init(authService: any AuthServiceProtocol, events: any EventPublishing) {
+    package init(authService: any AuthServiceProtocol, events: any EventPublishing) {
         self.authService = authService
         self.events = events
     }
 
-    func login() async {
+    package func login() async {
         guard isFormValid else { return }
         isLoading = true
         errorMessage = nil
@@ -62,29 +64,29 @@ final class LoginViewModel: ViewModelProtocol {
         }
     }
 
-    func clearError() {
+    package func clearError() {
         errorMessage = nil
     }
 }
 
 // MARK: - Auth Service Protocol
 
-protocol AuthServiceProtocol: Sendable {
+package protocol AuthServiceProtocol: Sendable {
     func login(email: String, password: String) async throws -> Bool
 }
 
 // MARK: - Live implementation
 
-struct LiveAuthService: AuthServiceProtocol {
+package struct LiveAuthService: AuthServiceProtocol {
     private let client: any APIClient
     private let tokenStore: any TokenStoring
 
-    init(client: any APIClient, tokenStore: any TokenStoring) {
+    package init(client: any APIClient, tokenStore: any TokenStoring) {
         self.client = client
         self.tokenStore = tokenStore
     }
 
-    func login(email: String, password: String) async throws -> Bool {
+    package func login(email: String, password: String) async throws -> Bool {
         let endpoint = try APIEndpoint.post(
             "/auth/login",
             body: LoginRequest(email: email, password: password),
@@ -104,7 +106,9 @@ struct LiveAuthService: AuthServiceProtocol {
 /// state. The knobs live behind a lock rather than under `@unchecked Sendable`,
 /// so a test that configures the mock from one task and exercises it from
 /// another is actually safe instead of only asserted to be.
-final class MockAuthService: AuthServiceProtocol {
+package final class MockAuthService: AuthServiceProtocol {
+    package init() {}
+
     private struct State: Sendable {
         var shouldSucceed = true
         var delay: Duration = .milliseconds(100)
@@ -118,28 +122,28 @@ final class MockAuthService: AuthServiceProtocol {
     // `Synchronization.Mutex` (iOS 18) would not.
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    var shouldSucceed: Bool {
+    package var shouldSucceed: Bool {
         get { state.withLock { $0.shouldSucceed } }
         set { state.withLock { $0.shouldSucceed = newValue } }
     }
 
-    var delay: Duration {
+    package var delay: Duration {
         get { state.withLock { $0.delay } }
         set { state.withLock { $0.delay = newValue } }
     }
 
-    func login(email _: String, password _: String) async throws -> Bool {
+    package func login(email _: String, password _: String) async throws -> Bool {
         try await Task.sleep(for: delay)
         guard shouldSucceed else { throw AuthError.invalidCredentials }
         return true
     }
 }
 
-enum AuthError: LocalizedError {
+package enum AuthError: LocalizedError {
     case invalidCredentials
     case networkUnavailable
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .invalidCredentials: "Invalid email or password."
         case .networkUnavailable: "No network connection."

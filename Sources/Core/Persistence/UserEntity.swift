@@ -4,7 +4,7 @@ import Foundation
 /// SwiftData persistent model for the authenticated user.
 /// Mapped to the `User` domain struct via `toDomainUser()` and `User.toEntity()`.
 @Model
-final class UserEntity {
+package final class UserEntity {
     // `id` deliberately carries no `@Attribute(.unique)`. SwiftData does not support
     // unique constraints on an in-memory store, and it does not report that by
     // throwing — it traps, on every operation against the container, `insert` and
@@ -16,14 +16,14 @@ final class UserEntity {
     // the store derives, and nothing here relies on the upsert-on-conflict behaviour
     // `.unique` provides: `save(user:)` inserts, and `update(user:)` looks the row up
     // first. Uniqueness is enforced by where the identifier comes from.
-    var id: UUID
-    var email: String
-    var name: String
-    var avatarURL: URL?
-    var createdAt: Date?
-    var updatedAt: Date?
+    package var id: UUID
+    package var email: String
+    package var name: String
+    package var avatarURL: URL?
+    package var createdAt: Date?
+    package var updatedAt: Date?
 
-    init(
+    package init(
         id: UUID,
         email: String,
         name: String,
@@ -39,7 +39,7 @@ final class UserEntity {
         self.updatedAt = updatedAt
     }
 
-    func toDomainUser() -> User {
+    package func toDomainUser() -> User {
         User(
             id: id,
             email: email,
@@ -52,7 +52,7 @@ final class UserEntity {
 }
 
 extension User {
-    func toEntity() -> UserEntity {
+    package func toEntity() -> UserEntity {
         UserEntity(
             id: id,
             email: email,

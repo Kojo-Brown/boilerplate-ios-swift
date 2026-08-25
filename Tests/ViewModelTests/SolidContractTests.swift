@@ -2,6 +2,9 @@ import Foundation
 import SwiftData
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - The audit primitive
 

@@ -18,7 +18,7 @@ extension Store {
     /// That ordering is the whole reason that overload exists: a setter that
     /// scheduled the change instead of making it would let the field render the
     /// old value once and drop the character the reader just typed.
-    func binding<Value>(
+    package func binding<Value>(
         _ keyPath: KeyPath<F.State, Value>,
         sending action: @escaping (Value) -> F.Action
     ) -> Binding<Value> {

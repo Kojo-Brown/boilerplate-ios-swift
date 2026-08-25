@@ -1,31 +1,33 @@
 import AuthenticationServices
+import Core
 import Foundation
+import Networking
 import os
 
 // MARK: - Protocols
 
 /// Abstracts a single social identity provider (Apple or Google).
-protocol SocialAuthProvider: Sendable {
+package protocol SocialAuthProvider: Sendable {
     func signIn(anchor: ASPresentationAnchor) async throws -> SocialAuthCredential
 }
 
 /// Exchanges a raw social credential for app-issued JWT tokens.
-protocol SocialAuthExchangeService: Sendable {
+package protocol SocialAuthExchangeService: Sendable {
     func exchange(_ credential: SocialAuthCredential) async throws -> LoginResponse
 }
 
 // MARK: - Live exchange implementation
 
-struct LiveSocialAuthExchangeService: SocialAuthExchangeService {
+package struct LiveSocialAuthExchangeService: SocialAuthExchangeService {
     private let client: any APIClient
     private let tokenStore: any TokenStoring
 
-    init(client: any APIClient, tokenStore: any TokenStoring) {
+    package init(client: any APIClient, tokenStore: any TokenStoring) {
         self.client = client
         self.tokenStore = tokenStore
     }
 
-    func exchange(_ credential: SocialAuthCredential) async throws -> LoginResponse {
+    package func exchange(_ credential: SocialAuthCredential) async throws -> LoginResponse {
         let body = SocialLoginRequest(credential: credential)
         let endpoint = try APIEndpoint.post("/auth/social", body: body, requiresAuth: false)
         let response: LoginResponse = try await client.send(endpoint)
@@ -68,7 +70,9 @@ private extension SocialLoginRequest {
 /// `any Error & Sendable` rather than `any Error` for the same reason the
 /// text-recognition and barcode doubles already use that spelling: the bare
 /// existential is not `Sendable`, so storing one would sink the conformance.
-final class MockSocialAuthProvider: SocialAuthProvider {
+package final class MockSocialAuthProvider: SocialAuthProvider {
+    package init() {}
+
     private struct State: Sendable {
         var credential: SocialAuthCredential = .apple(
             identityToken: "mock_id_token",
@@ -82,22 +86,22 @@ final class MockSocialAuthProvider: SocialAuthProvider {
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    var credential: SocialAuthCredential {
+    package var credential: SocialAuthCredential {
         get { state.withLock { $0.credential } }
         set { state.withLock { $0.credential = newValue } }
     }
 
-    var shouldThrow: (any Error & Sendable)? {
+    package var shouldThrow: (any Error & Sendable)? {
         get { state.withLock { $0.shouldThrow } }
         set { state.withLock { $0.shouldThrow = newValue } }
     }
 
-    var delay: Duration {
+    package var delay: Duration {
         get { state.withLock { $0.delay } }
         set { state.withLock { $0.delay = newValue } }
     }
 
-    func signIn(anchor _: ASPresentationAnchor) async throws -> SocialAuthCredential {
+    package func signIn(anchor _: ASPresentationAnchor) async throws -> SocialAuthCredential {
         // One snapshot up front, so the sleep is not a window in which the
         // configuration can change under the call that is already running.
         let snapshot = state.withLock { $0 }
@@ -107,7 +111,9 @@ final class MockSocialAuthProvider: SocialAuthProvider {
     }
 }
 
-final class MockSocialAuthExchangeService: SocialAuthExchangeService {
+package final class MockSocialAuthExchangeService: SocialAuthExchangeService {
+    package init() {}
+
     private struct State: Sendable {
         var response = LoginResponse(
             accessToken: "mock_access_token",
@@ -120,22 +126,22 @@ final class MockSocialAuthExchangeService: SocialAuthExchangeService {
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    var response: LoginResponse {
+    package var response: LoginResponse {
         get { state.withLock { $0.response } }
         set { state.withLock { $0.response = newValue } }
     }
 
-    var shouldThrow: (any Error & Sendable)? {
+    package var shouldThrow: (any Error & Sendable)? {
         get { state.withLock { $0.shouldThrow } }
         set { state.withLock { $0.shouldThrow = newValue } }
     }
 
-    var delay: Duration {
+    package var delay: Duration {
         get { state.withLock { $0.delay } }
         set { state.withLock { $0.delay = newValue } }
     }
 
-    func exchange(_: SocialAuthCredential) async throws -> LoginResponse {
+    package func exchange(_: SocialAuthCredential) async throws -> LoginResponse {
         let snapshot = state.withLock { $0 }
         try await Task.sleep(for: snapshot.delay)
         if let error = snapshot.shouldThrow { throw error }

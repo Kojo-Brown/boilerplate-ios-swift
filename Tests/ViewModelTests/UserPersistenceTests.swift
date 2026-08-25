@@ -2,6 +2,9 @@ import Foundation
 import Testing
 import SwiftData
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - SwiftDataUserPersistenceService integration tests
 

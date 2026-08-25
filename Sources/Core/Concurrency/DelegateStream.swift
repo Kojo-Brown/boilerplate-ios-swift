@@ -89,12 +89,12 @@ import os
 /// this type existed, and both view models call it on every `startScanning()`.
 /// The generation is what lets a late handler recognise that it is reporting a
 /// stream nobody is listening to any more, and do nothing.
-final class DelegateStream<Element: Sendable>: Sendable {
-    typealias BufferingPolicy = AsyncStream<Element>.Continuation.BufferingPolicy
+package final class DelegateStream<Element: Sendable>: Sendable {
+    package typealias BufferingPolicy = AsyncStream<Element>.Continuation.BufferingPolicy
     private typealias Continuation = AsyncStream<Element>.Continuation
 
     /// Why a stream ended, told to whoever was feeding it.
-    enum Termination: Sendable, Equatable {
+    package enum Termination: Sendable, Equatable {
         /// The producer called `finish()`.
         case finished
         /// The consuming task was cancelled, or dropped the stream unread.
@@ -102,7 +102,7 @@ final class DelegateStream<Element: Sendable>: Sendable {
     }
 
     /// What became of one `yield`.
-    enum Delivery: Sendable, Equatable {
+    package enum Delivery: Sendable, Equatable {
         /// Buffered, with nothing displaced to make room.
         case enqueued
         /// The buffering policy discarded an element: this one under
@@ -120,16 +120,16 @@ final class DelegateStream<Element: Sendable>: Sendable {
     /// was kept, and the discarded one is the older sample it displaced. Lost is
     /// the number worth watching either way, since it is the one the consumer
     /// can tell you nothing about.
-    struct Statistics: Sendable, Equatable {
+    package struct Statistics: Sendable, Equatable {
         /// Yields the buffer took with nothing displaced.
-        var enqueued = 0
+        package var enqueued = 0
         /// Elements the buffering policy discarded.
-        var dropped = 0
+        package var dropped = 0
         /// Elements yielded while no stream was live.
-        var undelivered = 0
+        package var undelivered = 0
 
         /// Every yield, however it ended.
-        var total: Int { enqueued + dropped + undelivered }
+        package var total: Int { enqueued + dropped + undelivered }
     }
 
     /// Everything mutable, inside the lock rather than beside it, so this type
@@ -150,19 +150,19 @@ final class DelegateStream<Element: Sendable>: Sendable {
 
     /// - Parameter bufferingPolicy: What happens to elements the consumer has
     ///   not taken yet. There is no default: picking one is the point.
-    init(bufferingPolicy: BufferingPolicy) {
+    package init(bufferingPolicy: BufferingPolicy) {
         self.bufferingPolicy = bufferingPolicy
     }
 
     // MARK: - Consuming
 
     /// Whether a stream is live to receive yields.
-    var hasConsumer: Bool {
+    package var hasConsumer: Bool {
         state.withLock { $0.continuation != nil }
     }
 
     /// A running count of what the buffering policy has done.
-    var statistics: Statistics {
+    package var statistics: Statistics {
         state.withLock { $0.statistics }
     }
 
@@ -175,7 +175,7 @@ final class DelegateStream<Element: Sendable>: Sendable {
     ///   the consumer that just asked for it.
     /// - Returns: A stream that yields until `finish()` or until its consumer
     ///   goes away.
-    func makeStream(
+    package func makeStream(
         onTermination: (@Sendable (Termination) -> Void)? = nil
     ) -> AsyncStream<Element> {
         let (stream, continuation) = AsyncStream<Element>.makeStream(
@@ -205,7 +205,7 @@ final class DelegateStream<Element: Sendable>: Sendable {
     /// Ends the live stream: its consumer drains whatever is buffered and its
     /// `for await` returns. Later yields report `.noConsumer` until the next
     /// `makeStream()`.
-    func finish() {
+    package func finish() {
         let continuation = state.withLock { current -> Continuation? in
             let installed = current.continuation
             current.continuation = nil
@@ -221,7 +221,7 @@ final class DelegateStream<Element: Sendable>: Sendable {
     ///
     /// - Returns: What the buffering policy did with it.
     @discardableResult
-    func yield(_ element: Element) -> Delivery {
+    package func yield(_ element: Element) -> Delivery {
         // The continuation is read under the lock and used outside it, because
         // `yield` can resume a suspended consumer and nothing in this package
         // calls out from inside a lock. The cost of that is one benign race: a

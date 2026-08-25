@@ -43,7 +43,7 @@ import Foundation
 /// reducer must not hold one. It is `Equatable` in practice for the same reason
 /// `State` is: `#expect(effect == .saveName("Ada"))` is the whole test for a
 /// branch of the reducer, and it needs no store, no double and no `await`.
-protocol Feature {
+package protocol Feature {
 
     /// Everything the screen shows, and nothing else. See the note above on why
     /// this is `Equatable`.
@@ -95,7 +95,7 @@ protocol Feature {
 /// the main actor: the store is `@MainActor` and awaits it, which is the hop
 /// `OffMainActor` describes, made once here for every feature instead of once
 /// per view model.
-protocol EffectHandling<Effect, Action>: Sendable {
+package protocol EffectHandling<Effect, Action>: Sendable {
 
     /// The effects this handler knows how to perform — a `Feature.Effect`.
     associatedtype Effect: Sendable

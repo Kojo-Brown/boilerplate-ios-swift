@@ -1,6 +1,9 @@
 import Foundation
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 private enum BridgeFailure: Error, Equatable {
     case boom

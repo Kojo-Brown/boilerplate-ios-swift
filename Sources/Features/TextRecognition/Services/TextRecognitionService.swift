@@ -4,11 +4,11 @@ import Vision
 
 // MARK: - Errors
 
-enum TextRecognitionError: Error, LocalizedError {
+package enum TextRecognitionError: Error, LocalizedError {
     case noResult
     case processingFailed(String)
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .noResult: return "No text found in the image."
         case .processingFailed(let reason): return "Recognition failed: \(reason)"
@@ -19,7 +19,7 @@ enum TextRecognitionError: Error, LocalizedError {
 // MARK: - Protocol
 
 /// Abstracts the text recognizer so tests can inject a predictable mock.
-protocol TextRecognizing: Sendable {
+package protocol TextRecognizing: Sendable {
     func recognize(frame: CapturedFrame) async throws -> RecognitionResult
 }
 
@@ -43,17 +43,19 @@ protocol TextRecognizing: Sendable {
 /// Bounding boxes arrive normalized with a bottom-left origin; `flipBoundingBox`
 /// converts them to the top-left origin the SwiftUI overlay draws in, exactly as
 /// `LiveBarcodeScannerService` does.
-struct LiveTextRecognitionService: TextRecognizing {
+package struct LiveTextRecognitionService: TextRecognizing {
+    package init() {}
+
     /// `.accurate` trades latency for quality. The frame loop in
     /// `TextRecognitionViewModel` already throttles to ~2 fps, so the extra time
     /// per pass is absorbed there rather than dropping frames.
-    var recognitionLevel: VNRequestTextRecognitionLevel = .accurate
+    package var recognitionLevel: VNRequestTextRecognitionLevel = .accurate
 
     /// Language correction fixes OCR confusions (`rn` → `m`) using a language
     /// model. Turn it off for content that is not prose — serial numbers, codes.
-    var usesLanguageCorrection = true
+    package var usesLanguageCorrection = true
 
-    func recognize(frame: CapturedFrame) async throws -> RecognitionResult {
+    package func recognize(frame: CapturedFrame) async throws -> RecognitionResult {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
             throw TextRecognitionError.noResult
         }
@@ -117,8 +119,10 @@ struct LiveTextRecognitionService: TextRecognizing {
 // MARK: - Mock implementation
 
 /// Test double that returns a predetermined result without Vision or camera hardware.
-struct MockTextRecognitionService: TextRecognizing {
-    var stubbedResult: RecognitionResult = RecognitionResult(
+package struct MockTextRecognitionService: TextRecognizing {
+    package init() {}
+
+    package var stubbedResult: RecognitionResult = RecognitionResult(
         fullText: "Hello World",
         blocks: [
             RecognizedTextBlock(
@@ -127,9 +131,9 @@ struct MockTextRecognitionService: TextRecognizing {
             ),
         ]
     )
-    var stubbedError: (any Error & Sendable)?
+    package var stubbedError: (any Error & Sendable)?
 
-    func recognize(frame _: CapturedFrame) async throws -> RecognitionResult {
+    package func recognize(frame _: CapturedFrame) async throws -> RecognitionResult {
         try await Task.sleep(for: .milliseconds(50))
         if let error = stubbedError { throw error }
         return stubbedResult

@@ -11,14 +11,14 @@ import os
 /// it needs makes the other half a compile error instead of a convention — the
 /// same reasoning `TokenStoring` records for keeping its four requirements down
 /// to the ones its callers use.
-protocol EventPublishing: Sendable {
+package protocol EventPublishing: Sendable {
     /// Delivers `event` to every subscriber registered for `Event`, and to no
     /// other subscriber. Safe to call from any task, actor or thread.
     func publish<Event: AppEvent>(_ event: Event)
 }
 
 /// Listening for one kind of event.
-protocol EventSubscribing: Sendable {
+package protocol EventSubscribing: Sendable {
     /// A new stream carrying every `Event` published from the moment this call
     /// returns.
     ///
@@ -48,7 +48,7 @@ extension EventSubscribing {
     ///
     /// The policy stays a parameter so that an event type with a real rate can
     /// pick one. The default is the claim that these do not have one.
-    func events<Event: AppEvent>(of type: Event.Type) -> AsyncStream<Event> {
+    package func events<Event: AppEvent>(of type: Event.Type) -> AsyncStream<Event> {
         events(of: type, bufferingPolicy: .unbounded)
     }
 }
@@ -107,7 +107,7 @@ extension EventSubscribing {
 /// `docs/concurrency.md`. Both rules from that document apply here and are
 /// marked at the lines that obey them: nothing awaits under the lock, and
 /// nothing calls out from under it.
-final class EventBus: EventPublishing, EventSubscribing {
+package final class EventBus: EventPublishing, EventSubscribing {
 
     /// One registration, erased to something a single dictionary can hold.
     private struct Subscription: Sendable {
@@ -121,11 +121,11 @@ final class EventBus: EventPublishing, EventSubscribing {
         initialState: [ObjectIdentifier: [UUID: Subscription]]()
     )
 
-    init() {}
+    package init() {}
 
     // MARK: - Publishing
 
-    func publish<Event: AppEvent>(_ event: Event) {
+    package func publish<Event: AppEvent>(_ event: Event) {
         let targets = subscriptions.withLock {
             Array(($0[ObjectIdentifier(Event.self)] ?? [:]).values)
         }
@@ -140,7 +140,7 @@ final class EventBus: EventPublishing, EventSubscribing {
 
     // MARK: - Subscribing
 
-    func events<Event: AppEvent>(
+    package func events<Event: AppEvent>(
         of type: Event.Type,
         bufferingPolicy: AsyncStream<Event>.Continuation.BufferingPolicy
     ) -> AsyncStream<Event> {
@@ -199,7 +199,7 @@ final class EventBus: EventPublishing, EventSubscribing {
     /// waiting. A bus with no such call obliges every consumer to be cancelled
     /// individually, and a consumer nobody remembered to cancel is a `for await`
     /// that never returns.
-    func finish() {
+    package func finish() {
         let ending = subscriptions.withLock { storage -> [Subscription] in
             let snapshot = storage.values.flatMap { $0.values }
             storage.removeAll()
@@ -222,7 +222,7 @@ final class EventBus: EventPublishing, EventSubscribing {
     /// subscribers that are still there. `EventBusTests` reads it to pin both
     /// that registering happens before `events(of:)` returns and that
     /// terminating a stream removes it again.
-    func subscriberCount<Event: AppEvent>(for type: Event.Type) -> Int {
+    package func subscriberCount<Event: AppEvent>(for type: Event.Type) -> Int {
         subscriptions.withLock { $0[ObjectIdentifier(type)]?.count ?? 0 }
     }
 }
