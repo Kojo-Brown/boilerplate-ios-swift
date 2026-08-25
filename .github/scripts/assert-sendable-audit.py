@@ -32,7 +32,7 @@ from pathlib import Path
 # different type in the same file reads as a new, unreviewed one.
 ALLOWED: dict[tuple[str, str], str] = {
     (
-        "Sources/Features/TextRecognition/Services/CameraService.swift",
+        "Sources/Features/Shared/Camera/CameraService.swift",
         "CapturedFrame",
     ): (
         "Wraps a CMSampleBuffer. CoreMedia's types carry no Sendable "
@@ -42,7 +42,7 @@ ALLOWED: dict[tuple[str, str], str] = {
         "expressible to the checker."
     ),
     (
-        "Sources/Features/TextRecognition/Services/CameraService.swift",
+        "Sources/Features/Shared/Camera/CameraService.swift",
         "CameraService",
     ): (
         "Holds AVCaptureSession and AVCaptureVideoPreviewLayer, neither of "

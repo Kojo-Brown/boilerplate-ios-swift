@@ -63,7 +63,7 @@ import Dispatch
 /// `assumeIsolated` from inside such a callback is checked rather than assumed.
 /// With the default executor there is no such queue to deliver to, and the same
 /// bridge has to go through a `Task`, which loses the callback's ordering.
-final class SerialDispatchExecutor: SerialExecutor {
+package final class SerialDispatchExecutor: SerialExecutor {
     /// The queue every job enqueued here runs on.
     ///
     /// `autoreleaseFrequency: .workItem` because a job is a unit of work with a
@@ -78,12 +78,12 @@ final class SerialDispatchExecutor: SerialExecutor {
     ///     domain rather than the type.
     ///   - qos: The quality of service every job on this executor runs at,
     ///     regardless of the priority of the task that enqueued it.
-    init(label: String, qos: DispatchQoS = .utility) {
+    package init(label: String, qos: DispatchQoS = .utility) {
         queue = DispatchQueue(label: label, qos: qos, autoreleaseFrequency: .workItem)
     }
 
     /// The label of the backing queue, as it appears in a crash report.
-    var label: String { queue.label }
+    package var label: String { queue.label }
 
     /// Schedules one unit of actor work on the queue.
     ///
@@ -93,7 +93,7 @@ final class SerialDispatchExecutor: SerialExecutor {
     /// unmanaged handle that can be, and consuming the `ExecutorJob` to make one
     /// transfers the obligation to run it exactly once. Dropping the handle
     /// without running it would leak the job and hang whatever awaits it.
-    func enqueue(_ job: consuming ExecutorJob) {
+    package func enqueue(_ job: consuming ExecutorJob) {
         let unownedJob = UnownedJob(job)
         queue.async {
             unownedJob.runSynchronously(on: self.asUnownedSerialExecutor())
@@ -105,7 +105,7 @@ final class SerialDispatchExecutor: SerialExecutor {
     /// `UnownedSerialExecutor` does not retain, which is safe here because the
     /// actor that installs this executor owns it as a stored `let` — the
     /// executor cannot outlive the reference and cannot predecease it either.
-    func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+    package func asUnownedSerialExecutor() -> UnownedSerialExecutor {
         UnownedSerialExecutor(ordinary: self)
     }
 
@@ -123,7 +123,7 @@ final class SerialDispatchExecutor: SerialExecutor {
     /// may always be more available than its requirement; annotating this to
     /// match would only stop it from being callable directly on iOS 17, which
     /// the tests do.
-    func checkIsolated() {
+    package func checkIsolated() {
         dispatchPrecondition(condition: .onQueue(queue))
     }
 }

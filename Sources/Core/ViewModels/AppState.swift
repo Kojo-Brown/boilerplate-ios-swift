@@ -10,12 +10,12 @@ import Observation
 /// ```
 @Observable
 @MainActor
-final class AppState {
-    var isAuthenticated = false
-    var currentUserEmail: String?
+package final class AppState {
+    package var isAuthenticated = false
+    package var currentUserEmail: String?
 
     /// User's preferred colour scheme — persisted across launches.
-    var colorSchemePreference: AppColorScheme {
+    package var colorSchemePreference: AppColorScheme {
         didSet {
             UserDefaults.standard.set(
                 colorSchemePreference.rawValue,
@@ -24,12 +24,12 @@ final class AppState {
         }
     }
 
-    init() {
+    package init() {
         let saved = UserDefaults.standard.string(forKey: AppColorScheme.defaultsKey) ?? ""
         colorSchemePreference = AppColorScheme(rawValue: saved) ?? .system
     }
 
-    func signOut() {
+    package func signOut() {
         isAuthenticated = false
         currentUserEmail = nil
     }

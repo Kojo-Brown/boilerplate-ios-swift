@@ -1,6 +1,9 @@
 import AuthenticationServices
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 @MainActor
 struct SocialLoginViewModelTests {

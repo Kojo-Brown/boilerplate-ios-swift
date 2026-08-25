@@ -2,11 +2,11 @@ import Foundation
 
 /// Thrown by `withTimeout(_:operation:)` when the deadline arrives before the
 /// operation finishes.
-struct TimedOutError: Error, Equatable, CustomStringConvertible {
+package struct TimedOutError: Error, Equatable, CustomStringConvertible {
     /// The budget that was exceeded.
-    let duration: Duration
+    package let duration: Duration
 
-    var description: String {
+    package var description: String {
         "operation timed out after \(duration)"
     }
 }
@@ -73,7 +73,7 @@ private enum Raced<Value: Sendable>: Sendable {
 /// - Throws: `TimedOutError` if the deadline came first; whatever `operation`
 ///   threw if it failed first; `CancellationError` if the surrounding task was
 ///   cancelled, which is distinct from timing out and stays distinct.
-func withTimeout<Value: Sendable>(
+package func withTimeout<Value: Sendable>(
     _ duration: Duration,
     operation: @escaping @Sendable () async throws -> Value
 ) async throws -> Value {

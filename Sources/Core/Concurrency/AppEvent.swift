@@ -30,7 +30,7 @@ import Foundation
 /// wants every event (`SessionObserver` wants two, separately), while a shared
 /// enum would make adding a third event an edit to a type that unrelated
 /// features depend on.
-protocol AppEvent: Sendable {}
+package protocol AppEvent: Sendable {}
 
 // MARK: - Session events
 
@@ -40,7 +40,7 @@ protocol AppEvent: Sendable {}
 /// a password just now" are different facts, and the second one is the one a
 /// subscriber needs to decide whether to offer biometric enrolment, or to skip a
 /// welcome screen for a returning user.
-enum AuthMethod: String, Sendable, Equatable, CaseIterable {
+package enum AuthMethod: String, Sendable, Equatable, CaseIterable {
     case password
     case apple
     case google
@@ -48,10 +48,10 @@ enum AuthMethod: String, Sendable, Equatable, CaseIterable {
 }
 
 /// The app acquired an authenticated session.
-struct UserSignedIn: AppEvent, Equatable {
+package struct UserSignedIn: AppEvent, Equatable {
 
     /// Which flow established it.
-    let method: AuthMethod
+    package let method: AuthMethod
 
     /// The account that signed in, when the flow that signed it in knows one.
     ///
@@ -61,7 +61,12 @@ struct UserSignedIn: AppEvent, Equatable {
     /// flow learned no address" distinct from "this account has no address", and
     /// `SessionObserver` reads it that way: a biometric unlock does not blank
     /// the email a password sign-in already put on `AppState`.
-    let email: String?
+    package let email: String?
+
+    package init(method: AuthMethod, email: String?) {
+        self.method = method
+        self.email = email
+    }
 }
 
 /// The app gave up its session.
@@ -73,4 +78,6 @@ struct UserSignedIn: AppEvent, Equatable {
 /// refresh fails and tells nobody, which is a real gap and a transport-layer one.
 /// A case nothing can construct would describe the app as it is not. See
 /// `docs/events.md`.
-struct UserSignedOut: AppEvent, Equatable {}
+package struct UserSignedOut: AppEvent, Equatable {
+    package init() {}
+}

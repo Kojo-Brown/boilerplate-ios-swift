@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - Fixtures
 

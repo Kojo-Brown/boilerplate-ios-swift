@@ -74,10 +74,10 @@ import os
 /// type and needs no `@unchecked Sendable`. Neither critical section awaits or
 /// calls out while holding the lock: each one decides, releases, and only then
 /// resumes or cancels.
-enum CancellableContinuation {
+package enum CancellableContinuation {
     /// Stops the underlying work. Returned by `start`, called at most once, and
     /// only when cancellation arrives before the work has finished.
-    typealias Cancel = @Sendable () -> Void
+    package typealias Cancel = @Sendable () -> Void
 
     /// Runs a completion-handler API as a cancellable `async` call.
     ///
@@ -95,7 +95,7 @@ enum CancellableContinuation {
     /// cooperative, so an API that never calls back after being cancelled is
     /// ordinary rather than broken, and a bridge that waited for it would turn
     /// that into a permanently suspended task.
-    static func run<Value: Sendable>(
+    package static func run<Value: Sendable>(
         starting start: @escaping @Sendable (
             _ finish: @escaping @Sendable (Result<Value, any Error>) -> Void
         ) -> Cancel

@@ -1,3 +1,5 @@
+import Core
+import Features
 import SwiftUI
 
 /// Coordinator-backed `NavigationStack` for the authenticated app flow.
@@ -21,7 +23,7 @@ struct AppNavigationView: View {
     var body: some View {
         @Bindable var coordinator = coordinator
         NavigationStack(path: $coordinator.path) {
-            HomeView(container: container)
+            HomeView(dependencies: container)
                 .navigationDestination(for: Route.self) { route in
                     destination(for: route)
                 }
@@ -32,13 +34,13 @@ struct AppNavigationView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .settings:
-            SettingsView(container: container)
+            SettingsView(dependencies: container)
         case .itemDetail(let id, let title):
             ItemDetailView(id: id, title: title)
         case .textRecognition:
-            TextRecognitionView(container: container)
+            TextRecognitionView(dependencies: container)
         case .barcodeScanner:
-            BarcodeScannerView(container: container)
+            BarcodeScannerView(dependencies: container)
         }
     }
 }

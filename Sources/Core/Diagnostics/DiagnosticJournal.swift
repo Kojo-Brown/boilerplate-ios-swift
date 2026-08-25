@@ -4,7 +4,7 @@ import Foundation
 
 /// What a journal entry is about. Deliberately coarse: a category is for
 /// filtering a log after the fact, not for reconstructing control flow.
-enum DiagnosticCategory: String, Sendable, CaseIterable {
+package enum DiagnosticCategory: String, Sendable, CaseIterable {
     case lifecycle
     case network
     case persistence
@@ -15,21 +15,21 @@ enum DiagnosticCategory: String, Sendable, CaseIterable {
 ///
 /// A value type, so it crosses out of the diagnostics domain to whoever is
 /// reading the buffer without any of it staying shared.
-struct DiagnosticRecord: Sendable, Equatable {
+package struct DiagnosticRecord: Sendable, Equatable {
     /// Position in the journal, assigned inside `DiagnosticsActor` and therefore
     /// gap-free and collision-free however many callers are recording at once.
-    let sequence: UInt64
+    package let sequence: UInt64
     /// When the caller says the event happened — passed in rather than read
     /// here, so a record's time is the moment it describes and not the moment it
     /// reached the queue.
-    let timestamp: Date
-    let category: DiagnosticCategory
+    package let timestamp: Date
+    package let category: DiagnosticCategory
     /// Human-readable detail.
     ///
     /// Never a credential, a token, a password, or a URL with either in it. This
     /// string is written to a file that survives the process and is routinely
     /// attached to bug reports; treat everything in it as published.
-    let message: String
+    package let message: String
 
     /// The record as one line of the on-disk format: tab-separated, newest
     /// field last, and exactly one line however the message was written.
@@ -37,7 +37,7 @@ struct DiagnosticRecord: Sendable, Equatable {
     /// Embedded newlines are escaped rather than dropped, because a record whose
     /// message spans lines would otherwise be read back as several records —
     /// silently, and with the sequence numbers still looking gap-free.
-    var line: String {
+    package var line: String {
         let flattened = message
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\n", with: "\\n")
@@ -56,7 +56,7 @@ struct DiagnosticRecord: Sendable, Equatable {
 /// It also states the contract that matters — a sink may block, because the
 /// domain it runs in has a thread it is allowed to block.
 @DiagnosticsActor
-protocol DiagnosticSink: AnyObject {
+package protocol DiagnosticSink: AnyObject {
     /// Writes `batch` in order. Throwing leaves the records unwritten; the
     /// journal will hand them back on the next flush.
     func write(_ batch: [DiagnosticRecord]) throws
@@ -69,17 +69,17 @@ protocol DiagnosticSink: AnyObject {
 /// records is one that throws away the crash you are looking for and keeps the
 /// launch you are not.
 @DiagnosticsActor
-final class InMemoryDiagnosticSink: DiagnosticSink {
+package final class InMemoryDiagnosticSink: DiagnosticSink {
     /// The most recent records, oldest first.
     private(set) var written: [DiagnosticRecord] = []
     private let capacity: Int
 
-    init(capacity: Int = 1_000) {
+    package init(capacity: Int = 1_000) {
         precondition(capacity > 0, "An in-memory sink with no capacity would discard every record.")
         self.capacity = capacity
     }
 
-    func write(_ batch: [DiagnosticRecord]) {
+    package func write(_ batch: [DiagnosticRecord]) {
         written.append(contentsOf: batch)
         if written.count > capacity {
             written.removeFirst(written.count - capacity)
@@ -97,9 +97,9 @@ final class InMemoryDiagnosticSink: DiagnosticSink {
 /// actor rather than two separate actors: admitting a record is a check followed
 /// by an act, and an `await` between them is a hole another caller fits through.
 @DiagnosticsActor
-final class DiagnosticBudget {
+package final class DiagnosticBudget {
     /// How many records may sit unflushed before further ones are refused.
-    let capacity: Int
+    package let capacity: Int
     /// How many records have been refused over the life of this budget.
     ///
     /// Monotonic, and deliberately never reset: the number is itself a
@@ -107,7 +107,7 @@ final class DiagnosticBudget {
     /// else.
     private(set) var dropped: UInt64 = 0
 
-    init(capacity: Int) {
+    package init(capacity: Int) {
         precondition(capacity > 0, "A budget with no capacity would refuse every record.")
         self.capacity = capacity
     }
@@ -116,7 +116,7 @@ final class DiagnosticBudget {
     ///
     /// Refusing counts as a drop, so a caller that ignores the answer still
     /// leaves a trace of having been refused.
-    func admit(buffered: Int) -> Bool {
+    package func admit(buffered: Int) -> Bool {
         guard buffered < capacity else {
             dropped += 1
             return false
@@ -150,10 +150,10 @@ final class DiagnosticBudget {
 /// `OffMainActor.run`, and the same caveat applies: state read before the
 /// `await` may be stale after it.
 @DiagnosticsActor
-final class DiagnosticJournal {
+package final class DiagnosticJournal {
     /// The app-wide journal. Tests build their own instead of using this one —
     /// the domain is shared, the objects in it need not be.
-    static let shared = DiagnosticJournal(
+    package static let shared = DiagnosticJournal(
         sink: InMemoryDiagnosticSink(),
         budget: DiagnosticBudget(capacity: 512)
     )
@@ -163,16 +163,16 @@ final class DiagnosticJournal {
     private var buffered: [DiagnosticRecord] = []
     private var nextSequence: UInt64 = 0
 
-    init(sink: any DiagnosticSink, budget: DiagnosticBudget) {
+    package init(sink: any DiagnosticSink, budget: DiagnosticBudget) {
         self.sink = sink
         self.budget = budget
     }
 
     /// The records recorded but not yet handed to the sink, oldest first.
-    var pending: [DiagnosticRecord] { buffered }
+    package var pending: [DiagnosticRecord] { buffered }
 
     /// How many records the budget has refused.
-    var dropped: UInt64 { budget.dropped }
+    package var dropped: UInt64 { budget.dropped }
 
     /// Appends one record to the buffer.
     ///
@@ -185,7 +185,7 @@ final class DiagnosticJournal {
     /// - Returns: The record, or `nil` if the budget refused it because the
     ///   buffer is full. A refusal is counted in `dropped`.
     @discardableResult
-    func record(
+    package func record(
         _ category: DiagnosticCategory,
         _ message: String,
         at timestamp: Date = Date()
@@ -216,7 +216,7 @@ final class DiagnosticJournal {
     /// ordering nothing. It can push the buffer over the budget's capacity,
     /// which is deliberate: the alternative is dropping records that were
     /// already accepted, and the next `record` will be refused anyway.
-    func flush() throws {
+    package func flush() throws {
         guard !buffered.isEmpty else { return }
         let batch = buffered
         buffered.removeAll(keepingCapacity: true)

@@ -1,5 +1,7 @@
-import SwiftUI
+import Core
+import Features
 import SwiftData
+import SwiftUI
 
 @main
 struct BoilerplateApp: App {
@@ -92,7 +94,7 @@ struct RootView: View {
         if appState.isAuthenticated {
             AppNavigationView(container: container)
         } else {
-            LoginView(container: container)
+            LoginView(dependencies: container)
         }
     }
 }

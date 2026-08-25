@@ -58,11 +58,11 @@ import Observation
 /// `docs/unidirectional-data-flow.md`.
 @Observable
 @MainActor
-final class Store<F: Feature> {
+package final class Store<F: Feature> {
 
     /// Everything the view renders. Written only by `F.reduce`, and only from
     /// inside this type.
-    private(set) var state: F.State
+    package private(set) var state: F.State
 
     /// The half of the feature that is allowed to talk to the world.
     @ObservationIgnored
@@ -81,7 +81,7 @@ final class Store<F: Feature> {
     @ObservationIgnored
     private var nextEffectID: UInt64 = 0
 
-    init(
+    package init(
         initialState: F.State,
         effects: any EffectHandling<F.Effect, F.Action>
     ) {
@@ -96,7 +96,7 @@ final class Store<F: Feature> {
     ///
     /// Cancelling the task that called this cancels the effect in flight, since
     /// the chain runs inside it.
-    func send(_ action: F.Action) async {
+    package func send(_ action: F.Action) async {
         guard let effect = F.reduce(&state, on: action) else { return }
         await run(effect)
     }
@@ -106,7 +106,7 @@ final class Store<F: Feature> {
     ///
     /// For call sites that cannot await — see the note on the type. The state
     /// change is finished by the time this returns; only the effect is not.
-    func send(_ action: F.Action) {
+    package func send(_ action: F.Action) {
         guard let effect = F.reduce(&state, on: action) else { return }
 
         let id = nextEffectID
@@ -127,7 +127,7 @@ final class Store<F: Feature> {
     /// what a `Button` taps and then awaits this, rather than sleeping and
     /// hoping. Nothing in the app calls it — SwiftUI's own entry points all
     /// await `send` directly.
-    func settled() async {
+    package func settled() async {
         while let task = inFlight.values.first {
             await task.value
         }

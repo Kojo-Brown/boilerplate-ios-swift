@@ -8,29 +8,29 @@ import Observation
 /// Navigate by calling `coordinator.push(.someRoute)`.
 @Observable
 @MainActor
-final class AppCoordinator {
-    var path = NavigationPath()
+package final class AppCoordinator {
+    package var path = NavigationPath()
 
-    init() {}
+    package init() {}
 
     /// Pushes a new destination onto the navigation stack.
-    func push(_ route: Route) {
+    package func push(_ route: Route) {
         path.append(route)
     }
 
     /// Pops the top destination off the navigation stack.
-    func pop() {
+    package func pop() {
         guard !path.isEmpty else { return }
         path.removeLast()
     }
 
     /// Returns to the root destination, clearing the entire stack.
-    func popToRoot() {
+    package func popToRoot() {
         path.removeLast(path.count)
     }
 
     /// Replaces the entire navigation stack with the given route sequence.
-    func replace(with routes: [Route]) {
+    package func replace(with routes: [Route]) {
         path.removeLast(path.count)
         routes.forEach { path.append($0) }
     }

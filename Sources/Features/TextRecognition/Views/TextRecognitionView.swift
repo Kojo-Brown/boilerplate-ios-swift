@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 import UIKit
 
@@ -6,16 +7,16 @@ import UIKit
 /// Shows the camera feed, draws bounding boxes over each recognized text block,
 /// and displays the full recognized string in a scrollable panel at the bottom.
 /// Navigation entry point: `coordinator.push(.textRecognition)`.
-struct TextRecognitionView: View {
+package struct TextRecognitionView: View {
     @State private var viewModel: TextRecognitionViewModel
     @Environment(AppCoordinator.self) private var coordinator
 
     @MainActor
-    init(container: AppContainer) {
-        _viewModel = State(wrappedValue: container.makeTextRecognitionViewModel())
+    package init(dependencies: any TextRecognitionDependencies) {
+        _viewModel = State(wrappedValue: dependencies.makeTextRecognitionViewModel())
     }
 
-    var body: some View {
+    package var body: some View {
         ZStack(alignment: .bottom) {
             cameraLayer
             if let result = viewModel.recognitionResult {

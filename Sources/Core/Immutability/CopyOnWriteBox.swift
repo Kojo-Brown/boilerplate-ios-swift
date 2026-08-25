@@ -57,7 +57,7 @@ import Foundation
 /// hands the storage out `inout` and mutates in place. The subscript-style
 /// spelling that would close this gap is the underscored `_modify` accessor,
 /// which is not language surface this package is willing to depend on.
-struct CopyOnWriteBox<Value> {
+package struct CopyOnWriteBox<Value> {
 
     /// The single allocation.
     ///
@@ -75,7 +75,7 @@ struct CopyOnWriteBox<Value> {
 
     private var storage: Storage
 
-    init(_ value: Value) {
+    package init(_ value: Value) {
         storage = Storage(value)
     }
 
@@ -83,7 +83,7 @@ struct CopyOnWriteBox<Value> {
     ///
     /// Reading is free. Writing copies first if this box is not the only owner,
     /// which is what stops the write being visible through every other copy.
-    var value: Value {
+    package var value: Value {
         get { storage.value }
         set {
             makeUnique()
@@ -96,7 +96,7 @@ struct CopyOnWriteBox<Value> {
     ///
     /// Prefer this to `box.value = ...` whenever the new value is derived from
     /// the old one: it performs at most one copy, where the property does two.
-    mutating func withValue<Result>(_ body: (inout Value) throws -> Result) rethrows -> Result {
+    package mutating func withValue<Result>(_ body: (inout Value) throws -> Result) rethrows -> Result {
         makeUnique()
         return try body(&storage.value)
     }
@@ -113,7 +113,7 @@ struct CopyOnWriteBox<Value> {
     /// Two boxes sharing an allocation report the same identity; the moment one
     /// of them is mutated, they stop. Only ever compared — an identity outlives
     /// nothing, so holding one past the box that produced it says nothing.
-    var storageIdentity: ObjectIdentifier {
+    package var storageIdentity: ObjectIdentifier {
         ObjectIdentifier(storage)
     }
 
@@ -123,7 +123,7 @@ struct CopyOnWriteBox<Value> {
     /// `mutating` because `isKnownUniquelyReferenced(_:)` needs exclusive access
     /// to the reference it is asked about — which is also why a box held in a
     /// `let` cannot be asked.
-    mutating func isUniquelyReferenced() -> Bool {
+    package mutating func isUniquelyReferenced() -> Bool {
         isKnownUniquelyReferenced(&storage)
     }
 
@@ -166,13 +166,13 @@ extension CopyOnWriteBox: @unchecked Sendable where Value: Sendable {}
 extension CopyOnWriteBox: Equatable where Value: Equatable {
     /// Boxes sharing an allocation are equal without looking at the value, which
     /// is the one comparison copy-on-write makes cheaper rather than dearer.
-    static func == (lhs: CopyOnWriteBox, rhs: CopyOnWriteBox) -> Bool {
+    package static func == (lhs: CopyOnWriteBox, rhs: CopyOnWriteBox) -> Bool {
         lhs.storage === rhs.storage || lhs.storage.value == rhs.storage.value
     }
 }
 
 extension CopyOnWriteBox: Hashable where Value: Hashable {
-    func hash(into hasher: inout Hasher) {
+    package func hash(into hasher: inout Hasher) {
         hasher.combine(storage.value)
     }
 }

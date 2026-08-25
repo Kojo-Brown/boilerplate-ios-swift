@@ -3,26 +3,26 @@ import Foundation
 // MARK: - Page-based pagination
 
 /// Page-based paginated result returned by list endpoints.
-struct Page<T: Decodable & Sendable>: Decodable, Sendable {
-    let items: [T]
-    let pagination: PageInfo
+package struct Page<T: Decodable & Sendable>: Decodable, Sendable {
+    package let items: [T]
+    package let pagination: PageInfo
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case items
         case pagination
     }
 }
 
-struct PageInfo: Decodable, Sendable, Equatable {
-    let page: Int
-    let perPage: Int
-    let total: Int
-    let totalPages: Int
+package struct PageInfo: Decodable, Sendable, Equatable {
+    package let page: Int
+    package let perPage: Int
+    package let total: Int
+    package let totalPages: Int
 
-    var hasNextPage: Bool { page < totalPages }
-    var hasPreviousPage: Bool { page > 1 }
+    package var hasNextPage: Bool { page < totalPages }
+    package var hasPreviousPage: Bool { page > 1 }
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case page
         case perPage = "per_page"
         case total
@@ -33,22 +33,22 @@ struct PageInfo: Decodable, Sendable, Equatable {
 // MARK: - Cursor-based pagination
 
 /// Cursor-based paginated result for infinite-scroll list endpoints.
-struct CursorPage<T: Decodable & Sendable>: Decodable, Sendable {
-    let items: [T]
-    let cursor: CursorInfo
+package struct CursorPage<T: Decodable & Sendable>: Decodable, Sendable {
+    package let items: [T]
+    package let cursor: CursorInfo
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case items
         case cursor
     }
 }
 
-struct CursorInfo: Decodable, Sendable, Equatable {
-    let nextCursor: String?
-    let prevCursor: String?
-    let hasMore: Bool
+package struct CursorInfo: Decodable, Sendable, Equatable {
+    package let nextCursor: String?
+    package let prevCursor: String?
+    package let hasMore: Bool
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case nextCursor = "next_cursor"
         case prevCursor = "prev_cursor"
         case hasMore = "has_more"

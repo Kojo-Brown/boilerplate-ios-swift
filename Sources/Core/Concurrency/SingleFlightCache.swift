@@ -75,9 +75,9 @@ import Foundation
 ///
 /// Errors are not cached: a failed load leaves the key empty so the next caller
 /// retries. Only success is memoised.
-actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
+package actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     /// Produces the value for a key. Runs at most once per successful cache fill.
-    typealias Load = @Sendable (Key) async throws -> Value
+    package typealias Load = @Sendable (Key) async throws -> Value
 
     private enum Entry {
         case inFlight(Task<Value, Error>)
@@ -90,7 +90,7 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     /// - Parameter load: The expensive operation this cache coalesces. It is
     ///   `@Sendable` because it runs outside this actor's isolation, so it must
     ///   not close over mutable state that anything else touches.
-    init(load: @escaping Load) {
+    package init(load: @escaping Load) {
         self.load = load
     }
 
@@ -100,7 +100,7 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     ///
     /// Concurrent callers for the same key share a single load and all receive
     /// the same value — or the same error, which is not cached.
-    func value(for key: Key) async throws -> Value {
+    package func value(for key: Key) async throws -> Value {
         switch entries[key] {
         case .some(.ready(let value)):
             return value
@@ -123,7 +123,7 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     ///
     /// Deliberately does not wait on an in-flight load: it reports what the
     /// cache holds, so it is safe on a path that must not trigger work.
-    func cachedValue(for key: Key) -> Value? {
+    package func cachedValue(for key: Key) -> Value? {
         if case .some(.ready(let value)) = entries[key] {
             return value
         }
@@ -136,7 +136,7 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     ///
     /// A load already running does not get to fill the cache afterwards — when
     /// it finishes it finds its claim on the key gone and leaves it gone.
-    func invalidate(_ key: Key) {
+    package func invalidate(_ key: Key) {
         if case .some(.inFlight(let task)) = entries[key] {
             task.cancel()
         }
@@ -144,7 +144,7 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     }
 
     /// Empties the cache and cancels every load still in flight.
-    func invalidateAll() {
+    package func invalidateAll() {
         for entry in entries.values {
             if case .inFlight(let task) = entry {
                 task.cancel()
@@ -208,7 +208,7 @@ extension SingleFlightCache {
     ///     at most once, synchronously, with the value in the cache.
     /// - Returns: The cached value if it was accepted, otherwise a newly loaded
     ///   one.
-    func freshValue(for key: Key, isFresh: @Sendable (Value) -> Bool) async throws -> Value {
+    package func freshValue(for key: Key, isFresh: @Sendable (Value) -> Bool) async throws -> Value {
         if let cached = cachedValue(for: key), !isFresh(cached) {
             invalidate(key)
         }

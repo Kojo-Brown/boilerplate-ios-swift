@@ -26,14 +26,14 @@ import Foundation
 /// user.with(avatarURL: .set(nil))    // clear the avatar, keep the name
 /// user.with()                        // a copy, which is `user`
 /// ```
-enum FieldUpdate<Value> {
+package enum FieldUpdate<Value> {
     /// Keep whatever the source value holds for this field.
     case unchanged
     /// Replace the field, including with `nil` when `Value` is itself optional.
     case set(Value)
 
     /// Resolve the update against the value it is being applied to.
-    func applied(to current: Value) -> Value {
+    package func applied(to current: Value) -> Value {
         switch self {
         case .unchanged: current
         case .set(let replacement): replacement

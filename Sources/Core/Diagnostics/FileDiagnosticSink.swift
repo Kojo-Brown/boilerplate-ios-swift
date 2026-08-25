@@ -1,7 +1,7 @@
 import Foundation
 
 /// What can go wrong on the way to the file.
-enum DiagnosticSinkError: Error, Equatable {
+package enum DiagnosticSinkError: Error, Equatable {
     /// The journal file did not exist and could not be created.
     case couldNotCreateFile(path: String)
 }
@@ -28,19 +28,19 @@ enum DiagnosticSinkError: Error, Equatable {
 /// caller's to call — and losing it costs one file descriptor at exit, not data,
 /// because each `write` is a completed syscall rather than a buffered append.
 @DiagnosticsActor
-final class FileDiagnosticSink: DiagnosticSink {
+package final class FileDiagnosticSink: DiagnosticSink {
     /// The file records are appended to.
-    let url: URL
+    package let url: URL
     private var handle: FileHandle?
 
     /// - Parameter url: Where to append. Missing intermediate directories are
     ///   created on first write, not here, so constructing a sink touches no
     ///   file system at all.
-    init(url: URL) {
+    package init(url: URL) {
         self.url = url
     }
 
-    func write(_ batch: [DiagnosticRecord]) throws {
+    package func write(_ batch: [DiagnosticRecord]) throws {
         guard !batch.isEmpty else { return }
         let text = batch.map(\.line).joined(separator: "\n") + "\n"
         try openedHandle().write(contentsOf: Data(text.utf8))
@@ -48,7 +48,7 @@ final class FileDiagnosticSink: DiagnosticSink {
 
     /// Releases the file descriptor. Safe to call more than once; a later
     /// `write` reopens.
-    func close() throws {
+    package func close() throws {
         guard let handle else { return }
         self.handle = nil
         try handle.close()

@@ -4,7 +4,7 @@ import Security
 
 // MARK: - Keychain errors
 
-enum KeychainError: Error, Sendable, Equatable {
+package enum KeychainError: Error, Sendable, Equatable {
     case unexpectedData
     case unhandledError(status: OSStatus)
 }
@@ -12,7 +12,7 @@ enum KeychainError: Error, Sendable, Equatable {
 // MARK: - Protocol
 
 /// Abstraction over Keychain storage; enables in-memory test doubles.
-protocol KeychainStoring: Sendable {
+package protocol KeychainStoring: Sendable {
     func string(forKey key: String) throws -> String?
     func set(_ value: String, forKey key: String) throws
     func remove(forKey key: String) throws
@@ -26,16 +26,16 @@ protocol KeychainStoring: Sendable {
 /// Entries are scoped to `service` (the app's bundle identifier by default)
 /// and use `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` so tokens
 /// survive backgrounding but cannot be restored from a device backup.
-struct KeychainWrapper: KeychainStoring {
-    let service: String
+package struct KeychainWrapper: KeychainStoring {
+    package let service: String
 
-    init(service: String = Bundle.main.bundleIdentifier ?? "com.boilerplate.ios-swift") {
+    package init(service: String = Bundle.main.bundleIdentifier ?? "com.boilerplate.ios-swift") {
         self.service = service
     }
 
     // MARK: - Read
 
-    func string(forKey key: String) throws -> String? {
+    package func string(forKey key: String) throws -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -61,7 +61,7 @@ struct KeychainWrapper: KeychainStoring {
 
     // MARK: - Write
 
-    func set(_ value: String, forKey key: String) throws {
+    package func set(_ value: String, forKey key: String) throws {
         // `String.data(using: .utf8)` cannot fail; `Data(_:)` says so in the type.
         let data = Data(value.utf8)
 
@@ -92,7 +92,7 @@ struct KeychainWrapper: KeychainStoring {
 
     // MARK: - Delete
 
-    func remove(forKey key: String) throws {
+    package func remove(forKey key: String) throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -104,7 +104,7 @@ struct KeychainWrapper: KeychainStoring {
         }
     }
 
-    func removeAll() throws {
+    package func removeAll() throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -131,22 +131,24 @@ struct KeychainWrapper: KeychainStoring {
 /// The storage lives inside the lock rather than beside it, which leaves this
 /// class with one `let` stored property of `Sendable` type and so a conformance
 /// the compiler checks instead of one it is told to assume.
-final class InMemoryKeychain: KeychainStoring, Sendable {
+package final class InMemoryKeychain: KeychainStoring, Sendable {
+    package init() {}
+
     private let storage = OSAllocatedUnfairLock(initialState: [String: String]())
 
-    func string(forKey key: String) throws -> String? {
+    package func string(forKey key: String) throws -> String? {
         storage.withLock { $0[key] }
     }
 
-    func set(_ value: String, forKey key: String) throws {
+    package func set(_ value: String, forKey key: String) throws {
         storage.withLock { $0[key] = value }
     }
 
-    func remove(forKey key: String) throws {
+    package func remove(forKey key: String) throws {
         storage.withLock { $0[key] = nil }
     }
 
-    func removeAll() throws {
+    package func removeAll() throws {
         storage.withLock { $0.removeAll() }
     }
 }

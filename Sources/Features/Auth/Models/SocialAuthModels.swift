@@ -1,7 +1,7 @@
 import Foundation
 
 // Credential payload returned by a social sign-in provider before backend exchange.
-enum SocialAuthCredential: Sendable {
+package enum SocialAuthCredential: Sendable {
     case apple(
         identityToken: String,
         authorizationCode: String,
@@ -11,13 +11,13 @@ enum SocialAuthCredential: Sendable {
     case google(idToken: String, accessToken: String)
 }
 
-enum SocialAuthError: LocalizedError, Sendable, Equatable {
+package enum SocialAuthError: LocalizedError, Sendable, Equatable {
     case invalidCredential
     case userCancelled
     case notConfigured
     case tokenExchangeFailed
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .invalidCredential: "The sign-in credential was invalid."
         case .userCancelled: "Sign-in was cancelled."

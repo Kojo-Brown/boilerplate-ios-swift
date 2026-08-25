@@ -1,4 +1,5 @@
 import AVFoundation
+import Core
 import Foundation
 import Observation
 import UIKit
@@ -9,7 +10,7 @@ import UIKit
 /// Inject `scannerService` in tests to avoid Vision and hardware dependencies.
 @Observable
 @MainActor
-final class BarcodeScannerViewModel: ViewModelProtocol {
+package final class BarcodeScannerViewModel: ViewModelProtocol {
     // MARK: - Published state
 
     private(set) var scanResult: ScanResult?
@@ -27,14 +28,14 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
 
     private var frameTask: Task<Void, Never>?
 
-    var previewLayer: AVCaptureVideoPreviewLayer { cameraService.previewLayer }
+    package var previewLayer: AVCaptureVideoPreviewLayer { cameraService.previewLayer }
 
     // MARK: - Init
 
     /// Built by `AppContainer.makeBarcodeScannerViewModel()`. See the note on
     /// `TextRecognitionViewModel.init` for why the camera service is passed in
     /// rather than defaulted.
-    init(
+    package init(
         cameraService: CameraService,
         scannerService: any BarcodeScanning
     ) {
@@ -44,17 +45,17 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
 
     // MARK: - ViewModelProtocol
 
-    func onAppear() async {
+    package func onAppear() async {
         await requestPermissionAndStart()
     }
 
-    func onDisappear() {
+    package func onDisappear() {
         stop()
     }
 
     // MARK: - Public actions
 
-    func requestPermissionAndStart() async {
+    package func requestPermissionAndStart() async {
         let granted = await cameraService.requestPermission()
         guard granted else {
             permissionDenied = true
@@ -64,7 +65,7 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
         await startScanning()
     }
 
-    func startScanning() async {
+    package func startScanning() async {
         guard !isScanning else { return }
         errorMessage = nil
         do {
@@ -76,18 +77,18 @@ final class BarcodeScannerViewModel: ViewModelProtocol {
         }
     }
 
-    func stop() {
+    package func stop() {
         frameTask?.cancel()
         frameTask = nil
         cameraService.stop()
         isScanning = false
     }
 
-    func clearResult() {
+    package func clearResult() {
         scanResult = nil
     }
 
-    func copyPayload() {
+    package func copyPayload() {
         guard let payload = scanResult?.primaryBarcode?.payload else { return }
         UIPasteboard.general.string = payload
         didCopyToClipboard = true

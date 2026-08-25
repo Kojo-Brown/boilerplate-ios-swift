@@ -1,11 +1,12 @@
 import AuthenticationServices
+import Core
 import GoogleSignInSwift
 import SwiftUI
 import UIKit
 
 /// Login screen with email/password, social sign-in, and biometric options.
 /// Backed by `LoginViewModel`, `SocialLoginViewModel`, and `BiometricAuthViewModel`.
-struct LoginView: View {
+package struct LoginView: View {
     @State private var viewModel: LoginViewModel
     @State private var socialViewModel: SocialLoginViewModel
     @State private var biometricViewModel: BiometricAuthViewModel
@@ -22,14 +23,14 @@ struct LoginView: View {
     /// re-init from a parent body evaluation costs three allocations and does
     /// not reset the screen's state.
     @MainActor
-    init(container: AppContainer) {
-        _viewModel = State(wrappedValue: container.makeLoginViewModel())
-        _socialViewModel = State(wrappedValue: container.makeSocialLoginViewModel())
-        _biometricViewModel = State(wrappedValue: container.makeBiometricAuthViewModel())
-        events = container.eventPublisher
+    package init(dependencies: any LoginDependencies) {
+        _viewModel = State(wrappedValue: dependencies.makeLoginViewModel())
+        _socialViewModel = State(wrappedValue: dependencies.makeSocialLoginViewModel())
+        _biometricViewModel = State(wrappedValue: dependencies.makeBiometricAuthViewModel())
+        events = dependencies.eventPublisher
     }
 
-    var body: some View {
+    package var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {

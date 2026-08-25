@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// Dims the area outside the finder window, draws corner-bracket markers, and
 /// animates a horizontal scan line so the UI communicates that the scanner is live.
-struct ScannerOverlayView: View {
-    let isScanning: Bool
+package struct ScannerOverlayView: View {
+    package let isScanning: Bool
 
     @State private var scanLineOffset: CGFloat = 0
     @State private var scanLineAnimating = false
@@ -14,7 +14,7 @@ struct ScannerOverlayView: View {
     private let cornerWidth: CGFloat = 4
     private let finderRatio: CGFloat = 0.72
 
-    var body: some View {
+    package var body: some View {
         GeometryReader { geometry in
             let finderSize = geometry.size.width * finderRatio
             let finderOriginX = (geometry.size.width - finderSize) / 2

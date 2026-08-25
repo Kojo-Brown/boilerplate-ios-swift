@@ -52,9 +52,9 @@ import Dispatch
 /// this work is never urgent no matter who asked for it. See that type for the
 /// rest of the reasoning.
 @globalActor
-actor DiagnosticsActor {
+package actor DiagnosticsActor {
     /// The single instance whose isolation `@DiagnosticsActor` refers to.
-    static let shared = DiagnosticsActor()
+    package static let shared = DiagnosticsActor()
 
     /// The queue-backed executor this domain runs on.
     ///
@@ -69,14 +69,14 @@ actor DiagnosticsActor {
     /// become isolated. Nothing is given up: the value is an immutable
     /// reference to a `Sendable` type, so there is no state here for isolation
     /// to have been guarding.
-    nonisolated let executor = SerialDispatchExecutor(
+    package nonisolated let executor = SerialDispatchExecutor(
         label: "com.boilerplate.iosswift.diagnostics",
         qos: .utility
     )
 
     /// Installs the custom executor. Without this override the actor would use
     /// the default one and every word above would be aspirational.
-    nonisolated var unownedExecutor: UnownedSerialExecutor {
+    package nonisolated var unownedExecutor: UnownedSerialExecutor {
         executor.asUnownedSerialExecutor()
     }
 

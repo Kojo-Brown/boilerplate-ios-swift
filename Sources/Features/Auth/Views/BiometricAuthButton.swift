@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 /// A button that initiates Face ID or Touch ID authentication.
@@ -19,12 +20,12 @@ import SwiftUI
 ///
 /// Somewhere guarding a destructive action, the same success would unlock that
 /// action and announce nothing.
-struct BiometricAuthButton: View {
-    let viewModel: BiometricAuthViewModel
-    var reason = "Authenticate to access your account"
-    var onSuccess: (() -> Void)?
+package struct BiometricAuthButton: View {
+    package let viewModel: BiometricAuthViewModel
+    package var reason = "Authenticate to access your account"
+    package var onSuccess: (() -> Void)?
 
-    var body: some View {
+    package var body: some View {
         Button {
             Task {
                 await viewModel.authenticate(reason: reason)

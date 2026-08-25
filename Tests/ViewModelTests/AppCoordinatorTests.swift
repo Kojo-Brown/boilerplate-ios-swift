@@ -1,6 +1,9 @@
 import Testing
 import SwiftUI
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 @MainActor
 struct AppCoordinatorTests {

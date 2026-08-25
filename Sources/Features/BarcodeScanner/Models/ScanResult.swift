@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// The symbology (encoding format) of a detected barcode.
-enum BarcodeSymbology: String, Sendable {
+package enum BarcodeSymbology: String, Sendable {
     case qrCode = "QR Code"
     case aztec = "Aztec"
     case code128 = "Code 128"
@@ -17,14 +17,14 @@ enum BarcodeSymbology: String, Sendable {
 }
 
 /// A single barcode or QR code detected in one scan frame.
-struct DetectedBarcode: Identifiable, Sendable {
-    let id: UUID
-    let payload: String
-    let symbology: BarcodeSymbology
+package struct DetectedBarcode: Identifiable, Sendable {
+    package let id: UUID
+    package let payload: String
+    package let symbology: BarcodeSymbology
     /// Bounding box normalized to 0–1 in the preview layer's coordinate space (top-left origin).
-    let normalizedFrame: CGRect
+    package let normalizedFrame: CGRect
 
-    init(payload: String, symbology: BarcodeSymbology, normalizedFrame: CGRect) {
+    package init(payload: String, symbology: BarcodeSymbology, normalizedFrame: CGRect) {
         id = UUID()
         self.payload = payload
         self.symbology = symbology
@@ -33,8 +33,8 @@ struct DetectedBarcode: Identifiable, Sendable {
 }
 
 /// The complete output of a single barcode scan pass.
-struct ScanResult: Sendable {
-    let barcodes: [DetectedBarcode]
-    var isEmpty: Bool { barcodes.isEmpty }
-    var primaryBarcode: DetectedBarcode? { barcodes.first }
+package struct ScanResult: Sendable {
+    package let barcodes: [DetectedBarcode]
+    package var isEmpty: Bool { barcodes.isEmpty }
+    package var primaryBarcode: DetectedBarcode? { barcodes.first }
 }

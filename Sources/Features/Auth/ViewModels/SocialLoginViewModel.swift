@@ -1,4 +1,5 @@
 import AuthenticationServices
+import Core
 import CryptoKit
 import Foundation
 import Observation
@@ -14,13 +15,13 @@ import Security
 /// the picker UI through `GoogleSignInService`.
 @Observable
 @MainActor
-final class SocialLoginViewModel {
-    var isLoadingApple = false
-    var isLoadingGoogle = false
-    var errorMessage: String?
-    var isAuthenticated = false
+package final class SocialLoginViewModel {
+    package var isLoadingApple = false
+    package var isLoadingGoogle = false
+    package var errorMessage: String?
+    package var isAuthenticated = false
 
-    var isLoading: Bool { isLoadingApple || isLoadingGoogle }
+    package var isLoading: Bool { isLoadingApple || isLoadingGoogle }
 
     private(set) var appleNonceHash: String = ""
     private var appleNonce: String = ""
@@ -31,7 +32,7 @@ final class SocialLoginViewModel {
 
     /// Built by `AppContainer.makeSocialLoginViewModel()`; no defaults, so the
     /// identity provider that runs is named in one place rather than here.
-    init(
+    package init(
         googleProvider: any SocialAuthProvider,
         exchangeService: any SocialAuthExchangeService,
         events: any EventPublishing
@@ -45,14 +46,14 @@ final class SocialLoginViewModel {
 
     /// Call before presenting `SignInWithAppleButton` to refresh the nonce.
     /// Assign `appleNonceHash` to `request.nonce` in the button's request closure.
-    func prepareAppleNonce() {
+    package func prepareAppleNonce() {
         let nonce = Self.generateNonce()
         appleNonce = nonce
         appleNonceHash = Self.sha256(nonce)
     }
 
     /// Processes the `ASAuthorization` delivered by `SignInWithAppleButton.onCompletion`.
-    func handleAppleResult(_ result: Result<ASAuthorization, Error>) async {
+    package func handleAppleResult(_ result: Result<ASAuthorization, Error>) async {
         guard !isLoading else { return }
         isLoadingApple = true
         errorMessage = nil
@@ -92,7 +93,7 @@ final class SocialLoginViewModel {
 
     // MARK: - Google Sign-In
 
-    func signInWithGoogle(anchor: ASPresentationAnchor) async {
+    package func signInWithGoogle(anchor: ASPresentationAnchor) async {
         guard !isLoading else { return }
         isLoadingGoogle = true
         errorMessage = nil
@@ -110,7 +111,7 @@ final class SocialLoginViewModel {
         }
     }
 
-    func clearError() {
+    package func clearError() {
         errorMessage = nil
     }
 

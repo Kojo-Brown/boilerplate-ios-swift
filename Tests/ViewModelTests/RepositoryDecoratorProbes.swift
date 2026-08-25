@@ -1,6 +1,9 @@
 import Foundation
 import os
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - Doubles shared by the decorator suites
 

@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 import UIKit
 
@@ -6,16 +7,16 @@ import UIKit
 /// Shows the camera feed, a targeting reticle, per-barcode bounding-box highlights,
 /// and a results panel at the bottom when a code is detected.
 /// Navigation entry point: `coordinator.push(.barcodeScanner)`.
-struct BarcodeScannerView: View {
+package struct BarcodeScannerView: View {
     @State private var viewModel: BarcodeScannerViewModel
     @Environment(AppCoordinator.self) private var coordinator
 
     @MainActor
-    init(container: AppContainer) {
-        _viewModel = State(wrappedValue: container.makeBarcodeScannerViewModel())
+    package init(dependencies: any BarcodeScannerDependencies) {
+        _viewModel = State(wrappedValue: dependencies.makeBarcodeScannerViewModel())
     }
 
-    var body: some View {
+    package var body: some View {
         ZStack(alignment: .bottom) {
             cameraLayer
             ScannerOverlayView(isScanning: viewModel.isScanning)

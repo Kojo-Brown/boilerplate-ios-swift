@@ -1,4 +1,6 @@
+import Core
 import Foundation
+import Networking
 
 /// Performs the Account section's effects: the half of `ProfileFeature` that is
 /// allowed to talk to the world.
@@ -18,16 +20,16 @@ import Foundation
 /// A `struct`, and `Sendable` because `EffectHandling` is: `perform` runs off
 /// the main actor, which is what keeps the store's `await` a real hop rather
 /// than a formality.
-struct ProfileEffectHandler: EffectHandling {
+package struct ProfileEffectHandler: EffectHandling {
 
-    typealias Effect = ProfileFeature.Effect
-    typealias Action = ProfileFeature.Action
+    package typealias Effect = ProfileFeature.Effect
+    package typealias Action = ProfileFeature.Action
 
     private let strategy: any SyncStrategy
     private let strategyFactory: any SyncStrategyFactory
     private let events: any EventPublishing
 
-    init(
+    package init(
         strategy: any SyncStrategy,
         strategyFactory: any SyncStrategyFactory,
         events: any EventPublishing
@@ -37,7 +39,7 @@ struct ProfileEffectHandler: EffectHandling {
         self.events = events
     }
 
-    func perform(_ effect: Effect) async -> Action? {
+    package func perform(_ effect: Effect) async -> Action? {
         switch effect {
         case .loadProfile:
             return await load(using: strategy)

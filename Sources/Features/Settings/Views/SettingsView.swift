@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 /// Settings screen — colour-scheme switching via the `AppColorScheme`
@@ -15,17 +16,17 @@ import SwiftUI
 /// there is no call anywhere in it that changes what the screen shows. The
 /// rows read derived properties of one state value, so the branch that renders
 /// a cached profile cannot disagree with the branch that renders the name.
-struct SettingsView: View {
+package struct SettingsView: View {
     @State private var store: Store<ProfileFeature>
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
     @MainActor
-    init(container: AppContainer) {
-        _store = State(wrappedValue: container.makeProfileStore())
+    package init(dependencies: any SettingsDependencies) {
+        _store = State(wrappedValue: dependencies.makeProfileStore())
     }
 
-    var body: some View {
+    package var body: some View {
         @Bindable var appState = appState
         List {
             Section("Account") {

@@ -81,7 +81,7 @@ private struct Indexed<Value: Sendable>: Sendable {
 /// That guarantee is the whole difference from a `for` loop full of `Task { }`,
 /// which returns immediately with the work still running, cancels nothing, and
 /// reports no errors to anyone.
-enum ConcurrentMap {
+package enum ConcurrentMap {
     /// Applies `transform` to every element, at most `maxConcurrent` at a time.
     ///
     /// - Parameters:
@@ -97,7 +97,7 @@ enum ConcurrentMap {
     ///   remaining children are cancelled and awaited before this returns. Or
     ///   `CancellationError` if the caller was cancelled before every element
     ///   had a result.
-    static func over<Element: Sendable, Transformed: Sendable>(
+    package static func over<Element: Sendable, Transformed: Sendable>(
         _ elements: [Element],
         maxConcurrent: Int,
         transform: @escaping @Sendable (Element) async throws -> Transformed

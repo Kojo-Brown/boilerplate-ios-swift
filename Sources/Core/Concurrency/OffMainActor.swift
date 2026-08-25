@@ -72,7 +72,7 @@ import Foundation
 /// "an `await` is a hole in your invariant" rule that actor reentrancy imposes,
 /// and the main actor is not exempt from it. `LatestOnlyTask` is the guard for
 /// the common form of it.
-enum OffMainActor {
+package enum OffMainActor {
     /// Runs `work` off the main actor and returns its result to the caller.
     ///
     /// Both the caller's priority and its cancellation propagate into `work`,
@@ -85,7 +85,7 @@ enum OffMainActor {
     ///   closure is accepted here too, which is the common case: expensive pure
     ///   computation that has no business on the main thread.
     /// - Returns: Whatever `work` returned, delivered back on the caller's actor.
-    static func run<Success: Sendable>(
+    package static func run<Success: Sendable>(
         _ work: @Sendable () async throws -> Success
     ) async rethrows -> Success {
         try await work()

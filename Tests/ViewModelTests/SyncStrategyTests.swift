@@ -3,6 +3,9 @@ import SwiftData
 import Testing
 import os
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - Doubles local to this suite
 

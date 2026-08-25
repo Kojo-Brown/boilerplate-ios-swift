@@ -1,6 +1,9 @@
 import SwiftUI
 import Testing
 @testable import BoilerplateiOSSwift
+@testable import Core
+@testable import Features
+@testable import Networking
 
 // MARK: - Component Preview Tests
 
@@ -159,7 +162,7 @@ struct AuthPreviewProviderTests {
         // LoginView no longer reads AppState — it publishes to the event bus
         // instead — but its body is still a SwiftUI tree, so this verifies
         // instantiation only, not body rendering, in a unit-test context.
-        let view = LoginView(container: .preview)
+        let view = LoginView(dependencies: AppContainer.preview)
         _ = view
     }
 
@@ -212,7 +215,7 @@ struct HomePreviewProviderTests {
     @Test("HomeView can be instantiated")
     func homeViewCanBeInstantiated() {
         // HomeView reads AppCoordinator from @Environment at body-evaluation time.
-        let view = HomeView(container: .preview)
+        let view = HomeView(dependencies: AppContainer.preview)
         _ = view
     }
 
@@ -248,7 +251,7 @@ struct BarcodeScannerPreviewProviderTests {
 
     @Test("BarcodeScannerView can be instantiated")
     func barcodeScannerViewCanBeInstantiated() {
-        let view = BarcodeScannerView(container: .preview)
+        let view = BarcodeScannerView(dependencies: AppContainer.preview)
         _ = view
     }
 
@@ -265,7 +268,7 @@ struct TextRecognitionPreviewProviderTests {
 
     @Test("TextRecognitionView can be instantiated")
     func textRecognitionViewCanBeInstantiated() {
-        let view = TextRecognitionView(container: .preview)
+        let view = TextRecognitionView(dependencies: AppContainer.preview)
         _ = view
     }
 
@@ -284,7 +287,7 @@ struct SettingsPreviewProviderTests {
     func settingsViewCanBeInstantiated() {
         // SettingsView reads AppState from @Environment directly in body,
         // so we verify instantiation only in a unit-test context.
-        let view = SettingsView(container: .preview)
+        let view = SettingsView(dependencies: AppContainer.preview)
         _ = view
     }
 

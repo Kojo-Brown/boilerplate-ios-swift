@@ -1,44 +1,37 @@
+import Core
 import Foundation
 
-struct LoginRequest: Encodable, Sendable {
-    let email: String
-    let password: String
+package struct LoginRequest: Encodable, Sendable {
+    package let email: String
+    package let password: String
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case email
         case password
     }
 }
 
-struct LoginResponse: Decodable, Sendable {
-    let accessToken: String
-    let refreshToken: String
-    let user: User
+package struct LoginResponse: Decodable, Sendable {
+    package let accessToken: String
+    package let refreshToken: String
+    package let user: User
 
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case user
     }
 }
 
-struct UpdateProfileRequest: Encodable, Sendable {
-    let name: String
+package struct SocialLoginRequest: Encodable, Sendable {
+    package let provider: String
+    package let identityToken: String
+    package let authorizationCode: String?
+    package let nonce: String?
+    package let givenName: String?
+    package let familyName: String?
 
-    enum CodingKeys: String, CodingKey {
-        case name
-    }
-}
-
-struct SocialLoginRequest: Encodable, Sendable {
-    let provider: String
-    let identityToken: String
-    let authorizationCode: String?
-    let nonce: String?
-    let givenName: String?
-    let familyName: String?
-
-    enum CodingKeys: String, CodingKey {
+    package enum CodingKeys: String, CodingKey {
         case provider
         case identityToken = "identity_token"
         case authorizationCode = "authorization_code"

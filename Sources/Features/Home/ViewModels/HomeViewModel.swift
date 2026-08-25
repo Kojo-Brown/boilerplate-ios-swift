@@ -1,29 +1,33 @@
+import Core
 import Foundation
 import Observation
 
 /// A placeholder item surfaced on the home screen.
-struct HomeItem: Identifiable {
-    let id: UUID
-    let title: String
-    let subtitle: String
+package struct HomeItem: Identifiable {
+    package let id: UUID
+    package let title: String
+    package let subtitle: String
 }
 
 /// Manages state and business logic for the home screen.
 @Observable
 @MainActor
-final class HomeViewModel: ViewModelProtocol {
+package final class HomeViewModel: ViewModelProtocol {
+
+    package init() {}
+
     private(set) var items: [HomeItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    var searchQuery = ""
+    package var searchQuery = ""
 
     /// Stored `Task` reference for the live-update stream.
     /// Keeping a reference enables explicit cancellation in `onDisappear`,
     /// preventing orphaned work after the view leaves the screen.
     private var liveUpdateTask: Task<Void, Never>?
 
-    var filteredItems: [HomeItem] {
+    package var filteredItems: [HomeItem] {
         guard !searchQuery.isEmpty else { return items }
         return items.filter {
             $0.title.localizedCaseInsensitiveContains(searchQuery)
@@ -33,23 +37,23 @@ final class HomeViewModel: ViewModelProtocol {
 
     // MARK: - Lifecycle
 
-    func onAppear() async {
+    package func onAppear() async {
         guard items.isEmpty else { return }
         await loadItems()
     }
 
     /// Cancels all in-flight Tasks when the view disappears.
-    func onDisappear() {
+    package func onDisappear() {
         stopLiveUpdates()
     }
 
     // MARK: - Actions
 
-    func refresh() async {
+    package func refresh() async {
         await loadItems()
     }
 
-    func deleteItems(at offsets: IndexSet) {
+    package func deleteItems(at offsets: IndexSet) {
         let targets = offsets.map { filteredItems[$0].id }
         items.removeAll { targets.contains($0.id) }
     }
@@ -61,7 +65,7 @@ final class HomeViewModel: ViewModelProtocol {
     /// The consuming `Task` is stored in `liveUpdateTask` so it can be cancelled
     /// via `stopLiveUpdates()` or `onDisappear()`. Cancelling the Task propagates
     /// into `PollingStream`'s inner task via `onTermination`, stopping all work.
-    func startLiveUpdates(interval: Duration = .seconds(10)) {
+    package func startLiveUpdates(interval: Duration = .seconds(10)) {
         liveUpdateTask?.cancel()
         liveUpdateTask = Task {
             let stream = PollingStream.make(interval: interval) {
@@ -83,7 +87,7 @@ final class HomeViewModel: ViewModelProtocol {
     }
 
     /// Cancels the live-update Task, which propagates into the underlying `PollingStream`.
-    func stopLiveUpdates() {
+    package func stopLiveUpdates() {
         liveUpdateTask?.cancel()
         liveUpdateTask = nil
     }
