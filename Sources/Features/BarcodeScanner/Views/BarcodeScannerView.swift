@@ -207,7 +207,7 @@ package struct BarcodeScannerView: View {
 
 #Preview {
     NavigationStack {
-        BarcodeScannerView(container: .preview)
+        BarcodeScannerView(dependencies: PreviewBarcodeScannerDependencies())
             .environment(AppCoordinator())
     }
 }

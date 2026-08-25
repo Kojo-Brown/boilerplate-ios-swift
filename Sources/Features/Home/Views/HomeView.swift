@@ -176,7 +176,7 @@ private struct HomeItemCard: View {
 
 #Preview {
     NavigationStack {
-        HomeView(container: .preview)
+        HomeView(dependencies: PreviewHomeDependencies())
             .environment(AppCoordinator())
     }
 }

@@ -186,7 +186,7 @@ package struct TextRecognitionView: View {
 
 #Preview {
     NavigationStack {
-        TextRecognitionView(container: .preview)
+        TextRecognitionView(dependencies: PreviewTextRecognitionDependencies())
             .environment(AppCoordinator())
     }
 }

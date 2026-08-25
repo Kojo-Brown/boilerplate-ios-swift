@@ -164,7 +164,7 @@ private extension Bundle {
 
 #Preview("Light mode") {
     NavigationStack {
-        SettingsView(container: .preview)
+        SettingsView(dependencies: PreviewSettingsDependencies())
             .environment(AppState())
     }
     .preferredColorScheme(.light)
@@ -172,7 +172,7 @@ private extension Bundle {
 
 #Preview("Dark mode") {
     NavigationStack {
-        SettingsView(container: .preview)
+        SettingsView(dependencies: PreviewSettingsDependencies())
             .environment(AppState())
     }
     .preferredColorScheme(.dark)

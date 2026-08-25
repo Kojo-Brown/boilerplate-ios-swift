@@ -15,8 +15,10 @@ package struct LoginView: View {
     /// does not announce its own result — see `biometricSection`.
     private let events: any EventPublishing
 
-    /// The three view models this screen owns come from the container, so the
-    /// view never names an auth service, an identity provider or a token store.
+    /// The three view models this screen owns are built by whoever supplies
+    /// `LoginDependencies` — the composition root in the app, this feature's own
+    /// double in a preview — so the view never names an auth service, an
+    /// identity provider or a token store.
     ///
     /// `State(wrappedValue:)` rather than a stored default: SwiftUI keeps the
     /// value produced by the first initialisation and discards the rest, so a
@@ -203,5 +205,5 @@ package struct LoginView: View {
 // MARK: - Preview
 
 #Preview {
-    LoginView(container: .preview)
+    LoginView(dependencies: PreviewLoginDependencies())
 }
