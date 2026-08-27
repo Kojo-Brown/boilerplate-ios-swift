@@ -697,7 +697,7 @@ is enforced by the script and not the compiler; `Networking` holds the sync stra
 `Features` compiling.
 
 ## Phase 9 — Offline-First & Data
-- [ ] Offline-first repository: SwiftData as source of truth with a network refresh policy
+- [x] Offline-first repository: SwiftData as source of truth with a network refresh policy — the other three policies ask the API and consult the store in a `catch`; this one starts at the store and lets a stamp *on the row* decide whether a request happens, which buys the thing `cacheFirst` documents itself as unable to do: a launch inside the window costs no request, because the freshness outlives the process that measured it. The strategy is a `struct` with no state as a result, where `cacheFirst` is a class around a lock. The stamp has to be wall-clock to survive a launch, so it can be moved — a row stamped in its own future is stale rather than fresh until the skew is corrected. `docs/solid.md` finding 3 was assigned here and is repaired: `save(user:)` upserts on both implementations, and `update(user:)` writes all five mapped fields rather than three, which is also why a refresh reads the row back by `id` instead of returning the response it just persisted (PR #39)
 - [ ] Background refresh via `BGTaskScheduler` with constraints and retry
 - [ ] Conflict resolution with a version field and a documented merge policy
 - [ ] SwiftData migration plan with versioned schemas and migration tests
