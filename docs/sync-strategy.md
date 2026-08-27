@@ -51,11 +51,20 @@ happens when the device cannot reach the host.
 | `remoteOnly` | API | none — it holds no store | fails |
 | `remoteFirst` | API | yes | serves the cached row |
 | `cacheFirst` | cache while fresh, else API | yes | serves the cached row, stale or not |
+| `offlineFirst` | the row while fresh, else API | yes, and it stamps the row | serves the row, stale or not |
 
-`remoteFirst` is the app's default because it is the conservative one: a read
-costs a request, so the screen is never quietly older than the call that
-produced it — and when it is, `SyncedUser.origin` says so and
-`SettingsView` renders "Showing a saved copy".
+Phase 9 item 1 added the fourth and made it the app's default; it has a page of
+its own, [`docs/offline-first.md`](./offline-first.md), because it is the only
+one that changes which side is *authoritative*. The three above are variations
+on "the API is the truth and the store is a copy of its last answer", and
+everything in the rest of this page is about them.
+
+`remoteFirst` was the default before that, because it is the conservative one: a
+read costs a request, so the screen is never quietly older than the call that
+produced it — and when it is, `SyncedUser.origin` says so and `SettingsView`
+renders "Showing a saved copy". That argument did not lose, it moved: it is now
+the argument for the refresh *gesture*, which is the policy `ProfileFeature`
+asks the factory for by name.
 
 Three things about that table are worth stating rather than leaving to be read
 out of the code.
@@ -128,6 +137,12 @@ store's contract, and the audit assigns it to Phase 9 item 1.
 `repeatedReadsDoNotAccumulateRows` pins it against the **real** SwiftData store
 rather than the double, because the double would have agreed either way.
 
+> Phase 9 item 1 took the decision the audit deferred: `save(user:)` upserts on
+> both implementations now, so `writeThrough(_:)` is one call rather than an
+> update-then-insert dance. What it still is, and is more of, is the place the
+> confirmation stamp is written — "written through" means "the server just said
+> so", and that is now recorded on the row.
+
 ### The freshness window is monotonic and in memory
 
 `cacheFirst` measures its window with `ContinuousClock` and holds the last
@@ -151,6 +166,12 @@ recorded that `withTimeout` shipped with no clock seam and that its suite
 therefore measures real durations; this is that lesson applied while the code was
 being written instead of afterwards.
 
+> Phase 9 item 1 persisted the stamp, on a new optional column, and paid the
+> price this section names: a wall-clock stamp is a stamp that can be moved, so
+> `offlineFirst` treats a row stamped in its own future as stale. Both windows
+> now exist side by side, which is deliberate —
+> [`docs/offline-first.md`](./offline-first.md) has the comparison.
+
 ## What propagates and what does not
 
 A write-through failure **propagates**. A store that cannot accept the row is a
@@ -170,9 +191,11 @@ Phase 8 item 4 adds — not hardcoded here, which is the shape of finding 7.
 - **It did not make SwiftData the source of truth.** That is Phase 9 item 1, and
   it is a different item because it changes which side is *authoritative*, not
   which side is asked first. Everything here treats the API as the truth and the
-  store as a copy.
+  store as a copy. ~~Still open.~~ Done — [`docs/offline-first.md`](./offline-first.md).
 - **It did not fix `save(user:)`.** Finding 3 stands, `saveDivergesBetweenImplementations`
   still passes, and `writeThrough(_:)` is the call-site answer in the meantime.
+  ~~Still open.~~ Done in Phase 9 item 1: both implementations upsert, and the
+  pin is inverted to `saveAgreesBetweenImplementations`.
 - **It did not reconcile the error types.** Finding 4 stands, and
   `SyncFailure.isOffline(_:)` knows about both vocabularies as a result. So does
   `SyncErrorMessage`, which exists only because a `catch` at a screen has no

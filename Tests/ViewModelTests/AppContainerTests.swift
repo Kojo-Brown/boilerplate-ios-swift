@@ -184,14 +184,19 @@ struct AppContainerTests {
         #expect(container.syncStrategy.policy == policy)
     }
 
-    /// `remoteFirst` is the app's default because it is the conservative one:
-    /// a read costs a request, so the screen is never quietly older than this
-    /// call unless it says so through `SyncOrigin`.
-    @Test("The default sync policy is remoteFirst")
-    func liveDefaultsToRemoteFirst() throws {
+    /// `offlineFirst` is the app's default as of Phase 9 item 1: the stored row
+    /// answers while it is fresh, and the stamp that decides "fresh" is on the
+    /// row, so a launch inside the window costs no request at all.
+    ///
+    /// It was `remoteFirst`, and that argument — a read that always costs a
+    /// request is never quietly stale — did not lose, it moved. It is now the
+    /// argument for the *refresh gesture*, which `ProfileFeature` still asks
+    /// the factory for by name.
+    @Test("The default sync policy is offlineFirst")
+    func liveDefaultsToOfflineFirst() throws {
         let store = try makeInMemoryUserStore()
         let container = AppContainer.live(userStore: store)
-        #expect(container.syncStrategy.policy == .remoteFirst)
+        #expect(container.syncStrategy.policy == .offlineFirst)
     }
 
     /// The Factory half. A view model that needs a policy of its own asks the

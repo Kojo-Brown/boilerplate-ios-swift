@@ -53,6 +53,90 @@ struct UserPersistenceTests {
 
     @Test func fetchCurrentUserReturnsNilWhenEmpty() throws {
         #expect(try service.fetchCurrentUser() == nil)
+        #expect(try service.fetchCurrentRecord() == nil)
+    }
+
+    // MARK: - The upsert (docs/solid.md finding 3)
+
+    /// `save(user:)` used to call `context.insert` unconditionally, so saving
+    /// the same user twice left two rows for one identity and
+    /// `fetchCurrentUser()` picked between them on `max(by:)`'s unspecified
+    /// tie-break. Phase 9 item 1 is the item the audit assigned the choice to,
+    /// and this store holds the signed-in user, so the duplicate is never a
+    /// record.
+    @Test func saveTwiceLeavesOneRow() throws {
+        let user = User(email: "once@test.com", name: "Once")
+        try service.save(user: user)
+        try service.save(user: user.with(name: .set("Twice")))
+
+        let rows = try container.mainContext.fetch(FetchDescriptor<UserEntity>())
+        #expect(rows.count == 1)
+        #expect(rows.first?.name == "Twice")
+    }
+
+    @Test func saveOfADifferentUserAddsARow() throws {
+        try service.save(user: User(email: "a@test.com", name: "A"))
+        try service.save(user: User(email: "b@test.com", name: "B"))
+        #expect(try container.mainContext.fetch(FetchDescriptor<UserEntity>()).count == 2)
+    }
+
+    // MARK: - The confirmation stamp
+
+    @Test func saveRecordsWhenTheApiConfirmedTheRow() throws {
+        let user = User(email: "stamped@test.com", name: "Stamped")
+        let confirmedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        try service.save(user: user, refreshedAt: confirmedAt)
+
+        // Bound before `#require` rather than nested inside it: the macro
+        // evaluates its argument in a context that does not propagate the
+        // fetch's `throws`, so `try #require(fetch())` does not compile and
+        // `try #require(try fetch())` reads worse than this does.
+        let fetched = try service.fetchCurrentRecord()
+        let record = try #require(fetched)
+        #expect(record.user.id == user.id)
+        #expect(record.refreshedAt == confirmedAt)
+    }
+
+    @Test func saveWithoutAStampLeavesTheRowUnconfirmed() throws {
+        try service.save(user: User(email: "plain@test.com", name: "Plain"))
+        #expect(try service.fetchCurrentRecord()?.refreshedAt == nil)
+    }
+
+    /// A row a caller wrote out of its own head is not a row the server
+    /// confirmed, so the stamp goes rather than outliving the value it
+    /// described.
+    @Test func anUnstampedSaveClearsAnEarlierStamp() throws {
+        let user = User(email: "cleared@test.com", name: "Cleared")
+        try service.save(user: user, refreshedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        try service.save(user: user)
+
+        #expect(try service.fetchCurrentRecord()?.refreshedAt == nil)
+    }
+
+    /// An update says what the row contains; it does not claim the server said
+    /// so.
+    @Test func updatePreservesTheStamp() throws {
+        let user = User(email: "kept@test.com", name: "Before")
+        let confirmedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        try service.save(user: user, refreshedAt: confirmedAt)
+
+        try service.update(user: user.with(name: .set("After")))
+
+        let fetched = try service.fetchCurrentRecord()
+        let record = try #require(fetched)
+        #expect(record.user.name == "After")
+        #expect(record.refreshedAt == confirmedAt)
+    }
+
+    @Test func fetchRecordFindsARowByIdentity() throws {
+        let wanted = User(email: "wanted@test.com", name: "Wanted")
+        try service.save(user: wanted)
+        try service.save(user: User(email: "other@test.com", name: "Other"))
+
+        #expect(try service.fetchRecord(userId: wanted.id)?.user == wanted)
+        #expect(try service.fetchRecord(userId: UUID()) == nil)
     }
 
     // MARK: - update

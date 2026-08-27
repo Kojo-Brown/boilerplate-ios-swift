@@ -141,27 +141,26 @@ package struct SyncErrorMessage: LocalizedError, Sendable, Equatable {
 
 extension UserPersistenceService {
 
-    /// Upserts `user`: update the stored row if it is there, insert it if it is
-    /// not.
+    /// Upserts `user` and records that the API confirmed it at `confirmedAt`.
     ///
-    /// This is spelled at the call site rather than by fixing `save(user:)`
-    /// because `docs/solid.md` finding 3 is about `save(user:)` and is assigned
-    /// to Phase 9 item 1 — `SwiftDataUserPersistenceService.save(user:)`
-    /// inserts, `MockUserPersistenceService.save(user:)` upserts, and choosing
-    /// between them is a change to the store's contract.
+    /// This used to be an update-then-insert dance, because `save(user:)` meant
+    /// "insert" in the store and "upsert" in its double — `docs/solid.md`
+    /// finding 3, which the audit assigned to Phase 9 item 1 on the grounds
+    /// that choosing between them is a change to the store's contract. That
+    /// item made the choice, so both implementations upsert and this is one
+    /// call. `repeatedReadsDoNotAccumulateRows` still pins the outcome against
+    /// the real SwiftData store rather than the double.
     ///
-    /// What this item must not do is *become* the caller that finding predicted:
-    /// "a save-on-every-launch caller reads back a stable value in tests and an
-    /// arbitrary one on device". Every write-through in this file goes through
-    /// here, so a second load of the same user leaves one row on both
-    /// implementations, and `repeatedReadsDoNotAccumulateRows` pins that
-    /// against the real SwiftData store rather than the double.
-    package func writeThrough(_ user: User) async throws {
-        do {
-            try await update(user: user)
-        } catch PersistenceError.userNotFound {
-            try await save(user: user)
-        }
+    /// Every caller of this method is the line immediately after a successful
+    /// API read or write, which is what makes stamping here honest rather than
+    /// convenient: "written through" *means* "the server just said so". The
+    /// default argument is the wall clock because that is the only clock a
+    /// persisted stamp can be read against on a later launch;
+    /// `OfflineFirstSyncStrategy` passes its injected one, and the two policies
+    /// that keep their window in memory take the default because nothing in
+    /// them reads the stamp back.
+    package func writeThrough(_ user: User, confirmedAt: Date = Date()) async throws {
+        try await save(user: user, refreshedAt: confirmedAt)
     }
 
     /// The cached user, or `nil` when there is none *or* the store failed.

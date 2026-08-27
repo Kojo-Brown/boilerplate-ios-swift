@@ -203,10 +203,26 @@ extension AppContainer {
     /// side effect of a default argument is finding 1 wearing a different hat —
     /// so `BoilerplateApp` builds the `ModelContainer` and hands the store in,
     /// and a test hands in one backed by `makeInMemoryContainer()`.
+    ///
+    /// The default policy is `offlineFirst` as of Phase 9 item 1.
+    ///
+    /// It was `remoteFirst`, chosen as the conservative default on the grounds
+    /// that a read which always costs a request is never quietly stale. That
+    /// argument survives, and it is now the argument for the *refresh gesture*
+    /// rather than for the app's standing policy: `ProfileFeature` still asks
+    /// the factory for `remoteFirst` when the reader pulls to refresh, which is
+    /// the whole reason the factory is a seam.
+    ///
+    /// What changed is what a launch costs. Under `remoteFirst` every profile
+    /// read on a device with no connection is a failure the store then papers
+    /// over; under `offlineFirst` it is an answer, and the request only happens
+    /// when the stored row has actually aged past the window. A boilerplate
+    /// whose Phase 9 is titled "Offline-First" should ship with the app wired
+    /// that way rather than with the policy present and unreachable.
     static func live(
         baseURL: URL = AppContainer.defaultBaseURL,
         userStore: any UserPersistenceService,
-        syncPolicy: SyncPolicy = .remoteFirst
+        syncPolicy: SyncPolicy = .offlineFirst
     ) -> AppContainer {
         let keychain = KeychainWrapper()
         let tokenStore = TokenStore(keychain: keychain)
