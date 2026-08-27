@@ -471,7 +471,10 @@ struct OfflineFirstSyncStrategyStoreTests {
         let synced = try await strategy.loadCurrentUser()
 
         #expect(synced.user == repository.user)
-        let stored = try #require(store.fetchRecord(userId: repository.user.id))
+        // Bound before `#require`: the macro evaluates its argument in a
+        // context that does not propagate the fetch's `throws`.
+        let fetched = try store.fetchRecord(userId: repository.user.id)
+        let stored = try #require(fetched)
         #expect(stored.user == repository.user)
     }
 

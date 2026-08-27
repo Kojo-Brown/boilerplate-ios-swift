@@ -88,7 +88,12 @@ struct UserPersistenceTests {
 
         try service.save(user: user, refreshedAt: confirmedAt)
 
-        let record = try #require(service.fetchCurrentRecord())
+        // Bound before `#require` rather than nested inside it: the macro
+        // evaluates its argument in a context that does not propagate the
+        // fetch's `throws`, so `try #require(fetch())` does not compile and
+        // `try #require(try fetch())` reads worse than this does.
+        let fetched = try service.fetchCurrentRecord()
+        let record = try #require(fetched)
         #expect(record.user.id == user.id)
         #expect(record.refreshedAt == confirmedAt)
     }
@@ -119,7 +124,8 @@ struct UserPersistenceTests {
 
         try service.update(user: user.with(name: .set("After")))
 
-        let record = try #require(service.fetchCurrentRecord())
+        let fetched = try service.fetchCurrentRecord()
+        let record = try #require(fetched)
         #expect(record.user.name == "After")
         #expect(record.refreshedAt == confirmedAt)
     }
