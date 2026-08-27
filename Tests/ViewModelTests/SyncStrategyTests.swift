@@ -7,7 +7,13 @@ import os
 @testable import Features
 @testable import Networking
 
-// MARK: - Doubles local to this suite
+// MARK: - Doubles shared with OfflineFirstSyncStrategyTests
+//
+// These three were `private` while this was the only file testing a sync
+// policy. Phase 9 item 1 added a fourth strategy in a file of its own — the
+// suites together would put this one past the 500-line ceiling `--strict`
+// enforces — and a second copy of a scripted repository is how two suites start
+// disagreeing about what the double does.
 
 /// A repository whose answer and whose failure are both set by the test.
 ///
@@ -19,7 +25,7 @@ import os
 /// It is nonisolated, like `LiveUserRepository` and unlike `MockUserRepository`
 /// — finding 5's recommendation, applied to a double written after the finding
 /// rather than before it. State is in a lock for the same reason.
-private final class ScriptedUserRepository: UserRepository {
+final class ScriptedUserRepository: UserRepository {
 
     private struct State: Sendable {
         var user = User(email: "sync@example.invalid", name: "Sync User")
@@ -82,7 +88,7 @@ private final class ScriptedUserRepository: UserRepository {
 /// freshness window can be tested without a `Task.sleep` — Phase 7 recorded
 /// that `withTimeout` shipped without that seam and that its suite pays for it
 /// in real seconds.
-private struct FakeMonotonicClock: Sendable {
+struct FakeMonotonicClock: Sendable {
 
     private let instant = OSAllocatedUnfairLock<ContinuousClock.Instant>(
         initialState: ContinuousClock.now
@@ -99,7 +105,7 @@ private struct FakeMonotonicClock: Sendable {
     }
 }
 
-private let offlineFailure = APIError.networkUnavailable(URLError(.notConnectedToInternet))
+let offlineFailure = APIError.networkUnavailable(URLError(.notConnectedToInternet))
 
 // MARK: - Classifying a failure
 
@@ -244,11 +250,13 @@ struct RemoteFirstSyncStrategyTests {
     }
 
     /// `docs/solid.md` finding 3 predicted the caller that would expose it: a
-    /// save on every launch leaves two rows in the real store and one entry in
+    /// save on every launch left two rows in the real store and one entry in
     /// the double, because `SwiftDataUserPersistenceService.save(user:)`
-    /// inserts. This item is that caller, so it goes through
-    /// `writeThrough(_:)` — and this runs against the SwiftData store rather
-    /// than the double, because the double would agree either way.
+    /// inserted. Phase 8 item 3 avoided it at the call site with
+    /// `writeThrough(_:)`; Phase 9 item 1 repaired the store, so both spellings
+    /// now upsert. This still runs against the SwiftData store rather than the
+    /// double, because the double would agree either way — which is exactly how
+    /// the bug survived being tested in the first place.
     @Test("Repeated reads do not accumulate rows in the SwiftData store")
     func repeatedReadsDoNotAccumulateRows() async throws {
         let modelContainer = try PersistenceController.makeInMemoryContainer()

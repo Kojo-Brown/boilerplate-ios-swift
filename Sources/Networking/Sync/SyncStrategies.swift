@@ -2,6 +2,12 @@ import Core
 import Foundation
 import os
 
+// The three policies that treat the API as the source of truth and the store as
+// a copy of its last answer. The fourth, which inverts that, is
+// `OfflineFirstSyncStrategy.swift` — it is a file of its own because it is the
+// only one whose read starts at the store, and reading it beside these three is
+// the point of the split rather than a casualty of it.
+
 // MARK: - Remote only
 
 /// The API answers every read and nothing is cached.
@@ -36,13 +42,17 @@ package struct RemoteOnlySyncStrategy: SyncStrategy {
 /// The API is the source of truth; the local store is a copy of the last
 /// successful answer, read only when the device cannot reach the host.
 ///
-/// This is the app's default (`AppContainer.live(syncPolicy:)`), and it is the
-/// conservative one: a read costs a request every time, so the screen is never
-/// showing something older than this call unless it says so through
-/// `SyncOrigin.localCache`. Phase 9 item 1 inverts it — SwiftData becomes the
-/// source of truth with a refresh policy over the top — and that is a different
-/// item precisely because it changes which side is authoritative rather than
-/// which side is asked first.
+/// This is the conservative policy: a read costs a request every time, so the
+/// screen is never showing something older than this call unless it says so
+/// through `SyncOrigin.localCache`. It was the app's default until Phase 9 item
+/// 1, which inverted the relationship — `OfflineFirstSyncStrategy` makes
+/// SwiftData authoritative and puts a refresh policy over the top — and took
+/// the default with it.
+///
+/// It keeps a caller either way, and a load-bearing one: `ProfileFeature`'s
+/// pull-to-refresh asks the factory for exactly this policy, because a refresh
+/// gesture answered out of the store is a broken gesture whatever the app's
+/// standing policy is.
 package struct RemoteFirstSyncStrategy: SyncStrategy {
     package var policy: SyncPolicy { .remoteFirst }
 
@@ -87,17 +97,17 @@ package struct RemoteFirstSyncStrategy: SyncStrategy {
 /// the API is asked and the answer is written through.
 ///
 /// The freshness window is measured on a monotonic clock and held in memory for
-/// the life of the process, not persisted beside the row. Two reasons. A stored
-/// "fetched at" column is a schema change, and versioned schemas plus migration
-/// tests are Phase 9 item 4 — adding a column here would land an unversioned
-/// migration in an item about a design pattern. And `ContinuousClock` does not
-/// move when the wall clock does, so a device that crosses a timezone or syncs
-/// its clock backwards does not get a cache that is suddenly fresh for an hour.
+/// the life of the process, not persisted beside the row, and `ContinuousClock`
+/// does not move when the wall clock does — so a device that crosses a timezone
+/// or syncs its clock backwards does not get a cache that is suddenly fresh for
+/// an hour.
 ///
 /// What it costs is stated plainly: a cold launch always goes to the network,
 /// because nothing in memory says when the cached row was fetched. That is the
-/// safe direction to be wrong in, and Phase 9 item 1 is where a persisted
-/// timestamp belongs.
+/// safe direction to be wrong in. Phase 9 item 1 is where the persisted stamp
+/// went, and `OfflineFirstSyncStrategy` pays the other price for it — a
+/// wall-clock stamp is a stamp that can be moved, so it has to treat a row
+/// stamped in the future as stale.
 ///
 /// `now` is injected so the window is testable without sleeping. Phase 7 noted
 /// that `withTimeout` shipped with no clock seam and that its suite therefore

@@ -12,12 +12,13 @@ test double through the same script and assert they disagree. The second kind fa
 finding is **fixed**, which is the point: a repair cannot quietly leave this page describing
 a problem that is gone.
 
-Findings 1 and 2 are **fixed** as of Phase 8 item 2, finding 6 as of Phase 8 item 3, and
-finding 7 as of Phase 8 item 4. Their sections have been rewritten to say what replaced them
-rather than left describing a problem that is gone — see
+Findings 1 and 2 are **fixed** as of Phase 8 item 2, finding 6 as of Phase 8 item 3, finding
+7 as of Phase 8 item 4, and finding 3 as of Phase 9 item 1. Their sections have been
+rewritten to say what replaced them rather than left describing a problem that is gone — see
 [`docs/dependency-injection.md`](./dependency-injection.md),
-[`docs/sync-strategy.md`](./sync-strategy.md) and
-[`docs/decorators.md`](./decorators.md) for the three designs. Findings 3, 4, 5 and 8 still
+[`docs/sync-strategy.md`](./sync-strategy.md),
+[`docs/decorators.md`](./decorators.md) and
+[`docs/offline-first.md`](./offline-first.md) for the four designs. Findings 4, 5 and 8 still
 stand, and each names the item that is its fix — except finding 4, which named item 4 and no
 longer does: that item is done and deliberately did not take it on, for a reason recorded in
 its section below.
@@ -42,11 +43,11 @@ camera, identity providers. Twelve types carry that role, and the audit is the w
 | Keychain | `KeychainStoring` | `KeychainWrapper` | `InMemoryKeychain` | `AppContainer.live()` |
 | Token state | `TokenStoring` | `TokenStore` | `InMemoryTokenStore` | `AppContainer.live()` |
 | Camera session | **none — a concrete `class`** | `CameraService` | — | `AppContainer.makeCameraService` |
-| Read policy | `SyncStrategy` | `RemoteOnly` / `RemoteFirst` / `CacheFirst` | `MockSyncStrategy` | `AppContainer.live()` |
+| Read policy | `SyncStrategy` | `RemoteOnly` / `RemoteFirst` / `CacheFirst` / `OfflineFirst` | `MockSyncStrategy` | `AppContainer.live()` |
 | Policy resolution | `SyncStrategyFactory` | `LiveSyncStrategyFactory` | `MockSyncStrategyFactory` | `AppContainer.live()` |
 
 Fourteen of the fifteen now get the shape right: a `Sendable` protocol, one live conformer
-(three, for `SyncStrategy` — that is the Strategy pattern rather than a divergence), a
+(four, for `SyncStrategy` — that is the Strategy pattern rather than a divergence), a
 hand-written double, and — since Phase 7 — a double whose mutable state lives inside a lock
 rather than under `@unchecked Sendable`. The fifteenth, `CameraService`, is unabstracted on
 purpose; finding 2 below says why.
@@ -159,7 +160,12 @@ Two divergences are live today.
 
 ### Finding 3 — `save(user:)` means different things in the store and in its double
 
-`SwiftDataUserPersistenceService.save(user:)` inserts:
+> **Repaired in Phase 9 item 1.** Both implementations upsert. The reasoning and
+> the new pin are at the end of this section; the description below is kept in
+> the past tense because it is what the audit found and what the repair had to
+> answer.
+
+`SwiftDataUserPersistenceService.save(user:)` inserted:
 
 ```swift
 context.insert(user.toEntity())
@@ -187,8 +193,24 @@ probably what a single-signed-in-user store wants, but making it so is a change 
 store, not to the double, and it belongs with the offline-first item in Phase 9 that will
 give this store an actual caller.
 
-**Pin:** `saveDivergesBetweenImplementations` asserts two rows against one entry. It fails
-the moment either side is changed to agree with the other.
+**The repair (Phase 9 item 1).** The upsert won, for the reason the audit guessed it would
+and one it could not have: the store holds the signed-in user, so a second row for one `id`
+is a duplicate rather than a record — and `OfflineFirstSyncStrategy` *answers reads from
+the row*, so the arbitrary tie-break the finding described stopped being a value read back
+and became the value on screen. `UserEntity.id` still carries no `@Attribute(.unique)`,
+because the constraint traps on an in-memory store and that is every store the tests and
+previews run on; uniqueness is enforced by the write instead.
+
+`update(user:)` was repaired in the same change and for the same reason. It assigned
+`name`, `avatarURL` and `updatedAt` and left `email` and `createdAt` on whatever the row
+already held — survivable while the API could correct the copy on the next read, and not
+survivable once the row *is* the answer. It now writes every mapped field.
+
+**Pin:** `saveAgreesBetweenImplementations` asserts one row against one entry, and
+`UserPersistenceTests.saveTwiceLeavesOneRow` and `updatePreservesTheStamp` cover the store
+directly. The suite's rule still holds in the other direction: a differential test fails
+when the divergence it describes is repaired, which is what made this page and the code
+change together.
 
 ### Finding 4 — the two `UserRepository` implementations throw disjoint error types
 
@@ -514,7 +536,7 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 | 1 — defaults are the composition root | DIP | **fixed** — Phase 8 item 2, `AppContainer` |
 | 2 — `TokenStore` unabstracted | DIP | **fixed** — Phase 8 item 2, `TokenStoring` |
 | 2 — `CameraService` unabstracted | DIP | **declined** — vended as a factory, reasons above |
-| 3 — `save` diverges from its double | LSP | Phase 9 item 1, offline-first repository |
+| 3 — `save` diverges from its double | LSP | **fixed** — Phase 9 item 1, both upsert |
 | 4 — disjoint error types | LSP | no item — needs an error type, not a decorator (above) |
 | 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor |
 | 6 — the layer has no callers | SRP | **fixed** — Phase 8 item 3, `SyncStrategy` |

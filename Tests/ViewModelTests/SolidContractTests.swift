@@ -112,11 +112,16 @@ struct SolidSurfaceTests {
             store: store,
             maxAge: .seconds(60)
         )
+        let offlineFirst: any SyncStrategy = OfflineFirstSyncStrategy(
+            repository: repository,
+            store: store,
+            maxAge: .seconds(60)
+        )
 
         let bound: [Any] = [
             client, tokenStore, repository, auth, exchange, apple,
             google, biometrics, recognizer, scanner, keychain,
-            syncFactory, remoteOnly, remoteFirst, cacheFirst,
+            syncFactory, remoteOnly, remoteFirst, cacheFirst, offlineFirst,
         ]
 
         let audited = [
@@ -135,9 +140,10 @@ struct SolidSurfaceTests {
             audit(RemoteOnlySyncStrategy.self),
             audit(RemoteFirstSyncStrategy.self),
             audit(CacheFirstSyncStrategy.self),
+            audit(OfflineFirstSyncStrategy.self),
         ]
 
-        expectAudit(audited, count: 15)
+        expectAudit(audited, count: 16)
         #expect(bound.count == audited.count)
     }
 
@@ -247,7 +253,7 @@ struct SolidSurfaceTests {
             "TelemetryUserRepository",
             "SwiftDataUserPersistenceService",
             "LiveSyncStrategyFactory",
-            "RemoteFirstSyncStrategy",
+            "OfflineFirstSyncStrategy",
             "LiveAuthService",
             "GoogleSignInService",
             "LiveSocialAuthExchangeService",
@@ -342,14 +348,26 @@ struct SolidSubstitutabilityTests {
         #expect(name == "SwiftDataUserPersistenceService")
     }
 
-    /// Finding 3: `save(user:)` inserts in the store and upserts in the double.
+    /// Finding 3, **repaired**, and therefore the one row of this suite that
+    /// asserts agreement rather than divergence.
     ///
-    /// `UserEntity.id` carries no `@Attribute(.unique)` — see the comment on the
-    /// model for why that is the right call — so nothing collapses the second
-    /// row. The double keys a dictionary on `user.id`, so nothing preserves it.
-    /// Two rows against one entry is the whole finding.
-    @Test("save() is an insert in the store and an upsert in its double")
-    func saveDivergesBetweenImplementations() throws {
+    /// The suite's rule is that a differential test fails when the divergence
+    /// it describes is repaired, so that the fix and the edit to
+    /// `docs/solid.md` land together. This is that landing. `save(user:)`
+    /// inserted in the store and upserted in the double, and the audit declined
+    /// to say which was right, assigning the decision to "the offline-first
+    /// item in Phase 9 that will give this store an actual caller". That item
+    /// chose the upsert: the store holds the signed-in user, so a second row
+    /// for one `id` is a duplicate rather than a record — and now that a read
+    /// is *answered* from the row, the arbitrary tie-break the finding
+    /// described would decide what the app displays.
+    ///
+    /// `UserEntity.id` still carries no `@Attribute(.unique)`, for the reason
+    /// the model's own comment gives: the constraint traps on an in-memory
+    /// store, which is every store these tests run on. Uniqueness is enforced
+    /// by the write instead, which is what this asserts.
+    @Test("save() upserts in the store and in its double alike")
+    func saveAgreesBetweenImplementations() throws {
         let user = User(email: "duplicate@example.invalid", name: "Duplicate")
 
         try store.save(user: user)
@@ -360,7 +378,7 @@ struct SolidSubstitutabilityTests {
         try double.save(user: user)
         try double.save(user: user)
 
-        #expect(rows.count == 2)
+        #expect(rows.count == 1)
         #expect(double.storage.count == 1)
     }
 

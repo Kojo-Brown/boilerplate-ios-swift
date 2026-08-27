@@ -22,7 +22,12 @@ package enum SyncPolicy: String, Sendable, Equatable, CaseIterable {
     /// the device is offline.
     case remoteFirst
     /// The cache answers while it is fresh; the API answers when it is not.
+    /// The window lives in memory, so the first read after launch is a request.
     case cacheFirst
+    /// The local store is the source of truth. It answers while its row is
+    /// fresh, the API refreshes the row when it is not, and the freshness is
+    /// recorded on the row — so a launch inside the window costs no request.
+    case offlineFirst
 }
 
 // MARK: - The factory
@@ -57,17 +62,31 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
     private let store: any UserPersistenceService
     private let cacheMaxAge: Duration
     private let now: @Sendable () -> ContinuousClock.Instant
+    private let date: @Sendable () -> Date
 
+    /// - Parameters:
+    ///   - cacheMaxAge: The freshness window, shared by `cacheFirst` and
+    ///     `offlineFirst`. One value rather than two because it answers one
+    ///     question — how stale a profile may be before it is worth a request —
+    ///     and the policies differ in where they record the answer, not in what
+    ///     it should be.
+    ///   - now: The monotonic clock `cacheFirst` measures its in-memory window
+    ///     with.
+    ///   - date: The wall clock `offlineFirst` stamps rows with. Two clocks
+    ///     because the two windows are stored in different places and only one
+    ///     of them has to mean anything to the next launch — see `StoredUser`.
     package init(
         repository: any UserRepository,
         store: any UserPersistenceService,
         cacheMaxAge: Duration = LiveSyncStrategyFactory.defaultCacheMaxAge,
-        now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+        now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
+        date: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = repository
         self.store = store
         self.cacheMaxAge = cacheMaxAge
         self.now = now
+        self.date = date
     }
 
     /// Each call builds a new strategy. `cacheFirst` carries a freshness window
@@ -91,6 +110,13 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
                 store: store,
                 maxAge: cacheMaxAge,
                 now: now
+            )
+        case .offlineFirst:
+            return OfflineFirstSyncStrategy(
+                repository: repository,
+                store: store,
+                maxAge: cacheMaxAge,
+                now: date
             )
         }
     }

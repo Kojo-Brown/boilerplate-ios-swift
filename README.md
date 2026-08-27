@@ -74,6 +74,10 @@ build its own previews from doubles it ships itself.
   layers, and which findings are still open
 - [docs/sync-strategy.md](./docs/sync-strategy.md) — the pluggable read policy
   over the API and the local store, and what it left for Phase 9
+- [docs/offline-first.md](./docs/offline-first.md) — the policy that inverts it:
+  SwiftData as the source of truth, a refresh window stamped on the row so a
+  launch can skip the request, and the two store bugs that only mattered once a
+  read was answered from disk
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on

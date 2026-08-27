@@ -12,10 +12,15 @@ import Networking
 ///
 /// It holds the factory as well as the strategy for the reason
 /// `docs/sync-strategy.md` gives: the container resolves one policy for the
-/// app, and a pull-to-refresh under `cacheFirst` would otherwise be answered by
-/// the very cache it is trying to get past. Asking the factory for
+/// app, and a pull-to-refresh under `cacheFirst` — or, since Phase 9 item 1,
+/// under the app's `offlineFirst` default — would otherwise be answered by the
+/// very stored row it is trying to get past. Asking the factory for
 /// `.remoteFirst` states "go to the server, but do not fail if the device is
 /// offline" without this type knowing which concrete strategy that is.
+///
+/// That the refresh writes through means it also restamps the row, so a gesture
+/// that got past the window leaves the window closed behind it rather than
+/// costing the next read a second request.
 ///
 /// A `struct`, and `Sendable` because `EffectHandling` is: `perform` runs off
 /// the main actor, which is what keeps the store's `await` a real hop rather
