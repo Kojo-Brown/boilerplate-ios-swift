@@ -78,6 +78,10 @@ build its own previews from doubles it ships itself.
   SwiftData as the source of truth, a refresh window stamped on the row so a
   launch can skip the request, and the two store bugs that only mattered once a
   read was answered from disk
+- [docs/background-refresh.md](./docs/background-refresh.md) — keeping that row
+  fresh while the app is not running: which `BGTaskRequest` can carry a
+  constraint and which cannot, why the failure count has to outlive the process,
+  and the three defects in the handler everyone writes first
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on
