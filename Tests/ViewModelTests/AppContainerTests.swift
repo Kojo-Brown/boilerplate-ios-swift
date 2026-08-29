@@ -297,6 +297,13 @@ struct AppContainerTests {
             biometricAuth: MockBiometricAuthService(),
             textRecognizer: MockTextRecognitionService(),
             barcodeScanner: MockBarcodeScannerService(),
+            backgroundRefresh: BackgroundRefreshCoordinator(
+                policy: BackgroundRefreshPolicy(identifier: AppContainer.backgroundRefreshIdentifier),
+                scheduler: MockBackgroundTaskScheduler(),
+                ledger: InMemoryBackgroundRefreshLedger(),
+                subsystem: AppContainer.logSubsystem,
+                refresh: {}
+            ),
             makeCameraService: { CameraService() }
         )
     }

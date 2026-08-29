@@ -137,6 +137,16 @@ struct AppContainer: Sendable {
     /// Vision-backed barcode and QR scanning.
     let barcodeScanner: any BarcodeScanning
 
+    /// Keeps the profile refreshed while the app is not running.
+    ///
+    /// Held by the root rather than built inside the `.backgroundTask` closure
+    /// for the reason the whole type exists: the closure runs in a process that
+    /// may have been launched for nothing else, so a coordinator constructed
+    /// there would be constructing the graph it needs from inside the handler —
+    /// finding 1 again, in the one place where getting it wrong is invisible
+    /// because nobody is watching the screen.
+    let backgroundRefresh: BackgroundRefreshCoordinator
+
     /// A factory, not an instance — and not a protocol either.
     ///
     /// `docs/solid.md` finding 2 lists `CameraService` as unabstracted and then
@@ -178,6 +188,47 @@ extension AppContainer {
     /// the rest of its wiring is — not inherit it from whatever bundle the code
     /// happens to be running in, which for the test bundle is not the app.
     static let logSubsystem = "com.example.boilerplate-ios-swift"
+
+    /// The identifier the profile refresh is registered and launched under.
+    ///
+    /// It is stated once, here, because it has to be the same string in three
+    /// places that cannot check each other: this container's
+    /// `BackgroundRefreshPolicy`, the `.backgroundTask(.appRefresh(_:))`
+    /// modifier in `BoilerplateApp`, and the app's
+    /// `BGTaskSchedulerPermittedIdentifiers` array. The first two are now one
+    /// constant. The third is an Info.plist entry no Swift declaration can
+    /// reach — and a mismatch there is not a returned error but a raised
+    /// exception on the first submit, so `docs/background-refresh.md` spells
+    /// the plist out rather than leaving it to be discovered.
+    static let backgroundRefreshIdentifier = "com.example.boilerplate-ios-swift.refresh-profile"
+}
+
+// MARK: - Why a cached answer is a failed background refresh
+
+/// What the background refresh throws when it ran but did not reach the API.
+///
+/// It exists because `RemoteFirstSyncStrategy` is deliberately forgiving: asked
+/// for the profile with the radio down, it answers out of the store and reports
+/// `SyncOrigin.localCache` rather than throwing, which is exactly right for a
+/// screen and exactly wrong for a ledger. A background launch that read its own
+/// cache has refreshed nothing; counting it as a success would clear the
+/// failure count, collapse the backoff, and leave a device that has been
+/// offline for a day waking up every fifteen minutes to re-read its own disk.
+///
+/// So the closure in `live()` inspects the origin and throws this. The
+/// alternative — asking for `.remoteOnly`, which never falls back — was
+/// rejected because it also never writes through, so a successful background
+/// fetch would leave the store exactly as stale as it found it.
+enum BackgroundRefreshFailure: LocalizedError, Equatable {
+    /// The read was answered from the local store, so nothing was refreshed.
+    case answeredFromCache
+
+    var errorDescription: String? {
+        switch self {
+        case .answeredFromCache:
+            "The background refresh was answered from the local store, so nothing was fetched."
+        }
+    }
 }
 
 /// `@MainActor` because `GoogleSignInService` is: it drives `GIDSignIn`, whose
@@ -254,6 +305,29 @@ extension AppContainer {
             store: userStore
         )
 
+        // Phase 9 item 2. The background leg asks the factory for
+        // `.remoteFirst` instead of reusing the strategy resolved below, for
+        // the same reason `ProfileFeature`'s pull-to-refresh does: under
+        // `offlineFirst` a read inside the freshness window is answered off the
+        // row and costs no request, which is the correct behaviour for a screen
+        // and a wasted process launch for a background task whose entire job is
+        // to make that row fresher.
+        let backgroundStrategy = syncStrategyFactory.makeStrategy(for: .remoteFirst)
+        let backgroundRefresh = BackgroundRefreshCoordinator(
+            policy: BackgroundRefreshPolicy(identifier: AppContainer.backgroundRefreshIdentifier),
+            scheduler: SystemBackgroundTaskScheduler(),
+            ledger: UserDefaultsBackgroundRefreshLedger(
+                taskIdentifier: AppContainer.backgroundRefreshIdentifier
+            ),
+            subsystem: AppContainer.logSubsystem,
+            refresh: {
+                let synced = try await backgroundStrategy.loadCurrentUser()
+                guard synced.origin == .remote else {
+                    throw BackgroundRefreshFailure.answeredFromCache
+                }
+            }
+        )
+
         return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
@@ -273,6 +347,7 @@ extension AppContainer {
             biometricAuth: LiveBiometricAuthService(),
             textRecognizer: LiveTextRecognitionService(),
             barcodeScanner: LiveBarcodeScannerService(),
+            backgroundRefresh: backgroundRefresh,
             makeCameraService: { CameraService() }
         )
     }
@@ -313,6 +388,20 @@ extension AppContainer {
         // buy a preview that announces sign-ins nothing receives.
         let eventBus = EventBus()
 
+        // A coordinator whose scheduler records rather than submits. Building a
+        // real one here would be the one line in this list that reaches out of
+        // the process: `BGTaskScheduler.submit` raises for an identifier that
+        // is not in the host's `BGTaskSchedulerPermittedIdentifiers`, and a
+        // preview host has no such array — so the double is what keeps
+        // `AppContainer.preview` constructible from a preview and a test at all.
+        let backgroundRefresh = BackgroundRefreshCoordinator(
+            policy: BackgroundRefreshPolicy(identifier: AppContainer.backgroundRefreshIdentifier),
+            scheduler: MockBackgroundTaskScheduler(),
+            ledger: InMemoryBackgroundRefreshLedger(),
+            subsystem: AppContainer.logSubsystem,
+            refresh: { _ = try await syncStrategy.loadCurrentUser() }
+        )
+
         return AppContainer(
             apiClient: MockAPIClient(),
             tokenStore: InMemoryTokenStore(),
@@ -329,6 +418,7 @@ extension AppContainer {
             biometricAuth: MockBiometricAuthService(),
             textRecognizer: MockTextRecognitionService(),
             barcodeScanner: MockBarcodeScannerService(),
+            backgroundRefresh: backgroundRefresh,
             makeCameraService: { CameraService() }
         )
     }
