@@ -309,6 +309,11 @@ package final class BackgroundRefreshCoordinator: Sendable {
         return chosen
     }
 
+    /// `earliestBeginDate` is a `Date` and the policy is in `Duration`, so one
+    /// of them has to convert. `Duration.seconds` is `Core`'s own — Phase 9
+    /// item 1 added it on `StoredUser.swift` for exactly this reason, a
+    /// persisted stamp forcing `Date` arithmetic on a window configured as a
+    /// `Duration` — and this is its second caller rather than a second copy.
     private func request(after delay: Duration) -> BackgroundRefreshRequest {
         BackgroundRefreshRequest(
             identifier: policy.identifier,
@@ -331,25 +336,5 @@ package final class BackgroundRefreshCoordinator: Sendable {
             let message = "Could not schedule the next refresh (\(reason)): \(error.localizedDescription)"
             logger.error("\(message, privacy: .public)")
         }
-    }
-}
-
-// MARK: - Duration as an interval
-
-/// `Date` arithmetic is in `TimeInterval` and the policy is in `Duration`, so
-/// one of them has to convert.
-///
-/// `Backoff` carries its own `fileprivate` copy of this. It is left there
-/// rather than hoisted into a shared extension, because widening it would be a
-/// change to a type this item does not otherwise touch, and the conversion is
-/// four lines whose correctness is local.
-private extension Duration {
-    /// This duration as a count of seconds.
-    ///
-    /// `components` is exact — `attoseconds` is an integer count — so the only
-    /// loss is `Double`'s significand, which on a six-hour cap is nanoseconds.
-    var seconds: TimeInterval {
-        let parts = components
-        return TimeInterval(parts.seconds) + TimeInterval(parts.attoseconds) * 1e-18
     }
 }

@@ -32,7 +32,10 @@ struct BackgroundRefreshSchedulingTests {
     /// asking it for its first term every launch.
     @Test(
         "Each recorded failure pushes the next launch one term further out",
-        arguments: [(1, 300.0), (2, 600.0), (3, 1200.0), (4, 2400.0), (5, 3600.0), (9, 3600.0)]
+        arguments: zip(
+            [1, 2, 3, 4, 5, 9],
+            [300.0, 600.0, 1200.0, 2400.0, 3600.0, 3600.0]
+        )
     )
     func failuresGrowTheDelay(failures: Int, expected: TimeInterval) throws {
         let scheduler = MockBackgroundTaskScheduler()
@@ -305,8 +308,8 @@ struct BackgroundRefreshHandleTests {
 
         await coordinator.handle()
 
-        #expect(scheduler.submitted.count == 2)
-        #expect(scheduler.submitted.allSatisfy { $0.kind == .processing(.networkOnly) })
+        let kinds = scheduler.submitted.map(\.kind)
+        #expect(kinds == [.processing(.networkOnly), .processing(.networkOnly)])
     }
 }
 
