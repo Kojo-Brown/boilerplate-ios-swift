@@ -61,6 +61,7 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
     private let repository: any UserRepository
     private let store: any UserPersistenceService
     private let cacheMaxAge: Duration
+    private let mergePolicy: any UserMergePolicy
     private let now: @Sendable () -> ContinuousClock.Instant
     private let date: @Sendable () -> Date
 
@@ -70,6 +71,11 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
     ///     question — how stale a profile may be before it is worth a request —
     ///     and the policies differ in where they record the answer, not in what
     ///     it should be.
+    ///   - mergePolicy: How `offlineFirst` orders a fetched copy of the user
+    ///     against the stored one. It is held here rather than constructed in
+    ///     the `switch` so that an app adopting this boilerplate replaces the
+    ///     rule at the composition root, which is the only place that is
+    ///     supposed to know which implementation of anything is live.
     ///   - now: The monotonic clock `cacheFirst` measures its in-memory window
     ///     with.
     ///   - date: The wall clock `offlineFirst` stamps rows with. Two clocks
@@ -79,12 +85,14 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
         repository: any UserRepository,
         store: any UserPersistenceService,
         cacheMaxAge: Duration = LiveSyncStrategyFactory.defaultCacheMaxAge,
+        mergePolicy: any UserMergePolicy = LastWriterWinsMergePolicy(),
         now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
         date: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = repository
         self.store = store
         self.cacheMaxAge = cacheMaxAge
+        self.mergePolicy = mergePolicy
         self.now = now
         self.date = date
     }
@@ -116,6 +124,7 @@ package struct LiveSyncStrategyFactory: SyncStrategyFactory {
                 repository: repository,
                 store: store,
                 maxAge: cacheMaxAge,
+                mergePolicy: mergePolicy,
                 now: date
             )
         }

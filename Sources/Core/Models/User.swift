@@ -22,13 +22,33 @@ package struct User: Identifiable, Codable, Sendable, Equatable {
     package let createdAt: Date?
     package let updatedAt: Date?
 
+    /// The server's revision number for this profile, or `nil` when the
+    /// response carried none.
+    ///
+    /// It is the field two copies of the same user are *ordered* by, which is
+    /// the one question `updatedAt` cannot answer reliably: `updatedAt` is a
+    /// wall-clock instant minted by whichever machine wrote it, so two writers
+    /// with clocks a second apart can produce a newer value that looks older.
+    /// A counter the server owns has no such failure mode — it increases per
+    /// accepted write, per row, and comparing two of them needs no clock at
+    /// all. `UserMergePolicy` is what does the comparing.
+    ///
+    /// Optional because the field is a claim about the server, not about this
+    /// app: an endpoint that does not report a revision decodes to `nil`, and
+    /// the merge policy falls back to `updatedAt` rather than pretending an
+    /// absent counter is version zero. Treating `nil` as zero would make an
+    /// unversioned response look older than every versioned row, so the first
+    /// deployment that stopped reporting the field would freeze the profile.
+    package let version: Int?
+
     package init(
         id: UUID = UUID(),
         email: String,
         name: String,
         avatarURL: URL? = nil,
         createdAt: Date? = nil,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        version: Int? = nil
     ) {
         self.id = id
         self.email = email
@@ -36,6 +56,7 @@ package struct User: Identifiable, Codable, Sendable, Equatable {
         self.avatarURL = avatarURL
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.version = version
     }
 
     package enum CodingKeys: String, CodingKey {
@@ -45,6 +66,7 @@ package struct User: Identifiable, Codable, Sendable, Equatable {
         case avatarURL = "avatar_url"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case version
     }
 }
 
@@ -68,7 +90,8 @@ extension User {
         name: FieldUpdate<String> = .unchanged,
         avatarURL: FieldUpdate<URL?> = .unchanged,
         createdAt: FieldUpdate<Date?> = .unchanged,
-        updatedAt: FieldUpdate<Date?> = .unchanged
+        updatedAt: FieldUpdate<Date?> = .unchanged,
+        version: FieldUpdate<Int?> = .unchanged
     ) -> User {
         User(
             id: id,
@@ -76,7 +99,8 @@ extension User {
             name: name.applied(to: self.name),
             avatarURL: avatarURL.applied(to: self.avatarURL),
             createdAt: createdAt.applied(to: self.createdAt),
-            updatedAt: updatedAt.applied(to: self.updatedAt)
+            updatedAt: updatedAt.applied(to: self.updatedAt),
+            version: version.applied(to: self.version)
         )
     }
 }

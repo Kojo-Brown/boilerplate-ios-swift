@@ -25,6 +25,12 @@ return try await persist(fetched)                    // → the row, read back
 
 Three properties follow, and none of them is available to the policy above it.
 
+> Phase 9 item 3 put one line in front of that `persist`. Inverting which side
+> is authoritative is what gives the row standing to *refuse* a response, and
+> until that item nothing exercised it: a fetched copy of an older write was
+> written over the row and then stamped as confirmed. The merge policy is what
+> now decides — [`docs/conflict-resolution.md`](./conflict-resolution.md).
+
 ### A cold launch inside the window makes no request
 
 `cacheFirst` holds its last-refresh instant in memory for the life of the
@@ -75,8 +81,11 @@ asked.
 
 **There is still no local-only write.** `updateProfile(name:)` goes to the API
 and fails if it cannot. An edit that never leaves the device needs an outbox and
-a merge rule, which are items 3 and 5 of this phase. Being offline-first about
-reads does not make a queued write free. Pin: `offlineWriteFails`.
+a merge rule; item 3 supplied the rule — see
+[`docs/conflict-resolution.md`](./conflict-resolution.md) — and the queue, with
+the client-generated keys that make a replayed request idempotent, is still
+ahead. Being offline-first about reads does not make a queued write free. Pin:
+`offlineWriteFails`.
 
 ## The stamp
 
@@ -163,6 +172,9 @@ one would land an unversioned migration inside an item about a design pattern.
 That reasoning holds and this item is where the same page said the stamp
 belonged. What is honest to say: this column is what item 4 will migrate
 *from*, and it is not itself covered by a `VersionedSchema`.
+
+> There are two such columns now. Phase 9 item 3 added `version` on the same
+> terms and for the same reason, so item 4 inherits both.
 
 ## Where the pins are
 

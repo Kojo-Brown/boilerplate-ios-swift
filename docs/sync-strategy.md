@@ -55,7 +55,10 @@ happens when the device cannot reach the host.
 
 Phase 9 item 1 added the fourth and made it the app's default; it has a page of
 its own, [`docs/offline-first.md`](./offline-first.md), because it is the only
-one that changes which side is *authoritative*. The three above are variations
+one that changes which side is *authoritative*. It is also the only one that
+takes a merge policy, for the same reason —
+[`docs/conflict-resolution.md`](./conflict-resolution.md) — since a copy has no
+standing to refuse the truth it is a copy of. The three above are variations
 on "the API is the truth and the store is a copy of its last answer", and
 everything in the rest of this page is about them.
 

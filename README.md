@@ -78,6 +78,10 @@ build its own previews from doubles it ships itself.
   SwiftData as the source of truth, a refresh window stamped on the row so a
   launch can skip the request, and the two store bugs that only mattered once a
   read was answered from disk
+- [docs/conflict-resolution.md](./docs/conflict-resolution.md) — what happens
+  when the row and the response disagree about the same profile: a
+  server-assigned revision, the nine decisions a merge can reach, and why a read
+  falls back to the row where a write fails
 - [docs/background-refresh.md](./docs/background-refresh.md) — keeping that row
   fresh while the app is not running: which `BGTaskRequest` can carry a
   constraint and which cannot, why the failure count has to outlive the process,
