@@ -347,7 +347,8 @@ struct OfflineFirstSyncStrategyTests {
     }
 
     /// There is no local-only write here: an edit that never leaves the device
-    /// needs an outbox and a merge rule, which are later items in this phase.
+    /// needs an outbox and a merge rule. Phase 9 item 3 supplied the rule — see
+    /// `ConflictResolutionTests` — and the queue is still ahead.
     @Test("An offline write fails rather than queueing")
     func offlineWriteFails() async {
         let clock = FakeWallClock()

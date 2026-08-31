@@ -155,10 +155,27 @@ struct RetryingUserRepositoryTests {
 @Suite("CachingUserRepository — a de-duplication window, not a policy")
 struct CachingUserRepositoryTests {
 
+    /// The clock is injected and never advanced, so "inside the window" is a
+    /// fact rather than a race.
+    ///
+    /// It used to take the real `ContinuousClock`, which made the test's
+    /// subject — three reads landing inside one five-second window — a claim
+    /// about how busy the CI machine was. It fails that way: run #79 on `main`
+    /// and run #80 on the conflict-resolution branch both lost it on a runner
+    /// where the whole suite took three to four times its usual wall time, in
+    /// company with the other two clock-sensitive tests in this package.
+    ///
+    /// Nothing is weakened by the change. The assertion is the same one, the
+    /// window is still the default `timeToLive` rather than a value chosen to
+    /// make the test pass, and a decorator that failed to de-duplicate would
+    /// still be caught: the seam this uses is the one
+    /// `aReadAfterTheWindowGoesBackToTheRepository` below already relies on to
+    /// prove the *expiry* half.
     @Test("Repeated reads inside the window make one request")
     func repeatedReadsInsideTheWindowMakeOneRequest() async throws {
+        let clock = ManualClock()
         let base = ScriptedRepository()
-        let repository = CachingUserRepository(base: base)
+        let repository = CachingUserRepository(base: base, now: clock.now)
 
         _ = try await repository.fetchCurrentUser()
         _ = try await repository.fetchCurrentUser()

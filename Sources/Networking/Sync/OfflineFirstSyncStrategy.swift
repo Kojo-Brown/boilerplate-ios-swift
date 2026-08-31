@@ -53,6 +53,16 @@ import Foundation
 /// failed read: quietly answering from the API would turn the one policy that
 /// promises a durable answer into `remoteOnly` at exactly the moment a reader
 /// would most want to be told.
+///
+/// ## The merge
+///
+/// Being the source of truth is also what gives this policy something to
+/// arbitrate. The other three write every response over the row because the
+/// response *is* the truth by definition; here the row is a claim of its own,
+/// so a fetched value and a stored one can disagree about which is newer and
+/// something has to say. `UserMergePolicy` says, on a server-assigned revision
+/// with a wall-clock fallback, and a rejected response leaves the row intact —
+/// see `docs/conflict-resolution.md` for the rules and what they cost.
 package struct OfflineFirstSyncStrategy: SyncStrategy {
 
     package var policy: SyncPolicy { .offlineFirst }
@@ -60,12 +70,18 @@ package struct OfflineFirstSyncStrategy: SyncStrategy {
     private let repository: any UserRepository
     private let store: any UserPersistenceService
     private let maxAge: Duration
+    private let mergePolicy: any UserMergePolicy
     private let now: @Sendable () -> Date
 
     /// - Parameters:
     ///   - repository: The network leg, asked only when the row is stale.
     ///   - store: The source of truth.
     ///   - maxAge: How old a confirmed row may be before a read refreshes it.
+    ///   - mergePolicy: Which of two copies of the user wins when a response
+    ///     and the row disagree. This policy is the only one that needs one:
+    ///     the other three treat the API as authoritative by definition, so
+    ///     there is no second claim for a rule to arbitrate between. See
+    ///     `docs/conflict-resolution.md`.
     ///   - now: The wall clock. Wall rather than monotonic because the stamp it
     ///     is compared against outlives the process — see `StoredUser` — and
     ///     injected because a freshness window tested with `Task.sleep` costs
@@ -74,11 +90,13 @@ package struct OfflineFirstSyncStrategy: SyncStrategy {
         repository: any UserRepository,
         store: any UserPersistenceService,
         maxAge: Duration,
+        mergePolicy: any UserMergePolicy = LastWriterWinsMergePolicy(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = repository
         self.store = store
         self.maxAge = maxAge
+        self.mergePolicy = mergePolicy
         self.now = now
     }
 
@@ -98,6 +116,24 @@ package struct OfflineFirstSyncStrategy: SyncStrategy {
 
         do {
             let fetched = try await repository.fetchCurrentUser()
+
+            // The one place in this package where two claims about the same
+            // profile meet. Until this item the response won unconditionally,
+            // which is correct exactly while the API is the source of truth —
+            // and this policy is the one that says it is not. A response the
+            // policy rejects is an *older* copy of the row, so writing it would
+            // roll the profile back and then stamp the rollback as confirmed.
+            //
+            // The row is re-persisted rather than merely returned: the exchange
+            // did happen, and re-stamping it is what stops a server that is
+            // behind from being re-asked on every read for as long as it stays
+            // behind. `persist` is an upsert of the value already on disk, so
+            // the write changes nothing but the stamp.
+            if let stored, !mergePolicy.decide(local: stored, remote: fetched).acceptsRemote {
+                let kept = try await persist(stored.user, at: instant)
+                return SyncedUser(user: kept, origin: .localCache)
+            }
+
             let persisted = try await persist(fetched, at: instant)
             return SyncedUser(user: persisted, origin: .remote)
         } catch {
@@ -118,8 +154,34 @@ package struct OfflineFirstSyncStrategy: SyncStrategy {
     /// A successful write is a fresher confirmation than any read could produce,
     /// so it restamps the row. The next read inside the window therefore serves
     /// what this call just saved rather than going back to ask about it.
+    ///
+    /// The response still goes through the merge policy, and a rejection here
+    /// is an error rather than the quiet fallback a read gets. The asymmetry is
+    /// the point: a read that rejects a response still has the row to hand
+    /// back, and a write does not — the caller asked for a change, and a server
+    /// answering with a revision older than the one on disk has not applied it
+    /// to the profile the caller was looking at. Returning the row would report
+    /// success for a write that did not happen; returning the response would
+    /// roll the profile back to satisfy a request that made it newer. Failing
+    /// says the only true thing.
+    ///
+    /// The row is looked up by the response's `id` rather than through
+    /// `fetchCurrentRecord()`, for the reason `persist(_:at:)` gives: "who is
+    /// current" is a question this store answers by `createdAt`, and it can
+    /// still answer it with a previous account's row.
     package func updateProfile(name: String) async throws -> User {
         let updated = try await repository.updateProfile(name: name)
+        let stored = try await store.fetchRecord(userId: updated.id)
+        let decision = mergePolicy.decide(local: stored, remote: updated)
+
+        guard decision.acceptsRemote else {
+            throw MergeConflictError(
+                decision: decision,
+                storedVersion: stored?.user.version,
+                fetchedVersion: updated.version
+            )
+        }
+
         return try await persist(updated, at: now())
     }
 

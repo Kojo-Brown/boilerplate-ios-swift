@@ -44,6 +44,25 @@ package final class UserEntity {
     /// item is meant to close, not one this comment pretends is closed.
     package var refreshedAt: Date?
 
+    /// The server revision this row holds, or `nil` when it was written from a
+    /// response that carried none.
+    ///
+    /// Domain data, unlike `refreshedAt`: it is a fact about the profile the
+    /// server accepted, not about this device's copy of it, which is why it
+    /// round-trips through `toDomainUser()` while the stamp does not. It has to
+    /// survive a launch for the same reason the stamp does — `UserMergePolicy`
+    /// compares an incoming response against the row, and a device that forgot
+    /// which revision it holds has nothing to compare.
+    ///
+    /// Optional for two reasons that happen to agree. The API's field is
+    /// optional (see `User.version`), and a new **optional** attribute is the
+    /// one schema change SwiftData's implicit lightweight migration performs
+    /// with no migration plan, filling existing rows with `nil` — which is
+    /// exactly what a row written before this item should say. That is the same
+    /// bargain `refreshedAt` struck, and it has the same caveat: Phase 9 item 4
+    /// is where these columns get a `VersionedSchema` to migrate from.
+    package var version: Int?
+
     package init(
         id: UUID,
         email: String,
@@ -51,7 +70,8 @@ package final class UserEntity {
         avatarURL: URL? = nil,
         createdAt: Date? = nil,
         updatedAt: Date? = nil,
-        refreshedAt: Date? = nil
+        refreshedAt: Date? = nil,
+        version: Int? = nil
     ) {
         self.id = id
         self.email = email
@@ -60,6 +80,7 @@ package final class UserEntity {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.refreshedAt = refreshedAt
+        self.version = version
     }
 
     package func toDomainUser() -> User {
@@ -69,7 +90,8 @@ package final class UserEntity {
             name: name,
             avatarURL: avatarURL,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            version: version
         )
     }
 
@@ -89,7 +111,10 @@ package final class UserEntity {
     /// disk, dropped on the floor, and then served back as the truth.
     ///
     /// `refreshedAt` is deliberately not touched here: this says what the row
-    /// contains, and the caller says when it was confirmed.
+    /// contains, and the caller says when it was confirmed. `version` *is*
+    /// touched, and has to be — it travels with the value, so a row that took
+    /// new content while keeping its old revision would claim to be a revision
+    /// it is not, and would then lose the next merge it should have won.
     package func overwrite(with user: User) {
         id = user.id
         email = user.email
@@ -97,6 +122,7 @@ package final class UserEntity {
         avatarURL = user.avatarURL
         createdAt = user.createdAt
         updatedAt = user.updatedAt
+        version = user.version
     }
 }
 
@@ -109,7 +135,8 @@ extension User {
             avatarURL: avatarURL,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            refreshedAt: refreshedAt
+            refreshedAt: refreshedAt,
+            version: version
         )
     }
 }
