@@ -127,7 +127,10 @@ struct UserMigrationTests {
                 let fresh = User(email: "new@example.test", name: "New", version: 7)
                 try service.save(user: fresh, refreshedAt: Date(timeIntervalSince1970: 1_720_000_000))
 
-                let stored = try #require(service.fetchRecord(userId: fresh.id))
+                // The inner `try` is not redundant: `#require` expands its
+                // argument into a closure, so the outer one does not cover the
+                // throwing call inside it.
+                let stored = try #require(try service.fetchRecord(userId: fresh.id))
                 #expect(stored.user.version == 7)
                 #expect(stored.refreshedAt != nil)
             }
