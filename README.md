@@ -86,6 +86,9 @@ build its own previews from doubles it ships itself.
   fresh while the app is not running: which `BGTaskRequest` can carry a
   constraint and which cannot, why the failure count has to outlive the process,
   and the three defects in the handler everyone writes first
+- [docs/migrations.md](./docs/migrations.md) — opening the store the *last*
+  build wrote: the versioned schemas, the migration plan over them, and why two
+  changes that already migrated themselves still needed writing down
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on
