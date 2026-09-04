@@ -64,9 +64,11 @@ package struct TelemetryUserRepository: UserRepositoryDecorator {
         return try await measure(.fetchCurrentUser) { try await base.fetchCurrentUser() }
     }
 
-    package func updateProfile(name: String) async throws -> User {
+    package func updateProfile(name: String, idempotencyKey: IdempotencyKey) async throws -> User {
         let base = self.base
-        return try await measure(.updateProfile) { try await base.updateProfile(name: name) }
+        return try await measure(.updateProfile) {
+            try await base.updateProfile(name: name, idempotencyKey: idempotencyKey)
+        }
     }
 
     package func deleteAccount() async throws {

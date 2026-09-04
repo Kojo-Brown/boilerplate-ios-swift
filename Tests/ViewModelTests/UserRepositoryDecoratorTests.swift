@@ -89,15 +89,40 @@ struct RetryingUserRepositoryTests {
         }
     }
 
-    /// The decision finding 7 said had nowhere to live. The server answered, so
-    /// it received the `PATCH`; whether it applied it before answering is not
-    /// something a 503 says, and sending it again could apply it twice.
-    @Test("A write is not retried when the server answered")
-    func writeIsNotRetriedWhenTheServerAnswered() async {
+    /// The decision finding 7 said had nowhere to live, as Phase 9 item 5 left
+    /// it. Before the key, this was `#expect(base.updateCount == 1)`: the server
+    /// answered, so it received the `PATCH`, and whether it applied it before
+    /// answering is not something a 503 says. That reasoning is unchanged and is
+    /// still what `writeIsNotRetriedWhenTheServerAnsweredAndThereIsNoKey` below
+    /// asserts. What changed is the request — it now carries a key the server
+    /// can collapse the duplicate on, so the ambiguity is no longer the
+    /// client's to resolve.
+    @Test("A keyed write is retried even when the server answered")
+    func keyedWriteIsRetriedWhenTheServerAnswered() async throws {
         let base = ScriptedRepository()
         base.updateFailures = [serverAnswered, serverAnswered]
         let log = SleepLog()
         let repository = RetryingUserRepository(base: base, sleep: log.sleep)
+
+        let user = try await repository.updateProfile(name: "Retried")
+
+        #expect(user.name == "Retried")
+        #expect(base.updateCount == 3)
+        #expect(log.delays.count == 2)
+    }
+
+    /// The old behaviour, still reachable and still under test: an API that
+    /// ignores `Idempotency-Key` gets the policy that assumes nothing.
+    @Test("A write is not retried when the server answered and there is no key")
+    func writeIsNotRetriedWhenTheServerAnsweredAndThereIsNoKey() async {
+        let base = ScriptedRepository()
+        base.updateFailures = [serverAnswered, serverAnswered]
+        let log = SleepLog()
+        let repository = RetryingUserRepository(
+            base: base,
+            writePolicy: RetryingUserRepository.defaultUnkeyedWritePolicy,
+            sleep: log.sleep
+        )
 
         await #expect(throws: APIError.self) {
             _ = try await repository.updateProfile(name: "Retried")
@@ -112,7 +137,11 @@ struct RetryingUserRepositoryTests {
         let base = ScriptedRepository()
         base.updateFailures = [neverDelivered]
         let log = SleepLog()
-        let repository = RetryingUserRepository(base: base, sleep: log.sleep)
+        let repository = RetryingUserRepository(
+            base: base,
+            writePolicy: RetryingUserRepository.defaultUnkeyedWritePolicy,
+            sleep: log.sleep
+        )
 
         let user = try await repository.updateProfile(name: "Retried")
 
@@ -121,19 +150,38 @@ struct RetryingUserRepositoryTests {
         #expect(log.delays.count == 1)
     }
 
-    /// The sharp edge of the same rule: a timeout means the connection existed,
-    /// so the request may have been delivered and the answer lost.
-    @Test("A write is not retried after a timeout, which proves nothing")
-    func writeIsNotRetriedOnATimeout() async {
+    /// The sharp edge of the unkeyed rule: a timeout means the connection
+    /// existed, so the request may have been delivered and the answer lost.
+    @Test("An unkeyed write is not retried after a timeout, which proves nothing")
+    func unkeyedWriteIsNotRetriedOnATimeout() async {
         let base = ScriptedRepository()
         base.updateFailures = [deliveryUnknown, deliveryUnknown]
-        let repository = RetryingUserRepository(base: base, sleep: SleepLog().sleep)
+        let repository = RetryingUserRepository(
+            base: base,
+            writePolicy: RetryingUserRepository.defaultUnkeyedWritePolicy,
+            sleep: SleepLog().sleep
+        )
 
         await #expect(throws: APIError.self) {
             _ = try await repository.updateProfile(name: "Retried")
         }
 
         #expect(base.updateCount == 1)
+    }
+
+    /// The other half of the same swap, and the reason the default moved: a
+    /// timeout is the canonical failure retrying exists to absorb, and the
+    /// unkeyed policy has to refuse it.
+    @Test("A keyed write is retried after a timeout")
+    func keyedWriteIsRetriedOnATimeout() async throws {
+        let base = ScriptedRepository()
+        base.updateFailures = [deliveryUnknown]
+        let repository = RetryingUserRepository(base: base, sleep: SleepLog().sleep)
+
+        let user = try await repository.updateProfile(name: "Retried")
+
+        #expect(user.name == "Retried")
+        #expect(base.updateCount == 2)
     }
 
     /// `DELETE` is idempotent by the method's own definition, so it takes the

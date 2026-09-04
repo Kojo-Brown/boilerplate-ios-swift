@@ -115,9 +115,15 @@ package struct CachingUserRepository: UserRepositoryDecorator {
         return cached.user
     }
 
-    package func updateProfile(name: String) async throws -> User {
+    /// The key is forwarded untouched. A decorator that re-minted here would
+    /// hand a fresh key to each of the retry loop's attempts — the memo it
+    /// invalidates is above the retry, so one call through this type can become
+    /// several through the one below it.
+    package func updateProfile(name: String, idempotencyKey: IdempotencyKey) async throws -> User {
         let base = self.base
-        return try await invalidatingCurrentUser { try await base.updateProfile(name: name) }
+        return try await invalidatingCurrentUser {
+            try await base.updateProfile(name: name, idempotencyKey: idempotencyKey)
+        }
     }
 
     package func deleteAccount() async throws {

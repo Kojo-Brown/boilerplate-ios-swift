@@ -40,6 +40,7 @@ final class ScriptedRepository: UserRepository {
         var fetchCount = 0
         var updateCount = 0
         var deleteCount = 0
+        var updateKeys: [IdempotencyKey] = []
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -77,6 +78,14 @@ final class ScriptedRepository: UserRepository {
     var updateCount: Int { state.withLock { $0.updateCount } }
     var deleteCount: Int { state.withLock { $0.deleteCount } }
 
+    /// The key on each `updateProfile` delivery, in order, failures included.
+    ///
+    /// The count says how many times the repository was called; this says
+    /// whether those calls were one edit or several, which is the only thing
+    /// that distinguishes a retry the server can collapse from a duplicate
+    /// write.
+    var updateKeys: [IdempotencyKey] { state.withLock { $0.updateKeys } }
+
     func fetchCurrentUser() async throws -> User {
         await beforeFetch()
         let outcome = state.withLock { current -> ScriptedOutcome<User> in
@@ -89,9 +98,10 @@ final class ScriptedRepository: UserRepository {
         return try ScriptedRepository.value(of: outcome)
     }
 
-    func updateProfile(name: String) async throws -> User {
+    func updateProfile(name: String, idempotencyKey: IdempotencyKey) async throws -> User {
         let outcome = state.withLock { current -> ScriptedOutcome<User> in
             current.updateCount += 1
+            current.updateKeys.append(idempotencyKey)
             if current.updateFailures.isEmpty {
                 current.user = current.user.with(name: .set(name))
                 return .success(current.user)

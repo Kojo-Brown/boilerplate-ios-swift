@@ -56,6 +56,7 @@ struct SendableConformanceTests {
             auditSendable(TokenRefreshRequest.self),
             auditSendable(HTTPMethod.self),
             auditSendable(APIEndpoint.self),
+            auditSendable(IdempotencyKey.self),
             auditSendable(EmptyResponse.self),
             auditSendable(APIError.self),
             auditSendable(LoginRequest.self),
@@ -89,7 +90,7 @@ struct SendableConformanceTests {
             // widened to every payload.
             auditSendable(CopyOnWriteBox<[Int]>.self),
         ]
-        expectAudit(audited, count: 35)
+        expectAudit(audited, count: 36)
     }
 
     /// Types that are `Sendable` only by inference — nothing in their

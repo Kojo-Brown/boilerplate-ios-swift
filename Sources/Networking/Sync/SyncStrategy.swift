@@ -61,10 +61,18 @@ package protocol SyncStrategy: Sendable {
     ///
     /// Every strategy sends the write to the API — there is no local-only
     /// policy here, because a profile edit that never leaves the device needs
-    /// somewhere to queue and a rule for reconciling it on the way back.
-    /// Phase 9 item 3 supplied the rule — `UserMergePolicy`, which
-    /// `offlineFirst` applies to the response of this very call — and left the
-    /// queue, which is the idempotent-outbox item.
+    /// somewhere to queue, a rule for reconciling it on the way back, and a way
+    /// to replay it without applying it twice. Phase 9 item 3 supplied the rule
+    /// (`UserMergePolicy`, which `offlineFirst` applies to the response of this
+    /// very call) and item 5 supplied the replay safety (`IdempotencyKey`,
+    /// minted per edit one layer down in `UserRepository`). The queue itself is
+    /// still ahead: a key in memory covers a retry inside this process, and an
+    /// edit that outlives the process needs the key written down beside it —
+    /// see `docs/idempotency.md`.
+    ///
+    /// The signature is unchanged by item 5 on purpose. A strategy chooses
+    /// *where* a write goes, not how many times it may be delivered, so the key
+    /// is minted below it rather than threaded through here.
     func updateProfile(name: String) async throws -> User
 }
 

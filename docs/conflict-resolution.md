@@ -168,8 +168,10 @@ from.
   this one.
 - **There is still no outbox.** An edit made offline still fails rather than
   queueing. This item supplied the merge rule that a queue would need on the way
-  back; the queue itself, and the client-generated keys that make a replayed
-  request idempotent, are the next item in this phase.
+  back, and item 5 supplied the client-generated key that keeps a replayed
+  request from applying twice — see [`docs/idempotency.md`](./idempotency.md).
+  What is left is the storage: a key lives in memory for one call, and a queued
+  edit needs it persisted beside the pending row.
 - **Nothing surfaces a conflict to the person.** `MergeConflictError` reaches a
   screen as a `SyncErrorMessage` like any other failure. "Someone else changed
   this — keep yours or take theirs" is a UI, and it needs the field-level merge

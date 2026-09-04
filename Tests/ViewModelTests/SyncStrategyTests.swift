@@ -66,7 +66,7 @@ final class ScriptedUserRepository: UserRepository {
         return snapshot.user
     }
 
-    func updateProfile(name: String) async throws -> User {
+    func updateProfile(name: String, idempotencyKey: IdempotencyKey) async throws -> User {
         let snapshot = state.withLock { current -> State in
             current.updateCount += 1
             current.requestedNames.append(name)
