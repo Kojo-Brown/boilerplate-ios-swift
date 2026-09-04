@@ -80,12 +80,15 @@ Pin: `storeFailureFailsTheRead`, which also asserts the repository was never
 asked.
 
 **There is still no local-only write.** `updateProfile(name:)` goes to the API
-and fails if it cannot. An edit that never leaves the device needs an outbox and
-a merge rule; item 3 supplied the rule — see
-[`docs/conflict-resolution.md`](./conflict-resolution.md) — and the queue, with
-the client-generated keys that make a replayed request idempotent, is still
-ahead. Being offline-first about reads does not make a queued write free. Pin:
-`offlineWriteFails`.
+and fails if it cannot. An edit that never leaves the device needs an outbox, a
+merge rule and a replay that cannot apply the edit twice; item 3 supplied the
+rule — see [`docs/conflict-resolution.md`](./conflict-resolution.md) — and item
+5 supplied the replay safety, the client-generated key — see
+[`docs/idempotency.md`](./idempotency.md). The queue itself is still ahead, and
+it is the part that needs storage: a key held in memory covers a retry inside
+this process, and an edit that outlives the process needs the key written down
+beside it. Being offline-first about reads does not make a queued write free.
+Pin: `offlineWriteFails`.
 
 ## The stamp
 

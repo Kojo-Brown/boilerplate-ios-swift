@@ -62,16 +62,15 @@ call costs, so there are two policies.
 | --- | --- | --- | --- |
 | `fetchCurrentUser` | `GET` | 3 | any transient failure, plus this type's own deadline |
 | `deleteAccount` | `DELETE` | 3 | same — `DELETE` is idempotent |
-| `updateProfile` | `PATCH` | 2 | only failures that prove the request was never delivered |
+| `updateProfile` | `PATCH` + key | 3 | same — the key is what makes it converge too |
 
-The third row is the decision finding 7 said had nowhere to live. A `PATCH` whose response
-was lost may have been applied: the request reached the server, the server acted, and the
-reply died on the way back. So the write policy retries only `URLError` codes that fail
-while the connection is being established — `.notConnectedToInternet`, `.cannotFindHost`,
+The third row is the decision finding 7 said had nowhere to live, and it has moved once
+since. A `PATCH` whose response was lost may have been applied: the request reached the
+server, the server acted, and the reply died on the way back. Until Phase 9 item 5 the only
+safe answer was to retry nothing but `URLError` codes that fail while the connection is
+still being established — `.notConnectedToInternet`, `.cannotFindHost`,
 `.cannotConnectToHost`, `.dnsLookupFailed` — where no byte of the request has been written
-to a socket.
-
-Deliberately outside that set, because none of them is evidence of anything:
+to a socket. Deliberately outside that set, because none of them is evidence of anything:
 
 - `.timedOut` and `.networkConnectionLost` — the connection existed.
 - `TimedOutError` from the per-attempt deadline — weaker still: the deadline is the client's
@@ -79,8 +78,17 @@ Deliberately outside that set, because none of them is evidence of anything:
 - `503`, `504`, `429` — the server answered, so it received the request. Whether it acted
   before answering is not something a status code says.
 
-Retrying through those safely needs a client-generated idempotency key the server can
-collapse a duplicate on, which is Phase 9 item 5 and not a decorator.
+Item 5 removed the question rather than answering it better. `updateProfile` now carries a
+client-generated `Idempotency-Key`, minted once per logical edit and passed unchanged to
+every attempt, so the server collapses a duplicate and the client no longer has to infer
+whether the write landed — see [`docs/idempotency.md`](./idempotency.md). That is what
+`defaultKeyedWritePolicy` spends, and it is a claim about the server:
+`defaultUnkeyedWritePolicy` is the classification above, kept intact and still under test,
+for an API that ignores the header.
+
+One duplicate stays outside both policies. `URLSessionAPIClient` re-sends a request once on
+a 401 to retry it with a refreshed token, which this decorator sees as a single call. The
+key covers it, because the re-send copies the original request's headers.
 
 One composition detail is worth stating because it is invisible until it bites:
 `Retry.isTransient` was written before anything called `withTimeout`, so it does not know

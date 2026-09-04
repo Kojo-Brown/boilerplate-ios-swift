@@ -89,6 +89,10 @@ build its own previews from doubles it ships itself.
 - [docs/migrations.md](./docs/migrations.md) — opening the store the *last*
   build wrote: the versioned schemas, the migration plan over them, and why two
   changes that already migrated themselves still needed writing down
+- [docs/idempotency.md](./docs/idempotency.md) — sending a write twice on
+  purpose: the client-generated key, where it is minted so that one edit is one
+  key and one key is every attempt, and the retry policy that widened because of
+  it
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on

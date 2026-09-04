@@ -20,18 +20,41 @@ package struct APIEndpoint: Sendable {
     package let body: Data?
     package let requiresAuth: Bool
 
+    /// The key identifying the logical request this endpoint is one delivery
+    /// of, sent as `Idempotency-Key`. `nil` for a request that needs none.
+    ///
+    /// It lives on the endpoint rather than being a parameter of `send` because
+    /// an endpoint is "one HTTP request, fully specified", and whether a repeat
+    /// of that request is safe is part of specifying it. Threading it beside
+    /// the endpoint instead would let the two be separated — an endpoint value
+    /// stored, passed on, and eventually sent without the key that made it
+    /// replayable.
+    package let idempotencyKey: IdempotencyKey?
+
+    /// - Parameter idempotencyKey: Must be `nil` for a `GET`. A safe method has
+    ///   nothing to de-duplicate, and a key on one is at best noise in the
+    ///   server's log and at worst a cache-key mismatch in a proxy that varies
+    ///   on request headers. The factory helpers make this unreachable — `get`
+    ///   does not accept a key — so reaching it means constructing the endpoint
+    ///   by hand and is a programmer error.
     package init(
         method: HTTPMethod,
         path: String,
         queryItems: [URLQueryItem] = [],
         body: Data? = nil,
-        requiresAuth: Bool = true
+        requiresAuth: Bool = true,
+        idempotencyKey: IdempotencyKey? = nil
     ) {
+        precondition(
+            idempotencyKey == nil || method != .get,
+            "A GET is safe and has no duplicate to collapse; \(path) was given an idempotency key"
+        )
         self.method = method
         self.path = path
         self.queryItems = queryItems
         self.body = body
         self.requiresAuth = requiresAuth
+        self.idempotencyKey = idempotencyKey
     }
 
     // MARK: - Factory helpers
@@ -48,13 +71,15 @@ package struct APIEndpoint: Sendable {
         _ path: String,
         body: Body,
         encoder: JSONEncoder = .apiEncoder,
-        requiresAuth: Bool = true
+        requiresAuth: Bool = true,
+        idempotencyKey: IdempotencyKey? = nil
     ) throws -> APIEndpoint {
         APIEndpoint(
             method: .post,
             path: path,
             body: try encoder.encode(body),
-            requiresAuth: requiresAuth
+            requiresAuth: requiresAuth,
+            idempotencyKey: idempotencyKey
         )
     }
 
@@ -62,13 +87,15 @@ package struct APIEndpoint: Sendable {
         _ path: String,
         body: Body,
         encoder: JSONEncoder = .apiEncoder,
-        requiresAuth: Bool = true
+        requiresAuth: Bool = true,
+        idempotencyKey: IdempotencyKey? = nil
     ) throws -> APIEndpoint {
         APIEndpoint(
             method: .put,
             path: path,
             body: try encoder.encode(body),
-            requiresAuth: requiresAuth
+            requiresAuth: requiresAuth,
+            idempotencyKey: idempotencyKey
         )
     }
 
@@ -76,21 +103,29 @@ package struct APIEndpoint: Sendable {
         _ path: String,
         body: Body,
         encoder: JSONEncoder = .apiEncoder,
-        requiresAuth: Bool = true
+        requiresAuth: Bool = true,
+        idempotencyKey: IdempotencyKey? = nil
     ) throws -> APIEndpoint {
         APIEndpoint(
             method: .patch,
             path: path,
             body: try encoder.encode(body),
-            requiresAuth: requiresAuth
+            requiresAuth: requiresAuth,
+            idempotencyKey: idempotencyKey
         )
     }
 
     package static func delete(
         _ path: String,
-        requiresAuth: Bool = true
+        requiresAuth: Bool = true,
+        idempotencyKey: IdempotencyKey? = nil
     ) -> APIEndpoint {
-        APIEndpoint(method: .delete, path: path, requiresAuth: requiresAuth)
+        APIEndpoint(
+            method: .delete,
+            path: path,
+            requiresAuth: requiresAuth,
+            idempotencyKey: idempotencyKey
+        )
     }
 }
 

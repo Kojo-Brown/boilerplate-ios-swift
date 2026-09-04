@@ -27,15 +27,27 @@ import Foundation
 ///
 /// `updateProfile` is a `PATCH`, and it is the interesting one. A `PATCH` whose
 /// response was lost may have been applied — the request reached the server,
-/// the server acted on it, and the reply died on the way back. Retrying it is
-/// safe here only because nothing distinguishes "applied twice" from "applied
-/// once" for a field assignment, and that is a fact about *this* endpoint, not
-/// about `PATCH`. So the write policy retries only failures that prove the
-/// request was **never delivered**: no connection to the internet, no route to
-/// the host, no DNS answer, no TCP connection. Every one of those fails before
-/// a byte of the request is written.
+/// the server acted on it, and the reply died on the way back. Which failures
+/// are worth another attempt therefore depends on whether the request carries
+/// something the server can recognise a repeat by, and since Phase 9 item 5 it
+/// does: `updateProfile` takes an ``IdempotencyKey``, minted once per logical
+/// edit in `UserRepository.updateProfile(name:)` and forwarded unchanged to
+/// every attempt this type makes.
 ///
-/// Deliberately outside that set, because none of them is evidence of anything:
+/// That is what ``defaultKeyedWritePolicy`` spends. With the key on the
+/// request, a timeout, a lost connection and a 503 stop being evidence the
+/// client has to interpret: whatever happened on the server the first time,
+/// the second request is answered from the record of the first rather than
+/// executed again. So the write takes the same classification as a read.
+///
+/// **This is a claim about the server, and it is the only one this package
+/// makes.** If the API ignores `Idempotency-Key`, the widened policy is a
+/// double-write waiting for a slow afternoon. ``defaultUnkeyedWritePolicy`` is
+/// kept for exactly that case and is a one-argument change at the composition
+/// root: it retries only failures that prove the request was **never
+/// delivered** — no connection to the internet, no route to the host, no DNS
+/// answer, no TCP connection, each of which fails before a byte is written to a
+/// socket — and refuses the rest, because none of them is evidence of anything:
 ///
 /// * `URLError(.timedOut)` and `.networkConnectionLost` — the connection
 ///   existed. The request may have been delivered and the answer lost.
@@ -46,8 +58,11 @@ import Foundation
 ///   Whether it acted on it before answering is not something the status code
 ///   says.
 ///
-/// A retry budget for those needs an idempotency key that lets the server
-/// collapse a duplicate, which is Phase 9 item 5 and not a decorator.
+/// One duplicate remains outside both policies and is worth knowing about:
+/// `URLSessionAPIClient` re-sends a request once on a 401 to retry it with a
+/// refreshed token, which this type sees as a single call. The key covers it —
+/// the refresh retry copies the original request, headers included — which is
+/// the one part of this mechanism that pays off even under the unkeyed policy.
 ///
 /// ## What the deadline does, and what it does not
 ///
@@ -79,11 +94,33 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
         isRetryable: RetryingUserRepository.isRetryableIdempotent
     )
 
-    /// Attempts for `updateProfile`. Two, not three: the only failures it
-    /// retries are ones that happened before the request left the device, and a
-    /// device that has no route to the host on two consecutive tries a backoff
-    /// apart is offline rather than unlucky.
-    package static let defaultNonIdempotentPolicy = Retry.Policy(
+    /// Attempts for `updateProfile` as this package sends it: with an
+    /// `Idempotency-Key` the server is expected to collapse a duplicate on.
+    ///
+    /// Identical to ``defaultIdempotentPolicy``, and that is the point rather
+    /// than an economy — a keyed write is, from the retry loop's side, exactly
+    /// as repeatable as a read. The two are separate constants because they
+    /// answer different questions: this one can be swapped for
+    /// ``defaultUnkeyedWritePolicy`` without touching how reads behave, and the
+    /// day they diverge nobody has to work out which callers meant which.
+    package static let defaultKeyedWritePolicy = Retry.Policy(
+        maxAttempts: 3,
+        isRetryable: RetryingUserRepository.isRetryableIdempotent
+    )
+
+    /// Attempts for `updateProfile` against an API that does **not** honour
+    /// `Idempotency-Key`.
+    ///
+    /// Two, not three: the only failures it retries are ones that happened
+    /// before the request left the device, and a device that has no route to the
+    /// host on two consecutive tries a backoff apart is offline rather than
+    /// unlucky.
+    ///
+    /// Nothing in this package selects it. It is here so that "our server
+    /// ignores the header" is a line in `AppContainer` rather than a rewrite of
+    /// this file, and so the safe classification stays under test — see
+    /// `IdempotencyTests`.
+    package static let defaultUnkeyedWritePolicy = Retry.Policy(
         maxAttempts: 2,
         isRetryable: RetryingUserRepository.isUndelivered
     )
@@ -99,7 +136,7 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
     package let base: any UserRepository
 
     private let idempotentPolicy: Retry.Policy
-    private let nonIdempotentPolicy: Retry.Policy
+    private let writePolicy: Retry.Policy
     private let attemptTimeout: Duration
     private let randomness: Backoff.UnitRandom
     private let sleep: Retry.Sleep
@@ -114,7 +151,7 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
     package init(
         base: any UserRepository,
         idempotentPolicy: Retry.Policy = RetryingUserRepository.defaultIdempotentPolicy,
-        nonIdempotentPolicy: Retry.Policy = RetryingUserRepository.defaultNonIdempotentPolicy,
+        writePolicy: Retry.Policy = RetryingUserRepository.defaultKeyedWritePolicy,
         attemptTimeout: Duration = RetryingUserRepository.defaultAttemptTimeout,
         randomness: @escaping Backoff.UnitRandom = Backoff.systemRandom,
         sleep: @escaping Retry.Sleep = Retry.taskSleep
@@ -122,7 +159,7 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
         precondition(attemptTimeout > .zero, "attemptTimeout must be positive, got \(attemptTimeout)")
         self.base = base
         self.idempotentPolicy = idempotentPolicy
-        self.nonIdempotentPolicy = nonIdempotentPolicy
+        self.writePolicy = writePolicy
         self.attemptTimeout = attemptTimeout
         self.randomness = randomness
         self.sleep = sleep
@@ -135,9 +172,14 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
         return try await run(idempotentPolicy) { try await base.fetchCurrentUser() }
     }
 
-    package func updateProfile(name: String) async throws -> User {
+    /// The key is captured, not re-derived: every attempt below sends the one
+    /// this call was handed. That is the entire reason the loop is allowed to
+    /// run more than once for a write.
+    package func updateProfile(name: String, idempotencyKey: IdempotencyKey) async throws -> User {
         let base = self.base
-        return try await run(nonIdempotentPolicy) { try await base.updateProfile(name: name) }
+        return try await run(writePolicy) {
+            try await base.updateProfile(name: name, idempotencyKey: idempotencyKey)
+        }
     }
 
     package func deleteAccount() async throws {
@@ -170,6 +212,10 @@ package struct RetryingUserRepository: UserRepositoryDecorator {
     }
 
     /// `true` only for failures that prove the request was never delivered.
+    ///
+    /// The classification behind ``defaultUnkeyedWritePolicy``: what a write
+    /// may retry when nothing on the request lets the server collapse a
+    /// duplicate.
     ///
     /// The direction of the default matters more here than the contents of the
     /// list: an unrecognised failure is not retried, so a `URLError` code added

@@ -4,8 +4,13 @@ import Foundation
 /// exponential delay between attempts.
 ///
 /// ```swift
-/// let user = try await Retry.run { attempt in
-///     try await api.send(GetUser(id: id), idempotencyKey: "\(requestID)-\(attempt)")
+/// // Minted once, outside the loop: every attempt is a delivery of the same
+/// // logical request and must carry the same key. Folding `attempt` into it —
+/// // which an earlier draft of this comment did — makes each attempt a
+/// // *different* request to the server and buys nothing at all.
+/// let key = IdempotencyKey()
+/// let user = try await Retry.run { _ in
+///     try await repository.updateProfile(name: name, idempotencyKey: key)
 /// }
 /// ```
 ///
@@ -49,11 +54,16 @@ import Foundation
 /// ## Retry does not make an operation idempotent
 ///
 /// A retried request that timed out may well have been received and applied —
-/// the response was lost, not the write. Nothing here can know that, so
-/// `operation` is handed the attempt number: use it to carry an idempotency key
-/// (the same one on every attempt of one logical request), or restrict the
-/// policy to reads. `Retry.isTransient` deliberately does not retry a 4xx, but
-/// a 503 on a `POST` is still a duplicate risk this type cannot resolve for you.
+/// the response was lost, not the write. Nothing here can know that, so a write
+/// under this loop needs either a policy restricted to failures that prove
+/// non-delivery, or a key the server can collapse a duplicate on. `Networking`
+/// does the second: `IdempotencyKey` is minted per logical edit and captured by
+/// the closure, so the loop repeats a *delivery* rather than producing a second
+/// request. `Retry.isTransient` deliberately does not retry a 4xx, but a 503 on
+/// an unkeyed `POST` is still a duplicate risk this type cannot resolve for you.
+///
+/// The attempt number handed to `operation` is for telling attempts apart in a
+/// log, not for building a key out of — see the example above.
 ///
 /// ## The operation runs in the caller's task
 ///

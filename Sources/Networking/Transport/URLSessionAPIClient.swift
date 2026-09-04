@@ -6,9 +6,23 @@ import Foundation
 /// Concrete `APIClient` backed by `URLSession`.
 ///
 /// - Attaches `Authorization: Bearer <token>` to every authenticated request.
+/// - Attaches `Idempotency-Key` when the endpoint carries one.
 /// - On a 401 response, calls `/auth/refresh` once via `TokenStore.refreshIfNeeded`,
 ///   then retries the original request with the new token.
 /// - Concurrent 401s coalesce to a single refresh via actor-isolated `TokenStore`.
+///
+/// ## The refresh retry is a second delivery, and it always was
+///
+/// The 401 path below re-sends the request. That is the one duplicate this type
+/// produces on its own, it is invisible to every retry policy layered above it —
+/// `RetryingUserRepository` sees one call — and a 401 arriving *after* the
+/// server acted is not exotic: an access token that expires between the request
+/// being authorised and the response being written produces exactly it.
+///
+/// Nothing here can make that safe. What it can do is not throw away the one
+/// thing that does: the retry copies the original `URLRequest` and replaces only
+/// the `Authorization` header, so an `Idempotency-Key` set on the first delivery
+/// is still on the second and the server can recognise the pair.
 package struct URLSessionAPIClient: APIClient {
     package let baseURL: URL
     private let session: URLSession
@@ -106,6 +120,9 @@ package struct URLSessionAPIClient: APIClient {
 
         if let body = endpoint.body {
             request.httpBody = body
+        }
+        if let key = endpoint.idempotencyKey {
+            request.setValue(key.rawValue, forHTTPHeaderField: IdempotencyKey.headerField)
         }
         if endpoint.requiresAuth {
             let token = try await tokenStore.currentToken()
