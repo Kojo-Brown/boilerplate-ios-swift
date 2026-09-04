@@ -24,7 +24,12 @@ import os
 /// The lock is `OSAllocatedUnfairLock` rather than `nonisolated(unsafe)`, like
 /// every other piece of shared state in this package: `startLoading()` runs on
 /// a `URLSession` delegate thread, so the race is real rather than theoretical.
-final class StubURLProtocol: URLProtocol {
+///
+/// Not `final`, unlike every other double here. `URLProtocol`'s entry points are
+/// `class func`s that a subclass overrides, and `static_over_final_class` reads
+/// a `class func` in a `final class` as one that should have been `static` —
+/// which these cannot be, because they override.
+class StubURLProtocol: URLProtocol {
 
     /// One scripted answer.
     struct Exchange: Sendable {
@@ -68,17 +73,25 @@ final class StubURLProtocol: URLProtocol {
         recordedRequests.map { $0.value(forHTTPHeaderField: header) }
     }
 
-    /// A session that routes everything through this stub.
+    /// The session that routes everything through this stub.
     ///
     /// Ephemeral, so nothing is written to a URL cache between tests, and the
     /// stub is installed on the configuration rather than through
     /// `URLProtocol.registerClass` so it cannot affect a session some other
     /// suite built.
-    static func makeSession() -> URLSession {
+    ///
+    /// One session for the whole suite rather than one per test. A `URLSession`
+    /// holds its own delegate queue and retains *itself* until it is
+    /// invalidated, and a `@Suite` struct has no teardown hook to invalidate one
+    /// in — so a per-test session is a per-test leak, in a bundle that runs its
+    /// suites in parallel on a three-core runner. Sharing is safe here for the
+    /// same reason the script can be static: the one suite that uses it is
+    /// `.serialized`, so no two of its tests are ever in flight together.
+    static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return URLSession(configuration: configuration)
-    }
+    }()
 
     // MARK: - URLProtocol
 
