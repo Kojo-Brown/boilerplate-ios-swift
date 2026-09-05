@@ -113,19 +113,20 @@ struct CursorPaginatorTests {
     /// request for the same cursor.
     @Test("A flick that appears a whole page of rows still makes one request")
     func concurrentPrefetchTriggersCollapseIntoOneRequest() async {
-        let gate = TaskGate()
         let source = ScriptedPageSource(
             [
                 .page(items: PagedItem.range(1...5), next: "c1"),
                 .page(items: PagedItem.range(6...10), next: nil),
             ],
-            gate: gate
+            parking: true
         )
         let sut = CursorPaginator(source: source, policy: PrefetchPolicy(pageSize: 5, distanceFromEnd: 2))
 
-        await gate.open(0)
+        await source.release(0)
         await sut.loadFirstPageIfNeeded()
 
+        // The next page is held at the source, so every row's trigger fires while
+        // a load is genuinely in flight rather than after it has finished.
         for item in sut.items {
             sut.prefetchIfNeeded(around: item)
         }
@@ -134,7 +135,7 @@ struct CursorPaginatorTests {
         // was turned away by a phase the first had already moved.
         #expect(sut.phase == .loadingNextPage)
 
-        await gate.open(1)
+        await source.release(1)
         await sut.settled()
 
         #expect(await source.requestCount == 2)
@@ -165,28 +166,30 @@ struct CursorPaginatorTests {
     /// generation it was started in.
     @Test("A page from a superseded load never lands on the refreshed list")
     func aSupersededPageIsDropped() async {
-        let gate = TaskGate()
         let source = ScriptedPageSource(
             [
                 .page(items: PagedItem.range(1...3), next: "c1"),
                 .page(items: PagedItem.range(4...6), next: "c2"),
                 .page(items: PagedItem.range(7...9), next: nil),
             ],
-            gate: gate,
-            ignoresCancellation: true
+            parking: true
         )
         let sut = CursorPaginator(source: source, policy: PrefetchPolicy(pageSize: 3, distanceFromEnd: 1))
 
-        await gate.open(0)
+        await source.release(0)
         await sut.loadFirstPageIfNeeded()
 
+        // Call 1 is the prefetch. It is parked at the source, so it is still in
+        // flight when the refresh below cancels its task — and parking survives
+        // cancellation, which is the only way to make the page arrive for a load
+        // nobody is waiting for.
         sut.prefetchIfNeeded(around: sut.items[2])
         await source.waitForRequests(2)
 
-        await gate.open(2)
+        await source.release(2)
         await sut.refresh()
 
-        await gate.open(1)
+        await source.release(1)
         await source.waitForAnswers(3)
         await sut.settled()
 
@@ -196,20 +199,20 @@ struct CursorPaginatorTests {
 
     @Test("Cancelling a prefetch leaves the list where it can resume")
     func cancellingAPrefetchLeavesAResumablePhase() async {
-        let gate = TaskGate()
         let source = ScriptedPageSource(
             [
                 .page(items: PagedItem.range(1...3), next: "c1"),
-                // Call 1 is the abandoned prefetch: it reaches the source and
-                // dies at the gate, so the resumed load is call 2.
-                .page(items: PagedItem.range(4...6), next: nil),
+                // Call 1 is the abandoned prefetch. It still reaches the source,
+                // and whatever it returns is dropped, so the resumed load is
+                // call 2 and it is the one whose page lands.
+                .page(items: PagedItem.range(7...9), next: nil),
                 .page(items: PagedItem.range(4...6), next: nil),
             ],
-            gate: gate
+            parking: true
         )
         let sut = CursorPaginator(source: source, policy: PrefetchPolicy(pageSize: 3, distanceFromEnd: 1))
 
-        await gate.open(0)
+        await source.release(0)
         await sut.loadFirstPageIfNeeded()
 
         sut.prefetchIfNeeded(around: sut.items[2])
@@ -219,8 +222,10 @@ struct CursorPaginatorTests {
         #expect(sut.phase == .ready)
         #expect(sut.items.map(\.id) == [1, 2, 3])
 
-        await gate.open(2)
+        await source.release(1)
+        await source.release(2)
         await sut.loadNextPage()
+        await source.waitForAnswers(3)
 
         #expect(sut.items.map(\.id) == [1, 2, 3, 4, 5, 6])
     }

@@ -52,36 +52,66 @@ actor ScriptedPageSource: CursorPageSource {
         let limit: Int
     }
 
+    /// How long a wait here may last before it gives up.
+    ///
+    /// Every wait in this type is bounded. An unbounded one that is never
+    /// satisfied does not fail — it hangs, and `-test-timeouts-enabled` kills it
+    /// two minutes later with a timeout that names nothing. Giving up instead
+    /// lets the assertion that follows report which expectation was not met.
+    private static let waitLimit = Duration.seconds(10)
+
     private let outcomes: [ScriptedPageOutcome]
-    private let gate: TaskGate?
-    private let ignoresCancellation: Bool
+    private let parks: Bool
+    private var released: Set<Int> = []
 
     private(set) var requests: [Request] = []
 
-    /// Calls that got past the gate, whether they went on to answer or to throw.
+    /// Calls that got as far as consulting the script, whether they went on to
+    /// answer or to throw.
     private(set) var answered = 0
 
-    /// - Parameter ignoresCancellation: Makes a parked call finish even after its
-    ///   task is cancelled, so a test can produce the one thing cancellation does
-    ///   not prevent — a result arriving for a load nobody is waiting for.
-    init(_ outcomes: [ScriptedPageOutcome], gate: TaskGate? = nil, ignoresCancellation: Bool = false) {
+    /// - Parameter parking: Holds every call at ``park(at:)`` until ``release(_:)``
+    ///   lets it through, so a test can decide the order two in-flight loads
+    ///   finish in rather than race them.
+    init(_ outcomes: [ScriptedPageOutcome], parking: Bool = false) {
         self.outcomes = outcomes
-        self.gate = gate
-        self.ignoresCancellation = ignoresCancellation
+        parks = parking
     }
 
     var requestCount: Int { requests.count }
+
+    /// Lets call number `index` proceed. Safe to call before the call exists —
+    /// ``park(at:)`` checks the release set on arrival.
+    func release(_ index: Int) {
+        released.insert(index)
+    }
+
+    /// Holds a call until it is released, **whether or not its task has been
+    /// cancelled**.
+    ///
+    /// That is the whole point of it, and it is why this is `Task.yield()` rather
+    /// than `TaskGate`'s sleep. A cancelled `Task.sleep` throws *without
+    /// suspending*, so a loop around it spins on the actor's executor and no
+    /// other call — including the `release` it is waiting for — can ever get in.
+    /// `TaskGate` documents that hazard and confines it to a caller that opens
+    /// the gate on the line after it cancels; the superseded-page test cannot,
+    /// because it has a whole refresh to complete in between.
+    ///
+    /// `Task.yield()` neither throws nor checks cancellation, and it always
+    /// suspends, so the actor is released on every turn of the loop.
+    private func park(at index: Int) async {
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while !released.contains(index), ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+    }
 
     func loadPage(after cursor: PageCursor?, limit: Int) async throws -> PageSlice<PagedItem> {
         let index = requests.count
         requests.append(Request(cursor: cursor?.rawValue, limit: limit))
 
-        if let gate {
-            if ignoresCancellation {
-                await gate.waitForOpeningIgnoringCancellation(at: index)
-            } else {
-                try await gate.waitForOpening(at: index)
-            }
+        if parks {
+            await park(at: index)
         }
 
         answered += 1
@@ -101,18 +131,21 @@ actor ScriptedPageSource: CursorPageSource {
     /// Waits until `count` requests have been *made*, so a test can order itself
     /// against work it started but is not holding.
     ///
-    /// Polls for the reason `TaskGate` does: the actor is released at every
-    /// sleep, which is what lets the calls being waited for get in.
+    /// Yields rather than sleeps for the reason ``park(at:)`` gives, and gives up
+    /// at ``waitLimit`` rather than hanging: the caller's next assertion is a
+    /// better failure report than a killed test.
     func waitForRequests(_ count: Int) async {
-        while requests.count < count {
-            try? await Task.sleep(for: .milliseconds(5))
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while requests.count < count, ContinuousClock.now < deadline {
+            await Task.yield()
         }
     }
 
-    /// Waits until `count` calls have got past the gate.
+    /// Waits until `count` calls have got as far as the script.
     func waitForAnswers(_ count: Int) async {
-        while answered < count {
-            try? await Task.sleep(for: .milliseconds(5))
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while answered < count, ContinuousClock.now < deadline {
+            await Task.yield()
         }
     }
 }
