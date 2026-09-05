@@ -732,7 +732,48 @@ applying twice, not two different edits racing, which is `If-Match` and a 409.
 And the server-side half is the API's: the key → outcome record, its retention
 window, and what happens when one key arrives with a different body. See
 `docs/idempotency.md`.
-- [ ] Pagination with cursor tokens and a prefetch-on-scroll strategy
+- [x] Pagination with cursor tokens and a prefetch-on-scroll strategy — `CursorPage` and `CursorInfo` have been decoded since Phase 2 with nothing that reads them, and offset pagination is why: rows 40–59 of an ordering the server may change between requests means one insert above the window shows row 40 twice and never shows row 60. A cursor names a position instead. `has_more` and `next_cursor` can disagree, so `CursorPage.slice()` settles it once rather than at every call site, and `has_more` decides termination — an API that emits a resume cursor on its last page, which many do for clients polling for new rows, would otherwise never stop. Four things separate this from the version that looks the same and is not. The prefetch guard is *synchronous*: `onAppear` runs per row and a flick brings thirty into view in a few frames, so `prefetchIfNeeded(around:)` moves `phase` before it returns and the second caller is turned away on the main actor before the first has suspended — a guard that awaited anything first would let all thirty through, which is also why the paginator is `@MainActor` and holds no lock. De-duplication is by `id` and keeps the first copy, because pages overlap whenever a row is inserted mid-read and two rows with one `id` in a `ForEach` is undefined behaviour rather than a cosmetic repeat; `indexByID` is a dictionary rather than a `Set` because the trigger also needs "how far from the end is this row" and `firstIndex(where:)` would answer that with a linear scan per appearance. Every load carries the generation it started in, because cancellation does not cover a request past the point of no return. And a page that adds no rows follows its own cursor instead of returning — the trigger for loading more is a row appearing, so an empty page produces no trigger and ends the scroll permanently with a spinner on screen and data behind it — bounded by `maxConsecutiveEmptyPages` so a cursor that never terminates fails loudly. `PrefetchPolicy` requires `distanceFromEnd < pageSize` for the mirror-image reason: at or above the page size every arriving page lands inside its own trigger zone and the paginator walks the whole collection without anybody scrolling (PR #44)
+
+Item 6 complete as of PR #44 (2026-09-05). All four checks green: SwiftLint
+(strict), dependency resolution, GitGuardian, and build-and-test on the iOS
+Simulator. Phase 9 is closed.
+
+Three reds on the way, and the interesting one is the third. The first two were
+`SocialLoginViewModelXCTests` blowing its execution allowance — genuinely this
+branch's, in a suite the diff never touches: `ScriptedPageSource` waited by
+running `while !condition { await Task.yield() }`, and a yield loop never blocks,
+so each wait pinned a cooperative-pool thread at 100% and starved a `@MainActor`
+XCTest on a three-core runner. Every wait is a `CheckedContinuation` now. That
+took 163s off the run.
+
+The third was five `SessionObserverTests` losing a five-second polling deadline —
+the same failure recorded against #43 and against `main` in run #83, and the
+third time it has cost a run. `rerun-failed-jobs` returns 403 for this token, so
+"re-run and see" was not available and waiting for a human to click it was not a
+plan. The deadline was the bug. Every test in that suite is `@MainActor`, so is
+the observer's consumer task, and so are the 21 tests this item adds, which Swift
+Testing runs in parallel with them; a wall-clock budget for "the main actor gets
+back to me" is a load meter with an assertion attached, green on an idle box and
+red on a busy one, and the effect had landed correctly in all nine observed
+failures. It is not a threshold worth tuning at any value, so it is gone rather
+than widened, and the bound is `.timeLimit(.minutes(1))` on the suite — Swift
+Testing's own, which cancels the test's task rather than racing it. `Task.sleep`
+throws on cancellation, so the loop still ends and the `Comment` each call site
+writes down still reaches the report. No `#expect` changed, and the green run
+took 341s — *longer* than the 278s red one, which is what tells the fix apart
+from a quiet runner.
+
+Known gaps carried forward: **no screen adopts this yet.** `HomeViewModel` still
+fetches from the Phase 3 stub, and the API has no list endpoint to point
+`APICursorPageSource` at, so `PaginatedList`'s `#Preview` against
+`InMemoryCursorPageSource` is the only thing driving the whole path. Pages are
+not rows in the SwiftData store either, so none of the offline-first machinery
+from items 1–4 applies to them and `refresh()` discards what was loaded — the
+list is empty again on every cold launch. Nothing pages backwards:
+`CursorInfo.prevCursor` stays decoded and unused, and bidirectional paging needs
+two cursors, two trigger zones and a prepend that does not move the scroll
+position, which is a different design rather than a parameter. The empty-page
+budget of four is a guess with no signal behind it. See `docs/pagination.md`.
 
 ## Phase 10 — SwiftUI Performance & UI
 - [ ] View-identity and `Equatable` conformance to cut redundant body evaluations
