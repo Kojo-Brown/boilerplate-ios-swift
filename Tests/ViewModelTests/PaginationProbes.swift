@@ -52,17 +52,19 @@ actor ScriptedPageSource: CursorPageSource {
         let limit: Int
     }
 
-    /// How long a wait here may last before it gives up.
-    ///
-    /// Every wait in this type is bounded. An unbounded one that is never
-    /// satisfied does not fail — it hangs, and `-test-timeouts-enabled` kills it
-    /// two minutes later with a timeout that names nothing. Giving up instead
-    /// lets the assertion that follows report which expectation was not met.
-    private static let waitLimit = Duration.seconds(10)
+    /// Someone waiting for a counter to reach `threshold`.
+    private struct Watcher {
+        let threshold: Int
+        let continuation: CheckedContinuation<Void, Never>
+    }
 
     private let outcomes: [ScriptedPageOutcome]
     private let parks: Bool
+
     private var released: Set<Int> = []
+    private var parked: [Int: [CheckedContinuation<Void, Never>]] = [:]
+    private var requestWatchers: [Watcher] = []
+    private var answerWatchers: [Watcher] = []
 
     private(set) var requests: [Request] = []
 
@@ -84,37 +86,56 @@ actor ScriptedPageSource: CursorPageSource {
     /// ``park(at:)`` checks the release set on arrival.
     func release(_ index: Int) {
         released.insert(index)
+        for continuation in parked.removeValue(forKey: index) ?? [] {
+            continuation.resume()
+        }
     }
 
     /// Holds a call until it is released, **whether or not its task has been
     /// cancelled**.
     ///
-    /// That is the whole point of it, and it is why this is `Task.yield()` rather
-    /// than `TaskGate`'s sleep. A cancelled `Task.sleep` throws *without
-    /// suspending*, so a loop around it spins on the actor's executor and no
-    /// other call — including the `release` it is waiting for — can ever get in.
-    /// `TaskGate` documents that hazard and confines it to a caller that opens
-    /// the gate on the line after it cancels; the superseded-page test cannot,
-    /// because it has a whole refresh to complete in between.
+    /// Surviving cancellation is the whole point: the superseded-page test needs
+    /// a page that arrives for a load nobody is waiting for, and there is no
+    /// other way to produce one. `CheckedContinuation` gives it for free — it
+    /// neither throws nor consults cancellation — where the two obvious
+    /// alternatives cost more than they look:
     ///
-    /// `Task.yield()` neither throws nor checks cancellation, and it always
-    /// suspends, so the actor is released on every turn of the loop.
+    /// * `TaskGate`'s `Task.sleep` loop throws the moment the task is cancelled,
+    ///   so a cancelled call would not park at all. Its
+    ///   `waitForOpeningIgnoringCancellation` swallows that and spins instead,
+    ///   which its own doc confines to a caller that opens the gate on the line
+    ///   after it cancels. This suite cannot be that caller: it has a whole
+    ///   refresh round trip in between.
+    /// * A `Task.yield()` loop parks correctly and costs a core to do it. That is
+    ///   what the first version of this file did, and on a three-core runner it
+    ///   starved an unrelated `@MainActor` XCTest until it blew its two-minute
+    ///   execution allowance — a test in a suite this branch does not touch,
+    ///   failing twice while `main` stayed green.
+    ///
+    /// A continuation costs nothing while parked, so the runner is free for the
+    /// tests running beside this one.
+    ///
+    /// There is no lost wakeup: the release check and the enrolment below both
+    /// run on this actor with no `await` between them, so a `release(_:)` cannot
+    /// land in the gap.
     private func park(at index: Int) async {
-        let deadline = ContinuousClock.now + Self.waitLimit
-        while !released.contains(index), ContinuousClock.now < deadline {
-            await Task.yield()
+        guard !released.contains(index) else { return }
+        await withCheckedContinuation { continuation in
+            parked[index, default: []].append(continuation)
         }
     }
 
     func loadPage(after cursor: PageCursor?, limit: Int) async throws -> PageSlice<PagedItem> {
         let index = requests.count
         requests.append(Request(cursor: cursor?.rawValue, limit: limit))
+        wakeRequestWatchers()
 
         if parks {
             await park(at: index)
         }
 
         answered += 1
+        wakeAnswerWatchers()
 
         guard index < outcomes.count else {
             throw ScriptedPageFailure(reason: "the script has no answer for call \(index)")
@@ -131,22 +152,39 @@ actor ScriptedPageSource: CursorPageSource {
     /// Waits until `count` requests have been *made*, so a test can order itself
     /// against work it started but is not holding.
     ///
-    /// Yields rather than sleeps for the reason ``park(at:)`` gives, and gives up
-    /// at ``waitLimit`` rather than hanging: the caller's next assertion is a
-    /// better failure report than a killed test.
+    /// Continuation-based for the reason ``park(at:)`` gives, and unbounded on
+    /// purpose. A deadline here would be a spin or a timer for a wait that is
+    /// satisfied by construction — every parking test releases every index it
+    /// parks — and the bound the first version carried is exactly what cost a
+    /// core. A script that genuinely never satisfies a wait is a bug in the
+    /// script, and one the suite timeout reports well enough.
     func waitForRequests(_ count: Int) async {
-        let deadline = ContinuousClock.now + Self.waitLimit
-        while requests.count < count, ContinuousClock.now < deadline {
-            await Task.yield()
+        guard requests.count < count else { return }
+        await withCheckedContinuation { continuation in
+            requestWatchers.append(Watcher(threshold: count, continuation: continuation))
         }
     }
 
     /// Waits until `count` calls have got as far as the script.
     func waitForAnswers(_ count: Int) async {
-        let deadline = ContinuousClock.now + Self.waitLimit
-        while answered < count, ContinuousClock.now < deadline {
-            await Task.yield()
+        guard answered < count else { return }
+        await withCheckedContinuation { continuation in
+            answerWatchers.append(Watcher(threshold: count, continuation: continuation))
         }
+    }
+
+    private func wakeRequestWatchers() {
+        let reached = requests.count
+        let ready = requestWatchers.filter { $0.threshold <= reached }
+        requestWatchers.removeAll { $0.threshold <= reached }
+        for watcher in ready { watcher.continuation.resume() }
+    }
+
+    private func wakeAnswerWatchers() {
+        let reached = answered
+        let ready = answerWatchers.filter { $0.threshold <= reached }
+        answerWatchers.removeAll { $0.threshold <= reached }
+        for watcher in ready { watcher.continuation.resume() }
     }
 }
 
