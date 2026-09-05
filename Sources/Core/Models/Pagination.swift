@@ -54,3 +54,36 @@ package struct CursorInfo: Decodable, Sendable, Equatable {
         case hasMore = "has_more"
     }
 }
+
+// MARK: - Wire shape to paginator shape
+
+extension CursorPage {
+
+    /// Reduces the envelope to the one fact a paginator can act on.
+    ///
+    /// ``CursorInfo`` carries two answers to "is there more" — `has_more` and
+    /// the presence of `next_cursor` — and they can disagree. ``PageSlice``
+    /// carries one, so the disagreement has to be settled here, once, rather
+    /// than at every call site that reads a page.
+    ///
+    /// `has_more` decides termination, because it is the field whose *purpose*
+    /// is to say so: an API that emits a cursor on the last page (many do, so
+    /// that a client polling for new rows has somewhere to resume from) would
+    /// otherwise never terminate. A `has_more` of `true` with no cursor is the
+    /// one combination that cannot be honoured either way, and throws.
+    ///
+    /// - Throws: ``PaginationError/moreItemsPromisedWithoutCursor`` or
+    ///   ``PaginationError/unusableCursor(_:)``.
+    package func slice() throws -> PageSlice<T> {
+        guard cursor.hasMore else {
+            return PageSlice(items: items, nextCursor: nil)
+        }
+        guard let raw = cursor.nextCursor else {
+            throw PaginationError.moreItemsPromisedWithoutCursor
+        }
+        guard let next = PageCursor(rawValue: raw) else {
+            throw PaginationError.unusableCursor(raw)
+        }
+        return PageSlice(items: items, nextCursor: next)
+    }
+}

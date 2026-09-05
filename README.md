@@ -93,6 +93,10 @@ build its own previews from doubles it ships itself.
   purpose: the client-generated key, where it is minted so that one edit is one
   key and one key is every attempt, and the retry policy that widened because of
   it
+- [docs/pagination.md](./docs/pagination.md) — reading a list one page at a time:
+  the opaque cursor, the scroll trigger that fires thirty times a flick and the
+  synchronous guard that makes it one request, and the empty page that deadlocks
+  every infinite scroll written without it
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on

@@ -20,17 +20,44 @@ import Testing
 /// own, so how many main-actor jobs are queued ahead of it is not this test's to
 /// know; a fixed sleep would only make the assertion *likely*. A poll is exact
 /// when the effect has landed and fails with the reason when it never does.
+///
+/// ## Why the poll is unbounded, and where the bound went
+///
+/// It used to carry its own five-second deadline, checked against
+/// `ContinuousClock` on every turn. That is a stopwatch held against the main
+/// actor's queue depth, and it measured the runner rather than the code: every
+/// test in this suite is `@MainActor`, so is the observer's consumer task, and
+/// so are two dozen others that Swift Testing runs in parallel with them. Five
+/// of these eight went red on a loaded three-core runner in CI run #94, four of
+/// them the same way on `main` in run #83, and the effect had landed correctly
+/// every time — the main actor had simply not got back to the poll inside the
+/// budget. A deadline that fires on a busy machine and not on an idle one
+/// reports load, and a suite that reports load is one people learn to re-run.
+///
+/// So the wait no longer keeps time, and the bound is
+/// `.timeLimit(.minutes(1))` on the suite: Swift Testing's own, which cancels
+/// the test's task rather than racing it. `Task.sleep` throws on cancellation,
+/// which is how the loop ends and how `description` still reaches the report —
+/// the reason a wait was hung is the whole value of having written one down.
+///
+/// Nothing about what is asserted moves. Every `#expect` below is unchanged, a
+/// condition that never holds still fails, and it fails naming the wait. The
+/// only thing that stopped being asserted is a claim this suite never meant to
+/// make: that a loaded CI runner will schedule a main-actor job within five
+/// seconds.
 @MainActor
 private func waitForState(
     _ description: Comment,
-    timeout: Duration = .seconds(5),
     _ condition: @MainActor () async throws -> Bool
 ) async throws {
-    let deadline = ContinuousClock.now + timeout
     while true {
         if try await condition() { return }
-        try #require(ContinuousClock.now < deadline, description)
-        try await Task.sleep(for: .milliseconds(5))
+        do {
+            try await Task.sleep(for: .milliseconds(5))
+        } catch {
+            Issue.record(description)
+            throw error
+        }
     }
 }
 
@@ -80,7 +107,13 @@ private struct Harness {
 /// was still live. Both were invisible because the code that should have done
 /// them was a `.onChange` in a view, where the question "what else does this
 /// mean?" never gets asked.
-@Suite("SessionObserver — applying the session events")
+///
+/// The time limit is the bound `waitForState` used to carry itself. A minute is
+/// four orders of magnitude more than any of these waits needs — they land in
+/// microseconds on an idle machine — which is the point: it is a hang detector,
+/// not a performance assertion, and a hang detector that can be tripped by a
+/// busy runner is neither.
+@Suite("SessionObserver — applying the session events", .timeLimit(.minutes(1)))
 @MainActor
 struct SessionObserverTests {
 
