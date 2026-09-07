@@ -196,23 +196,52 @@ inside a `UIWindow`, mutates one value, pumps the run loop, and reads the counts
 back:
 
 ```swift
-let harness = RenderHarness(MemoisationHarness(ticker: ticker, ledger: ledger))
-ledger.reset()                       // the first render is not redundant work
+let harness = await RenderHarness.mount(MemoisationHarness(ticker: ticker, ledger: ledger))
+defer { harness.dismount() }
 
-for _ in 1...3 {
+var perUpdate: [[String: Int]] = []
+for _ in 1...4 {
+    ledger.reset()
     ticker.tick += 1                 // nothing any subtree is keyed on
-    harness.settle()
+    await harness.settle()
+    perUpdate.append(ledger.snapshot)
 }
 
-#expect(ledger.count(of: ProbeLabel.inline) >= 3)
-#expect(ledger.count(of: ProbeLabel.memoized) == 0)
-#expect(ledger.count(of: ProbeLabel.equatable) == 0)
+let steady = perUpdate.dropFirst()   // see below
+#expect(steady.allSatisfy { ($0[ProbeLabel.inline]    ?? 0) >= 1 })
+#expect(steady.allSatisfy { ($0[ProbeLabel.memoized]  ?? 0) == 0 })
+#expect(steady.allSatisfy { ($0[ProbeLabel.equatable] ?? 0) == 0 })
 ```
 
 The asymmetry in those assertions is deliberate. The side that is supposed to
 run is a lower bound, because SwiftUI evaluating a body more than once for a
 single change is allowed and is not a defect. The side that is supposed to be
 skipped is exact: zero.
+
+Three details of the harness are load-bearing, and each of them is a bug that
+was hit rather than a precaution:
+
+* **The counts are read per update, not in total.** "Three evaluations across
+  three updates" and "three on the first update and none after" are different
+  claims about a memoisation, and a total cannot tell them apart. The whole
+  history goes into the failure message, so a red run says which update went
+  wrong.
+* **The first update after mounting is not measured.** On CI run 34162321433 the
+  memoised subtree was rebuilt exactly once across three updates — the first one,
+  which carries the tail of the initial render and the layout that follows a
+  window becoming visible. The equatable row did not rebuild at all. Steady state
+  is the claim this makes; asserting zero from the first update would be
+  asserting something the harness has observed to be false.
+* **`settle()` suspends; it does not pump.** `RunLoop.run(until:)` and a
+  `while !done { await Task.yield() }` loop both wait while *holding* the main
+  actor, and this suite runs in parallel with every other one in the bundle.
+  `SocialLoginViewModelXCTests` is `@MainActor` and has twice been hung into its
+  two-minute execution allowance by exactly that (SPEC.md, Phase 9 item 6). An
+  `await` hands the main actor back, which is both what lets SwiftUI's
+  transaction run and what keeps the rest of the bundle moving. `dismount()`
+  exists for the same reason in the other direction: a visible `UIWindow` is
+  retained by UIKit, so without it every harness leaves a key-window candidate
+  behind for the rest of the process.
 
 ## What is not done
 

@@ -30,7 +30,17 @@ final class RenderHarness<Root: View> {
     private let window: UIWindow
     private let host: UIHostingController<Root>
 
-    init(_ root: Root) {
+    /// Hosts `root` and returns once its first render has happened.
+    ///
+    /// A factory rather than an initialiser because settling is `async`, and
+    /// that is not an implementation detail — see ``settle(for:)``.
+    static func mount(_ root: Root) async -> RenderHarness {
+        let harness = RenderHarness(root)
+        await harness.settle()
+        return harness
+    }
+
+    private init(_ root: Root) {
         let controller = UIHostingController(rootView: root)
         let frame = CGRect(x: 0, y: 0, width: 402, height: 874)
         let hostWindow = UIWindow(frame: frame)
@@ -41,20 +51,39 @@ final class RenderHarness<Root: View> {
         host = controller
         window = hostWindow
 
-        settle()
+        host.view.layoutIfNeeded()
     }
 
     /// Gives SwiftUI a chance to apply whatever the last mutation scheduled,
     /// then forces the layout pass that runs the bodies.
     ///
-    /// An `@Observable` mutation does not re-render on the spot — it invalidates
-    /// and schedules, and the scheduled work runs on the main run loop. So the
-    /// order matters: pump the run loop first so the update is applied, then lay
-    /// out so the bodies of whatever it invalidated actually run.
-    func settle(for duration: TimeInterval = 0.05) {
-        RunLoop.current.run(until: Date().addingTimeInterval(duration))
+    /// An `@Observable` mutation does not re-render on the spot — it
+    /// invalidates and schedules, and the scheduled work runs on the main run
+    /// loop. The wait is therefore an `await`, and specifically not
+    /// `RunLoop.run(until:)` or a `Task.yield()` loop: both of those hold the
+    /// main actor while they wait, and this suite runs in parallel with every
+    /// other one in the bundle. `SocialLoginViewModelXCTests` is `@MainActor`
+    /// and has been hung into its execution allowance twice already by exactly
+    /// that — a test elsewhere in the run pinning the actor it needs (SPEC.md,
+    /// Phase 9 item 6). Suspending hands the main actor back, which is both
+    /// what lets SwiftUI's transaction run and what keeps the rest of the
+    /// bundle moving.
+    func settle(for duration: Duration = .milliseconds(50)) async {
         host.view.setNeedsLayout()
+        try? await Task.sleep(for: duration)
         host.view.layoutIfNeeded()
+    }
+
+    /// Takes the window back down.
+    ///
+    /// A visible `UIWindow` is retained by UIKit, not only by whoever made it,
+    /// so without this the harness outlives the test that built it and leaves a
+    /// key-window candidate behind for every later test in the process. There
+    /// is no `deinit` doing this because a `deinit` cannot touch main-actor
+    /// state; `defer { harness.dismount() }` at the call site can.
+    func dismount() {
+        window.isHidden = true
+        window.rootViewController = nil
     }
 }
 
