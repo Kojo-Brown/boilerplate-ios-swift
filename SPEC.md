@@ -776,13 +776,65 @@ position, which is a different design rather than a parameter. The empty-page
 budget of four is a guess with no signal behind it. See `docs/pagination.md`.
 
 ## Phase 10 — SwiftUI Performance & UI
-- [ ] View-identity and `Equatable` conformance to cut redundant body evaluations
+- [x] View-identity and `Equatable` conformance to cut redundant body evaluations — `HomeViewModel.fetchItems()` minted its rows with `UUID()` inside the fetch, so a pull-to-refresh that changed nothing handed `ForEach` ten ids it had never seen: ten removals and ten insertions, every row's state discarded with the row that held it, and invisible to a test that counts rows. Identity belongs to the row rather than to the request that read it, so the stub mints its catalogue once; the test asserting ids *must* differ after a refresh was asserting the defect and is inverted in both mirrors. The rows are `HomeItemRow` and `HomeItemCard` now, `Equatable` and applied with `.equatable()`, because SwiftUI's fallback comparison for a non-`Equatable` view reads the view's memory and cannot see through the storage behind a `String` — and `HomeItem` compares content rather than `id`, since equality that stopped at identity would freeze every row whose title was edited. `Memoized<Key, Content>` is the same skip for inline content, keyed on a value the closure is handed rather than one it captures. `BodyEvaluationLedger`/`BodyEvaluationProbe` and `RenderHarness` make it measured rather than asserted: `_ = view.body` cannot answer "would SwiftUI have skipped this?" because the call is the evaluation, so the tree keeps its own count inside a hosted `UIHostingController`. In steady state an update to a value nothing is keyed on rebuilds the inline subtree and skips the other two exactly zero times over (PR #45)
 - [ ] `LazyVStack` performance: stable ids, `.id()` pitfalls, and prefetch
 - [ ] Instruments profiling walkthrough: hitches, hangs, and a fixed hotspot
 - [ ] Custom `Layout` protocol implementation for a measure-dependent component
 - [ ] Matched-geometry transitions + interactive dismissal
 - [ ] Full accessibility pass: labels, traits, Dynamic Type, VoiceOver rotor
 - [ ] Localisation with String Catalogs including plurals and an RTL pass
+
+Item 1 complete as of PR #45 (2026-09-07). All four checks green: SwiftLint
+(strict), dependency resolution, GitGuardian, and build-and-test on the iOS
+Simulator.
+
+Two reds on the way, both this branch's. The first was three instances of
+`main actor-isolated operator function '==' cannot be used to satisfy
+nonisolated requirement from protocol 'Equatable'` — `View` is `@MainActor`,
+so an operator declared inside one is isolated by inference. `nonisolated` is
+what lets SwiftUI call a comparison while diffing, and it brings a restriction
+worth having: only immutable `Sendable` properties are readable from there, so
+an `Equatable` view can compare exactly the values it is safe to compare, and
+`Memoized` states it as `Key: Equatable & Sendable`.
+
+The second is the caveat on the measurement, and it is recorded rather than
+smoothed over. **The first update after mounting rebuilds the memoised subtree
+once** — the equatable row was skipped on all three updates of that run, the
+memoised one was rebuilt on update one and never after (run 34162321433). The
+tail of the initial render and the layout that follows a window becoming
+visible land there. The test measures four updates, reads counts per update
+rather than in total, and asserts the steady state across the last three;
+asserting zero from the first would be asserting something the harness has
+observed to be false, and asserting "at most one" everywhere would be
+weakening the claim where it holds exactly.
+
+That run also hung `SocialLoginViewModelXCTests.testClearErrorNilsErrorMessage`
+into its two-minute allowance — which this file already records as flaky on
+`main`, and *also* records twice as not the flake but a test elsewhere pinning
+the main actor (Phase 9 item 6). It was the latter again: `RenderHarness.settle()`
+waited with `RunLoop.current.run(until:)`, which holds the main actor, in a
+suite Swift Testing runs in parallel with that `@MainActor` XCTest. It suspends
+now, the suite is `.serialized` with a `.timeLimit(.minutes(1))`, and
+`dismount()` takes each window back down — a visible `UIWindow` is retained by
+UIKit, and the suite that hangs is the one whose every hang is around an
+`ASPresentationAnchor()`.
+
+**Every gate in CLAUDE.md remains unrunnable in the scheduled agent's Linux
+environment.** `assert-sendable-audit.py` and `assert-module-boundaries.py` are
+the two that run there, and both did; nothing in this item was compiled before
+CI compiled it, which is why the isolation error cost a round.
+
+Known gaps carried into item 2: **no screen is measured in CI** — the harness
+proves the mechanisms, nothing bounds how many times `HomeView` evaluates a row
+during a search. `LazyVStack`/`List` row recycling is untouched, which is item
+2's subject: in a lazy container "how many evaluations" is a question about
+scrolling rather than about state changes. The probe counts evaluations and not
+cost, so a body that runs twice as often and does nothing expensive reads the
+same as one that does — Instruments is item 3. And nothing enforces the
+`==`-covers-the-body rule: a stored property added to a row without a matching
+line in `==` compiles, renders, and goes stale, caught only by review and by
+equality tests that have to be extended by hand. See `docs/view-identity.md`.
+
 
 ## Phase 11 — Security & Release
 - [ ] Keychain access-control flags with biometric gating, never `UserDefaults` for tokens
