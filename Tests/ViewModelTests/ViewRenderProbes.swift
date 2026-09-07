@@ -135,7 +135,7 @@ struct CountedEquatableRow: View, Equatable {
     let title: String
     let ledger: BodyEvaluationLedger
 
-    static func == (lhs: CountedEquatableRow, rhs: CountedEquatableRow) -> Bool {
+    nonisolated static func == (lhs: CountedEquatableRow, rhs: CountedEquatableRow) -> Bool {
         lhs.title == rhs.title
     }
 

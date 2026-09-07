@@ -67,7 +67,7 @@ import SwiftUI
 ///
 /// A stale view is a worse defect than a redundant body evaluation, so reach
 /// for this only where the key genuinely covers what the content renders.
-package struct Memoized<Key: Equatable, Content: View>: View {
+package struct Memoized<Key: Equatable & Sendable, Content: View>: View {
 
     private let key: Key
     private let content: (Key) -> Content
@@ -89,11 +89,20 @@ package struct Memoized<Key: Equatable, Content: View>: View {
     /// Swift, and comparing them by identity would defeat the whole type — a
     /// closure written inline in a body is a fresh value on every evaluation,
     /// so an identity comparison would never find two of them equal.
+    ///
+    /// It is `nonisolated` because it must be: `View` is `@MainActor`, so an
+    /// operator declared inside one is main-actor isolated by inference and
+    /// cannot satisfy `Equatable`'s nonisolated requirement. That in turn is
+    /// why `Key` is constrained to `Sendable` — reading `key` from a
+    /// nonisolated context is only allowed for an immutable property whose
+    /// type can cross an isolation boundary. The constraint costs nothing a
+    /// memo key should ever have: a key is a value the framework compares off
+    /// the back of a diff, not a reference into the screen's state.
     private struct Contents: View, Equatable {
         let key: Key
         let content: (Key) -> Content
 
-        static func == (lhs: Contents, rhs: Contents) -> Bool {
+        nonisolated static func == (lhs: Contents, rhs: Contents) -> Bool {
             lhs.key == rhs.key
         }
 

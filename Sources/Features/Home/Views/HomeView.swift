@@ -162,6 +162,15 @@ package struct HomeView: View {
 /// * **`item` is the only stored property.** Everything the body renders comes
 ///   from it, so `==` is total: there is no captured value that can change
 ///   while the comparison reports equality and leaves a stale row on screen.
+/// * **`==` is `nonisolated`, and has to be.** `View` is `@MainActor`, so
+///   everything declared in a view is main-actor isolated by inference —
+///   including this operator, which then cannot satisfy `Equatable`'s
+///   nonisolated requirement and fails to compile. The keyword is what lets
+///   SwiftUI call it during a diff. It reads `item`, an immutable `Sendable`
+///   property, which is exactly what a nonisolated member of an isolated type
+///   is allowed to touch; a `var`, or a property of a non-`Sendable` type,
+///   would not compile here and that restriction is a feature — it is the same
+///   set of values that can be compared safely.
 /// * **The tap action is not in here.** It stays on the `Button` in `HomeView`,
 ///   because it captures `coordinator`, and a closure cannot be compared. Held
 ///   here it would either be excluded from `==` — the stale-capture trap — or
@@ -174,7 +183,7 @@ package struct HomeView: View {
 struct HomeItemRow: View, Equatable {
     let item: HomeItem
 
-    static func == (lhs: HomeItemRow, rhs: HomeItemRow) -> Bool {
+    nonisolated static func == (lhs: HomeItemRow, rhs: HomeItemRow) -> Bool {
         lhs.item == rhs.item
     }
 
@@ -197,7 +206,7 @@ struct HomeItemRow: View, Equatable {
 struct HomeItemCard: View, Equatable {
     let item: HomeItem
 
-    static func == (lhs: HomeItemCard, rhs: HomeItemCard) -> Bool {
+    nonisolated static func == (lhs: HomeItemCard, rhs: HomeItemCard) -> Bool {
         lhs.item == rhs.item
     }
 

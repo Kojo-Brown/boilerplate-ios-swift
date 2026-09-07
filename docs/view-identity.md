@@ -82,7 +82,7 @@ Conforming the view to `Equatable` replaces that guess with an answer:
 struct HomeItemRow: View, Equatable {
     let item: HomeItem
 
-    static func == (lhs: HomeItemRow, rhs: HomeItemRow) -> Bool {
+    nonisolated static func == (lhs: HomeItemRow, rhs: HomeItemRow) -> Bool {
         lhs.item == rhs.item
     }
 
@@ -93,6 +93,24 @@ struct HomeItemRow: View, Equatable {
 HomeItemRow(item: item)
     .equatable()
 ```
+
+### `nonisolated` is not optional here
+
+`View` is `@MainActor`, so everything declared inside one is main-actor
+isolated by inference — including that operator. `Equatable`'s requirement is
+nonisolated, an isolated function cannot satisfy it, and the build fails with
+*"main actor-isolated operator function '==' cannot be used to satisfy
+nonisolated requirement from protocol 'Equatable'"*. The keyword is what lets
+SwiftUI call the comparison while diffing.
+
+It brings a restriction with it, and the restriction is a feature: a
+nonisolated member of an isolated type may only touch immutable properties
+whose types are `Sendable`. So an `Equatable` view compares `let`s of value
+types and nothing else — which is the same set of things it is *safe* to
+compare. A view holding a `var`, or a reference into the screen's state, will
+not compile as written, and that is the compiler pointing at the stale-capture
+trap before it ships. `Memoized` inherits the same rule as a constraint on its
+key: `Key: Equatable & Sendable`.
 
 `HomeView`'s body reads `viewModel.isLoading`, `viewModel.errorMessage` and
 `viewModel.searchQuery`, so it re-runs on every keystroke in the search field
