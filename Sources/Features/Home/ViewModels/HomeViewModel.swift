@@ -3,7 +3,12 @@ import Foundation
 import Observation
 
 /// A placeholder item surfaced on the home screen.
-package struct HomeItem: Identifiable {
+///
+/// `Equatable` is not decoration. `ForEach` uses `id` to decide *which* row a
+/// value belongs to, and SwiftUI uses equality to decide whether that row needs
+/// rebuilding at all — `HomeItemRow` and `HomeItemCard` are `Equatable` views,
+/// and their `==` is this one.
+package struct HomeItem: Identifiable, Equatable, Sendable {
     package let id: UUID
     package let title: String
     package let subtitle: String
@@ -109,12 +114,33 @@ package final class HomeViewModel: ViewModelProtocol {
     /// Stub — replaced by typed API client in Phase 3.
     private func fetchItems() async throws -> [HomeItem] {
         try await Task.sleep(for: .milliseconds(600))
-        return (1...10).map {
-            HomeItem(
-                id: UUID(),
-                title: "Item \($0)",
-                subtitle: "Description for item \($0)"
-            )
-        }
+        return Self.catalogue
+    }
+
+    /// The rows this stub stands in for a server's, minted once.
+    ///
+    /// This used to be `(1...10).map { HomeItem(id: UUID(), ...) }` *inside*
+    /// `fetchItems()`, which gave every row a new identity on every fetch. A
+    /// pull-to-refresh that changed nothing therefore replaced the whole list
+    /// as far as SwiftUI was concerned: `ForEach` matches rows by `id`, so ten
+    /// ids it had never seen mean ten rows removed and ten inserted. Every
+    /// row's state — a disclosure toggle, a swipe part-way open, an in-flight
+    /// transition — is discarded with the row it belonged to, the diff
+    /// animates as a full replacement rather than as nothing happening, and
+    /// none of it is visible in a test that only counts rows.
+    ///
+    /// Identity belongs to the row, not to the request that read it. A real
+    /// backend supplies it and the client keeps it; this stub does the same by
+    /// creating the ids once and handing back the same values every time.
+    ///
+    /// Deleting is local-only here, so a refresh brings a deleted row back.
+    /// That is the stub being a stub — the delete never reached a server — and
+    /// it behaved the same way before, with a new id on top of it.
+    private static let catalogue: [HomeItem] = (1...10).map { index in
+        HomeItem(
+            id: UUID(),
+            title: "Item \(index)",
+            subtitle: "Description for item \(index)"
+        )
     }
 }

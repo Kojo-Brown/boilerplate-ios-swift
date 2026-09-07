@@ -66,15 +66,19 @@ final class HomeViewModelXCTests: XCTestCase {
 
     // MARK: - refresh
 
-    func testRefreshReplacesExistingItems() async {
+    /// The Swift Testing mirror of this — `refreshKeepsRowIdentityStable` —
+    /// carries the reasoning: a refresh that reissues every id makes `ForEach`
+    /// remove and reinsert every row, which throws away the state SwiftUI was
+    /// holding for them.
+    func testRefreshKeepsRowIdentityStable() async {
         let sut = HomeViewModel()
         await sut.onAppear()
-        let firstBatch = sut.items.map(\.id)
+        let firstBatch = sut.items
 
         await sut.refresh()
 
-        // Each fetch generates new UUIDs, so IDs must differ
-        XCTAssertNotEqual(sut.items.map(\.id), firstBatch)
+        XCTAssertEqual(sut.items.map(\.id), firstBatch.map(\.id))
+        XCTAssertEqual(sut.items, firstBatch)
     }
 
     func testRefreshClearsIsLoadingOnCompletion() async {

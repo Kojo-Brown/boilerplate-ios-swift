@@ -100,6 +100,10 @@ build its own previews from doubles it ships itself.
 - [docs/unidirectional-data-flow.md](./docs/unidirectional-data-flow.md) — the
   `State` + `Action` + `Effect` contract, the store that runs it, and the screen
   it replaced five stored properties on
+- [docs/view-identity.md](./docs/view-identity.md) — the two levers that decide
+  whether a body runs: the identity that says which view this is, the
+  `Equatable` conformance that says whether it needs rebuilding, and the ledger
+  that measures the difference instead of assuming it
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 
