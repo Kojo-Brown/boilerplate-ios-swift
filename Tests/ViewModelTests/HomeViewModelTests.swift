@@ -27,15 +27,22 @@ struct HomeViewModelTests {
         #expect(sut.items.count == firstCount)
     }
 
-    @Test func refreshReplacesItems() async {
+    /// This assertion used to read the other way round — "IDs should differ
+    /// because each fetch creates new UUIDs" — and it was describing a defect
+    /// rather than a requirement. `ForEach` matches rows by `id`, so a refresh
+    /// that reissued every id meant SwiftUI removed ten rows and inserted ten
+    /// others: row state discarded, the diff animating as a full replacement,
+    /// and nothing in a test that counts rows able to see it. Identity belongs
+    /// to the row, not to the request that read it.
+    @Test func refreshKeepsRowIdentityStable() async {
         let sut = HomeViewModel()
         await sut.onAppear()
-        let firstBatch = sut.items.map(\.id)
+        let firstBatch = sut.items
 
         await sut.refresh()
 
-        // IDs should differ because each fetch creates new UUIDs
-        #expect(sut.items.map(\.id) != firstBatch)
+        #expect(sut.items.map(\.id) == firstBatch.map(\.id))
+        #expect(sut.items == firstBatch)
     }
 
     @Test func searchFiltersItems() async {

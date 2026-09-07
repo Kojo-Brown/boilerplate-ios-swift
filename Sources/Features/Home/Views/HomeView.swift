@@ -80,15 +80,8 @@ package struct HomeView: View {
                 Button {
                     coordinator.push(.itemDetail(id: item.id, title: item.title))
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text(item.subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
+                    HomeItemRow(item: item)
+                        .equatable()
                 }
                 .buttonStyle(.plain)
             }
@@ -116,6 +109,7 @@ package struct HomeView: View {
                             coordinator.push(.itemDetail(id: item.id, title: item.title))
                         } label: {
                             HomeItemCard(item: item)
+                                .equatable()
                         }
                         .buttonStyle(.plain)
                     }
@@ -147,11 +141,74 @@ package struct HomeView: View {
     }
 }
 
-// MARK: - Grid card
+// MARK: - Rows
 
-/// Card-style item used in the iPad grid layout.
-private struct HomeItemCard: View {
+/// The list row's content, in its own `Equatable` view.
+///
+/// Both row types below exist to be skipped. `HomeView`'s body reads
+/// `viewModel.isLoading`, `viewModel.errorMessage` and `viewModel.searchQuery`,
+/// so it re-runs on every keystroke in the search field and on both edges of
+/// every load — and each of those evaluations rebuilds every visible row, none
+/// of which has changed.
+///
+/// SwiftUI would like to skip them for us, but the comparison it falls back to
+/// for a non-`Equatable` view inspects the view's memory, and `HomeItem` holds
+/// two `String`s: reference-counted storage the framework cannot compare by
+/// value. Conforming to `Equatable` replaces that guess with `HomeItem`'s own
+/// `==`, and `.equatable()` at the call site is what tells SwiftUI to use it.
+///
+/// Two properties of this type are load-bearing and easy to lose in an edit:
+///
+/// * **`item` is the only stored property.** Everything the body renders comes
+///   from it, so `==` is total: there is no captured value that can change
+///   while the comparison reports equality and leaves a stale row on screen.
+/// * **`==` is `nonisolated`, and has to be.** `View` is `@MainActor`, so
+///   everything declared in a view is main-actor isolated by inference —
+///   including this operator, which then cannot satisfy `Equatable`'s
+///   nonisolated requirement and fails to compile. The keyword is what lets
+///   SwiftUI call it during a diff. It reads `item`, an immutable `Sendable`
+///   property, which is exactly what a nonisolated member of an isolated type
+///   is allowed to touch; a `var`, or a property of a non-`Sendable` type,
+///   would not compile here and that restriction is a feature — it is the same
+///   set of values that can be compared safely.
+/// * **The tap action is not in here.** It stays on the `Button` in `HomeView`,
+///   because it captures `coordinator`, and a closure cannot be compared. Held
+///   here it would either be excluded from `==` — the stale-capture trap — or
+///   force the type to be unequal on every rebuild, which is where it started.
+///
+/// Both are internal rather than `private` so `ViewIdentityTests` can hold them
+/// to that first property: a stored property added without a matching line in
+/// `==` is a stale row, and the test fails on it rather than the reader finding
+/// it on screen.
+struct HomeItemRow: View, Equatable {
     let item: HomeItem
+
+    nonisolated static func == (lhs: HomeItemRow, rhs: HomeItemRow) -> Bool {
+        lhs.item == rhs.item
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text(item.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// Card-style item used in the iPad grid layout. `Equatable` for the same
+/// reason as ``HomeItemRow``, and more so: the grid renders more of these at
+/// once, and each one carries a shadow and a clip shape to re-rasterise.
+struct HomeItemCard: View, Equatable {
+    let item: HomeItem
+
+    nonisolated static func == (lhs: HomeItemCard, rhs: HomeItemCard) -> Bool {
+        lhs.item == rhs.item
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
