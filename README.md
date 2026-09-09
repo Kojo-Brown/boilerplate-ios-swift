@@ -104,6 +104,10 @@ build its own previews from doubles it ships itself.
   whether a body runs: the identity that says which view this is, the
   `Equatable` conformance that says whether it needs rebuilding, and the ledger
   that measures the difference instead of assuming it
+- [docs/lazy-stacks.md](./docs/lazy-stacks.md) — what changes when a screen
+  leaves `List` behind: rows realised rather than recycled, the index-keyed
+  `ForEach` that mounts the wrong row, the `.id(...)` "refresh" that throws away
+  every row's state, and the page that fits on screen and loads the next one
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 
