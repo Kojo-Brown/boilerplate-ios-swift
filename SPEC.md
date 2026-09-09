@@ -777,7 +777,7 @@ budget of four is a guess with no signal behind it. See `docs/pagination.md`.
 
 ## Phase 10 — SwiftUI Performance & UI
 - [x] View-identity and `Equatable` conformance to cut redundant body evaluations — `HomeViewModel.fetchItems()` minted its rows with `UUID()` inside the fetch, so a pull-to-refresh that changed nothing handed `ForEach` ten ids it had never seen: ten removals and ten insertions, every row's state discarded with the row that held it, and invisible to a test that counts rows. Identity belongs to the row rather than to the request that read it, so the stub mints its catalogue once; the test asserting ids *must* differ after a refresh was asserting the defect and is inverted in both mirrors. The rows are `HomeItemRow` and `HomeItemCard` now, `Equatable` and applied with `.equatable()`, because SwiftUI's fallback comparison for a non-`Equatable` view reads the view's memory and cannot see through the storage behind a `String` — and `HomeItem` compares content rather than `id`, since equality that stopped at identity would freeze every row whose title was edited. `Memoized<Key, Content>` is the same skip for inline content, keyed on a value the closure is handed rather than one it captures. `BodyEvaluationLedger`/`BodyEvaluationProbe` and `RenderHarness` make it measured rather than asserted: `_ = view.body` cannot answer "would SwiftUI have skipped this?" because the call is the evaluation, so the tree keeps its own count inside a hosted `UIHostingController`. In steady state an update to a value nothing is keyed on rebuilds the inline subtree and skips the other two exactly zero times over (PR #45)
-- [ ] `LazyVStack` performance: stable ids, `.id()` pitfalls, and prefetch
+- [x] `LazyVStack` performance: stable ids, `.id()` pitfalls, and prefetch — `LazyPaginatedStack` is `PaginatedList`'s counterpart over a `ScrollView` + `LazyVStack`, and the difference is that `List` recycles rows while a lazy stack realises them: the layout `List` will not express, in exchange for three obligations, each measured rather than asserted. **Stable ids**: `ForEach(items.indices, id: \.self)` keys a row on its position, so a prepend moves every row's *content* down a slot while identity stays with the slot — the inserted row mounts once under stable ids and *zero* times under index ids, and a row mounts at the tail instead holding an item that was already on screen, which read as a bug report is state attached to whichever item slid into the slot. **`.id(changingValue)` is not a refresh**: it mounts every row a second time where the two stacks beside it, same body and same invalidation, mount none. **A page that fits on screen loads the next one**: the trigger is `onAppear` per row and fires for everything the stack realises, so 40 rows at 200pt load exactly one page and wait while 12 rows at 44pt chain until the content outgrows the viewport — the rows still arriving once each and in order, because the prefetch guard moves the phase before it returns. `PrefetchPolicy` already refuses the unconditional version (`distanceFromEnd < pageSize`); the sizing it cannot check is the real rule, so choose the page size against the shortest row the screen can render. Laziness is the premise and is measured too: 150 rows in a 402x874 window realise a fraction of themselves where the same rows in a plain `VStack` all build — and a lazy stack *outside* a scrolling container builds every row, which is what makes the identity harness deterministic. `PaginationFooter` is extracted so the retry button that is the only way past a failed page does not exist in two copies (PR #46)
 - [ ] Instruments profiling walkthrough: hitches, hangs, and a fixed hotspot
 - [ ] Custom `Layout` protocol implementation for a measure-dependent component
 - [ ] Matched-geometry transitions + interactive dismissal
@@ -834,6 +834,56 @@ same as one that does — Instruments is item 3. And nothing enforces the
 `==`-covers-the-body rule: a stored property added to a row without a matching
 line in `==` compiles, renders, and goes stale, caught only by review and by
 equality tests that have to be extended by hand. See `docs/view-identity.md`.
+
+Item 2 complete as of PR #46 (2026-09-09). All four checks green: SwiftLint
+(strict), dependency resolution, GitGuardian, and build-and-test on the iOS
+Simulator.
+
+One red on the way, and it was this branch's in a way worth recording, because
+the item above set the trap. **Both new suites passed and the build was
+warning-free; two pre-existing tests failed.** A `RenderHarness` is a visible
+`UIWindow` plus a synchronous layout pass, Swift Testing runs suites in
+parallel, and `.serialized` orders the tests *within* a suite rather than the
+suites against each other — so a 400-row eager layout ran while two other
+suites were measuring things on the same main actor.
+`ViewIdentityTests.unrelatedChangeSkipsMemoisedContent` discarded exactly one
+update as the tail of the initial render, a number the note above records as
+*observed* rather than derived; under contention the tail reached update two
+(`[["inline": 1, "memoized": 1], ["memoized": 1, "inline": 1], ["inline": 1],
+["inline": 1]]`). It warms up until an update rebuilds nothing memoised and
+measures the four after that, which is stricter than what it replaced — all
+four measured updates must be clean where the first of four used to be exempt.
+`HomeViewModelConcurrencyTests.startLiveUpdatesAppendsItems` gave a 20 ms
+polling stream a fixed 120 ms to append; six intervals fit only when nothing
+else holds the actor the stream appends on, so it polls now with a `.timeLimit`
+on the suite — the third time this file has recorded that fix, after
+`SessionObserverTests` and `repeatedReadsInsideTheWindowMakeOneRequest`. It also
+stops the stream, which it had been leaving running for the rest of the bundle.
+This branch's own load came down too: two suites nested under one `.serialized`
+parent, 150 rows rather than 400.
+
+A process note, because it cost most of the run rather than most of the work.
+`GET /repos/.../pulls/46/check-runs` served `in_progress` for the failed job for
+about ninety minutes after it had concluded, and the first diagnosis written
+from that — a lost runner, neither timeout firing — was wrong and had to be
+retracted on the PR. The run-level status from `/actions/runs` and the webhook
+event were both correct and immediate. Trust those.
+
+**Every gate in CLAUDE.md remains unrunnable in the scheduled agent's Linux
+environment**, unchanged from item 1: `assert-sendable-audit.py` and
+`assert-module-boundaries.py` are the two that run there, and both did.
+
+Known gaps carried into item 3: **no scroll is ever driven.** Both prefetch
+tests measure what a *mount* realises, so the trigger is exercised by sizing
+rather than by scrolling, and a regression that only appears once the reader
+moves would not be caught. Scroll restoration is not wired up either —
+`scrollPosition(id:)` over a `scrollTargetLayout()` is the supported answer and
+is a screen-level decision about what to restore and when. No screen adopts the
+container: `HomeView` still renders a `List` on iPhone and a `LazyVGrid` on
+iPad, and neither is paginated. And the realisation count is still evaluations
+rather than cost — a row that is cheap to build a hundred times reads worse
+than one that is expensive to build twice, which is what item 3's Instruments
+walkthrough is for. See `docs/lazy-stacks.md`.
 
 
 ## Phase 11 — Security & Release
