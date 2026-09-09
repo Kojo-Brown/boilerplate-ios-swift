@@ -123,13 +123,22 @@ struct ViewIdentityTests {
     /// memoisation — and a failure that carries the whole history says which
     /// update went wrong, which a single total cannot.
     ///
-    /// **The first update after mounting is not part of the measurement.** On
-    /// CI run 34162321433 the memoised subtree was rebuilt exactly once across
-    /// three updates, and it was the first: the tail of the initial render and
-    /// the layout that follows a window becoming visible land on it. Steady
-    /// state is what the item claims and what is asserted here; asserting zero
-    /// from the first update would be asserting something this harness has
-    /// observed to be false.
+    /// **Reaching steady state is not part of the measurement.** On CI run
+    /// 34162321433 the memoised subtree was rebuilt exactly once across three
+    /// updates, and it was the first: the tail of the initial render and the
+    /// layout that follows a window becoming visible land on it. Steady state
+    /// is what the item claims; asserting zero from the first update would be
+    /// asserting something this harness has observed to be false.
+    ///
+    /// How many updates that tail spans is *not* fixed at one, which is what
+    /// run 34405002270 showed — with another suite mounting harnesses of its
+    /// own, it reached the second update too, and a test that discarded exactly
+    /// one update failed on a rebuild it was always going to tolerate. So the
+    /// warm-up drives updates until one of them rebuilds nothing memoised, and
+    /// the measurement starts from there. The result is a stricter assertion
+    /// than the one it replaces — every measured update must be clean, where
+    /// before the first of four was exempt — and it no longer depends on how
+    /// busy the machine is.
     @Test("An unrelated change rebuilds inline content and skips the memoised content")
     func unrelatedChangeSkipsMemoisedContent() async {
         let ticker = RenderTicker()
@@ -144,6 +153,18 @@ struct ViewIdentityTests {
         #expect(ledger.count(of: ProbeLabel.memoized) >= 1)
         #expect(ledger.count(of: ProbeLabel.equatable) >= 1)
 
+        // Bounded: if the memoisation is broken outright this never settles, and
+        // the budget is what turns that into a failed assertion below rather
+        // than a test that runs until the suite's time limit kills it.
+        var warmUps = 0
+        while warmUps < 10 {
+            ledger.reset()
+            ticker.tick += 1
+            await harness.settle()
+            warmUps += 1
+            if ledger.count(of: ProbeLabel.memoized) == 0 { break }
+        }
+
         var perUpdate: [[String: Int]] = []
         for _ in 1...4 {
             ledger.reset()
@@ -152,12 +173,11 @@ struct ViewIdentityTests {
             perUpdate.append(ledger.snapshot)
         }
 
-        let history: Comment = "per-update counts: \(perUpdate)"
-        let steady = perUpdate.dropFirst()
+        let history: Comment = "warm-up updates: \(warmUps); per-update counts: \(perUpdate)"
 
-        #expect(steady.allSatisfy { ($0[ProbeLabel.inline] ?? 0) >= 1 }, history)
-        #expect(steady.allSatisfy { ($0[ProbeLabel.memoized] ?? 0) == 0 }, history)
-        #expect(steady.allSatisfy { ($0[ProbeLabel.equatable] ?? 0) == 0 }, history)
+        #expect(perUpdate.allSatisfy { ($0[ProbeLabel.inline] ?? 0) >= 1 }, history)
+        #expect(perUpdate.allSatisfy { ($0[ProbeLabel.memoized] ?? 0) == 0 }, history)
+        #expect(perUpdate.allSatisfy { ($0[ProbeLabel.equatable] ?? 0) == 0 }, history)
     }
 
     /// The other direction, and the reason the test above is not simply a

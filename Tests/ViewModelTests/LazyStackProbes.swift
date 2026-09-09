@@ -10,7 +10,7 @@ import SwiftUI
 /// The identity harness records one label per *item*, not per row, so that a
 /// count answers "did the row holding item 3 mount again?" rather than "did
 /// something at position 2 mount again?" — the difference between those two
-/// questions is the whole subject of `LazyStackIdentityTests`.
+/// questions is the whole subject of `LazyStackTests.RealisationAndIdentity`.
 enum LazyProbeLabel {
     static let lazyRow = "lazy-row"
     static let eagerRow = "eager-row"
@@ -71,6 +71,17 @@ struct ProbedRow: View {
         .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
     }
 }
+
+/// How many rows the realisation harnesses render.
+///
+/// Large enough that "a fraction of them" is unmistakable against the ~20 rows
+/// an 874-point window fits, and no larger. The eager control lays every one of
+/// them out in a single synchronous pass on the main actor, and that pass is not
+/// free to the rest of the bundle: at 400 it was long enough to starve
+/// `HomeViewModelConcurrencyTests`, which measures a 20 ms polling stream that
+/// appends on the same actor, and to stretch `ViewIdentityTests`' per-update
+/// windows (CI run 34405002270).
+let realisationRowCount = 150
 
 /// `count` rows inside a `ScrollView` + `LazyVStack`: the container under test.
 struct LazyRealisationHarness: View {
@@ -174,7 +185,7 @@ struct LazyIdentityHarness: View {
 /// ``LazyPaginatedStack`` with a row of a known height, so that a test can
 /// decide how much of a page fits in the harness window.
 ///
-/// The height is the independent variable of `LazyStackPrefetchTests`: a page
+/// The height is the independent variable of `LazyStackTests.Prefetch`: a page
 /// taller than the viewport loads once and waits for the reader, and a page
 /// shorter than it triggers its own successor.
 struct LazyPaginationHarness: View {

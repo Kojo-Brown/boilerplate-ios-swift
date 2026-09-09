@@ -74,9 +74,27 @@ struct PollingStreamTests {
     }
 }
 
-@Suite("Task Cancellation — HomeViewModel")
+/// The time limit is the backstop for the polling loop below: a stream that
+/// never ticks would otherwise spend its whole budget of sleeps before failing,
+/// and on a suite this is the bound that reports it as a time-out with a name
+/// rather than as a job that ran long. It is the same bound `SessionObserverTests`
+/// took for the same reason.
+@Suite("Task Cancellation — HomeViewModel", .timeLimit(.minutes(1)))
 @MainActor
 struct HomeViewModelConcurrencyTests {
+    /// The stream appends on the main actor, so a single fixed sleep measures
+    /// how busy that actor is rather than whether the stream ticks: six 20 ms
+    /// intervals fit inside 120 ms only if nothing else in the bundle is holding
+    /// the actor, and something else in the bundle usually is. That is how this
+    /// failed on CI run 34405002270, where a suite laying out several hundred
+    /// rows in one synchronous pass ran alongside it. Polling asserts the same
+    /// thing — the count grows — without also asserting a deadline that belongs
+    /// to the runner, and it is the same fix `SessionObserverTests` and
+    /// `repeatedReadsInsideTheWindowMakeOneRequest` already carry.
+    ///
+    /// The stream is stopped at the end. Left running, a 20 ms poller appending
+    /// on the main actor outlives this test and becomes the noise that breaks
+    /// somebody else's.
     @Test("startLiveUpdates appends items over time")
     func startLiveUpdatesAppendsItems() async throws {
         let viewModel = HomeViewModel()
@@ -84,7 +102,12 @@ struct HomeViewModelConcurrencyTests {
         let baseline = viewModel.items.count
 
         viewModel.startLiveUpdates(interval: .milliseconds(20))
-        try await Task.sleep(for: .milliseconds(120))
+        defer { viewModel.stopLiveUpdates() }
+
+        for _ in 0..<200 {
+            if viewModel.items.count > baseline { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
 
         #expect(viewModel.items.count > baseline)
     }

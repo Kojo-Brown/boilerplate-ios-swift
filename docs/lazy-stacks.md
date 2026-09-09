@@ -24,14 +24,14 @@ that buys is the layout `List` will not express — rows of genuinely different
 shapes, no separators or insets you did not ask for, a header pinned through
 `pinnedViews`, content that is not a list of rows at all.
 
-The laziness itself is real and measured. `LazyStackIdentityTests` mounts four
-hundred 44-point rows in a 402 × 874 window and counts how many bodies ran:
+The laziness itself is real and measured. `LazyStackTests.RealisationAndIdentity`
+mounts 150 44-point rows in a 402 × 874 window and counts how many bodies ran:
 
 ```
-lazy realised <a fraction> of 400; the plain VStack built 400
+lazy realised <a fraction> of 150; the plain VStack built 150
 ```
 
-The bound asserted is "a fraction of four hundred", not a number. How far beyond
+The bound asserted is "a fraction of them", not a number. How far beyond
 the viewport SwiftUI realises is undocumented and varies by OS version, and a
 test that pinned it would be asserting an implementation detail rather than the
 property the container is chosen for.
@@ -125,7 +125,7 @@ its last row appears without anybody scrolling and the next page is requested
 immediately. Chained, that is the entire collection loaded at mount with the
 scrolling removed.
 
-`LazyStackPrefetchTests` measures both sides against the same catalogue and the
+`LazyStackTests.Prefetch` measures both sides against the same catalogue and the
 same window, with the row height as the only variable:
 
 | Page | Row height | Page height vs. 874 pt viewport | Loaded at rest |
@@ -167,6 +167,37 @@ inside a `List` that suppresses the hairline above the footer, and inside a lazy
 stack there is no list to hear it and the modifier is inert. A list-scoped
 modifier applied outside a list doing nothing is the documented behaviour, and
 it is why the footer needed no parameter for which container it is in.
+
+## Measuring this in a shared test bundle
+
+A `RenderHarness` is a visible `UIWindow` and a synchronous layout pass. Both are
+process-global, and the layout pass holds the main actor for as long as it takes
+— which, for the eager control, is every one of its rows in one go. Swift
+Testing runs suites in parallel by default, and `.serialized` orders the tests
+*within* a suite rather than the suites themselves, so two harness suites will
+happily mount two windows at once.
+
+The first CI run of this item (34405002270) is what that costs, and it cost it
+to other people's tests rather than to these. Both suites here passed; two
+elsewhere in the bundle did not:
+
+* `ViewIdentityTests.unrelatedChangeSkipsMemoisedContent` discarded exactly one
+  update as the tail of the initial render. With another suite competing for the
+  main actor the tail reached the second update as well. It now warms up until
+  an update rebuilds nothing memoised and measures from there, which is a
+  stricter assertion than the one it replaces — all four measured updates must
+  be clean, where before the first was exempt.
+* `HomeViewModelConcurrencyTests.startLiveUpdatesAppendsItems` gave a 20 ms
+  polling stream a fixed 120 ms to append something. That window measures how
+  busy the main actor is, not whether the stream ticks. It polls now, and stops
+  the stream at the end rather than leaving a 20 ms poller running for the rest
+  of the bundle.
+
+Three things follow for anyone adding a harness-driven measurement here: nest it
+under the existing serialized parent so only one window is mounted at a time,
+keep the synchronous layout small enough that other suites can interleave (150
+rows, not 400), and assume any test that measures a deadline near yours is
+measuring your layout pass too.
 
 ## What this does not do
 

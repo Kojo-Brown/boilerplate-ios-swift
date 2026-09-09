@@ -47,7 +47,7 @@ import SwiftUI
 /// it moves every row's *content* down one slot while identity stays with the
 /// slot. The reader sees each row's text change to its neighbour's, the state
 /// each row was holding stays where it was, and the row that was actually added
-/// never mounts at all. `LazyStackIdentityTests` measures exactly this.
+/// never mounts at all. `LazyStackTests` measures exactly this.
 ///
 /// A stable id is one that belongs to the row rather than to the request that
 /// read it, which is the same requirement `HomeViewModel` was fixed to meet in
@@ -85,7 +85,7 @@ import SwiftUI
 /// (`distanceFromEnd < pageSize` is a precondition). The rest is a sizing
 /// question this type cannot answer for you: a page has to be taller than the
 /// viewport, which means `pageSize` chosen against the shortest row the screen
-/// can render, not the average. `LazyStackPrefetchTests` measures both sides —
+/// can render, not the average. `LazyStackTests.Prefetch` measures both sides —
 /// tall rows load one page and stop, short rows chain.
 ///
 /// ## Isolation and laziness
