@@ -39,6 +39,14 @@ import SwiftUI
 /// frames, and it never fires at all for a page that adds no rows. A trigger
 /// that can be skipped is why the paginator follows an empty page itself rather
 /// than waiting to be asked again.
+///
+/// ## When this is the wrong container
+///
+/// `List` recycles its rows and imposes its own spacing, insets and separators.
+/// A screen that needs rows of genuinely different shapes, a pinned header, or
+/// none of that chrome wants ``LazyPaginatedStack`` instead — same paginator,
+/// same footer, a `ScrollView` + `LazyVStack` underneath, and the three
+/// obligations that come with realising rows instead of recycling them.
 package struct PaginatedList<Element: Identifiable & Sendable, Row: View>: View {
 
     private let paginator: CursorPaginator<Element>
@@ -59,62 +67,13 @@ package struct PaginatedList<Element: Identifiable & Sendable, Row: View>: View 
                 row(item)
                     .onAppear { paginator.prefetchIfNeeded(around: item) }
             }
-            footer
+            PaginationFooter(paginator)
         }
         .task { await paginator.loadFirstPageIfNeeded() }
         .refreshable { await paginator.refresh() }
         .onDisappear { paginator.cancel() }
     }
 
-    // MARK: - Footer
-
-    /// What sits below the last row: a spinner while a page is in flight, the
-    /// failure and a way past it, or the end of the list.
-    ///
-    /// The empty cases are not oversights. With no rows yet there is nothing for
-    /// a footer to be below — the screen showing this list owns its own empty
-    /// and first-load states, because only it knows what "no articles" should
-    /// look like.
-    @ViewBuilder
-    private var footer: some View {
-        switch paginator.phase {
-        case .idle, .ready:
-            EmptyView()
-
-        case .loadingFirstPage, .loadingNextPage:
-            ProgressView()
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 8)
-                .listRowSeparator(.hidden)
-                .accessibilityLabel("Loading more items")
-
-        case .failed(let message):
-            VStack(spacing: 8) {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Try Again") {
-                    Task { await paginator.retry() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 8)
-            .listRowSeparator(.hidden)
-
-        case .exhausted where paginator.items.isEmpty:
-            EmptyView()
-
-        case .exhausted:
-            Text("No more items")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 8)
-                .listRowSeparator(.hidden)
-        }
-    }
 }
 
 // MARK: - Preview
