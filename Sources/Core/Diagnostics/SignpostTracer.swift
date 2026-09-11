@@ -22,14 +22,20 @@ import os
 /// Identifiers start at 1 and only ever increase. `0` is `OSSignpostID.null`,
 /// and `UInt64.max` is `.invalid`; neither would be paired.
 ///
-/// ## Why `@unchecked Sendable`
+/// ## Sendable without an opt-out
 ///
-/// `os_signpost` is safe to call from any thread — that is the entire point of
-/// it as a profiling primitive, since the interesting work is rarely on one
-/// thread — and the mutable state here is one counter behind a lock. The
-/// unchecked conformance covers the `OSLog` handle, which the compiler cannot
-/// be told about and which is immutable and thread-safe by contract.
-package final class SignpostTracer: PerformanceTracing, @unchecked Sendable {
+/// A tracer is handed to whatever is being measured, and the point of a
+/// profiling primitive is that the interesting work is rarely on one thread —
+/// so this has to cross isolation boundaries, and `@unchecked Sendable` would
+/// be the lazy way to say so. It is not needed. The log handle is an immutable
+/// `let` of a `Sendable` type, and the one piece of mutable state is a counter
+/// inside an `OSAllocatedUnfairLock` — the same discipline
+/// `.github/scripts/assert-sendable-audit.py` holds the rest of the package to.
+///
+/// The lock lives in a `struct` rather than a class because
+/// `OSAllocatedUnfairLock` allocates its state: copies of this value share one
+/// counter, which is what the identifiers depend on.
+package struct SignpostTracer: PerformanceTracing {
 
     private let log: OSLog
     private let nextID = OSAllocatedUnfairLock<UInt64>(initialState: 1)
