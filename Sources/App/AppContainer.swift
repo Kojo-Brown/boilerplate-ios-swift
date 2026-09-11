@@ -163,6 +163,20 @@ struct AppContainer: Sendable {
     /// choice — one session per screen — and leaves a shared one a one-line
     /// change here.
     let makeCameraService: @Sendable () -> CameraService
+
+    /// What the app marks its own intervals with, for Instruments to draw.
+    ///
+    /// It carries a default — the only collaborator here that does — because
+    /// the decision it encodes is not which implementation to use but whether
+    /// to be measurable at all, and the answer to that is always yes. A
+    /// signpost on a log nobody is recording costs a load and a branch; the
+    /// alternative is an app that can only be profiled after somebody adds the
+    /// instrumentation, which is to say after the report of the stutter has
+    /// gone cold.
+    ///
+    /// The subsystem is `logSubsystem`, so one filter finds the app's
+    /// intervals and its log lines together. See `docs/profiling.md`.
+    let tracer: any PerformanceTracing = SignpostTracer(subsystem: AppContainer.logSubsystem)
 }
 
 // MARK: - The live graph
@@ -472,12 +486,18 @@ extension AppContainer {
         )
     }
 
-    /// `HomeViewModel` has no collaborators yet — it fabricates its list with a
-    /// `Task.sleep`, which is `docs/solid.md` finding 6. It is built here
-    /// anyway, so that giving it a repository is a change to this method rather
-    /// than a change to `HomeView`.
+    /// `HomeViewModel` still has no *data* collaborator — it fabricates its
+    /// list with a `Task.sleep`, which is `docs/solid.md` finding 6. It is
+    /// built here anyway, so that giving it a repository is a change to this
+    /// method rather than a change to `HomeView`.
+    ///
+    /// The tracer it does take is the container's, rather than one of its own,
+    /// so that every interval in the app is issued from one counter. Two
+    /// tracers can hand out the same identifier at the same moment, and
+    /// `os_signpost` pairs a begin with an end by identifier: the trace would
+    /// close one screen's interval with another screen's end.
     func makeHomeViewModel() -> HomeViewModel {
-        HomeViewModel()
+        HomeViewModel(tracer: tracer)
     }
 
     /// The Settings account section — a `Store`, not a view model, since Phase
