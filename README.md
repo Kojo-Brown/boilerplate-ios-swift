@@ -108,6 +108,10 @@ build its own previews from doubles it ships itself.
   leaves `List` behind: rows realised rather than recycled, the index-keyed
   `ForEach` that mounts the wrong row, the `.id(...)` "refresh" that throws away
   every row's state, and the page that fits on screen and loads the next one
+- [docs/profiling.md](./docs/profiling.md) — capturing and reading an
+  Instruments trace: what separates a hitch from a hang, where the app's own
+  signposts appear, and the search-field hotspot that was four locale-aware
+  passes over the list per keystroke
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 

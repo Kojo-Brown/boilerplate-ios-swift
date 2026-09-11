@@ -471,12 +471,25 @@ struct UserRepositoryChainTests {
     /// request. Innermost it would be the other way round — one record per
     /// transport attempt and none for a hit — which is what an error-budget
     /// dashboard wants and not what "how long did the user wait" is.
+    ///
+    /// The clock is injected and never advanced, for the reason
+    /// `repeatedReadsInsideTheWindowMakeOneRequest` states above and the same
+    /// failure: on the real `ContinuousClock`, "the second read is a cache hit"
+    /// is a claim about whether two sequential `await`s landed inside five
+    /// seconds of wall time, which on a loaded runner they do not — this is the
+    /// third test in this package to lose that race, found red on a runner where
+    /// nothing else in the suite failed. Nothing is weakened: both assertions are
+    /// the ones that were there, the window is still the default `timeToLive`,
+    /// and the expiry half is proved by
+    /// `aReadAfterTheWindowGoesBackToTheRepository`, which advances this same
+    /// seam deliberately.
     @Test("Telemetry outermost records the cache hit that made no request")
     func telemetryOutermostSeesTheCacheHit() async throws {
+        let clock = ManualClock()
         let base = ScriptedRepository()
         let telemetry = RecordingRepositoryTelemetry()
         let repository = TelemetryUserRepository(
-            base: CachingUserRepository(base: base),
+            base: CachingUserRepository(base: base, now: clock.now),
             telemetry: telemetry
         )
 
