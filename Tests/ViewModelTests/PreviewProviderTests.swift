@@ -148,6 +148,34 @@ struct ComponentPreviewProviderTests {
     func adaptiveStackPreviewsPropertyAccessible() {
         _ = AdaptiveStack_Previews.self
     }
+
+    // MARK: - TagChip
+
+    /// A chip with no action is a label; one with an action is a `Button`.
+    /// They are different view trees, so both are built here — the second is
+    /// the one where a change to the traits or the button style would go
+    /// unnoticed otherwise.
+    @Test("TagChip renders as a label when it has no action")
+    func tagChipLabelBodyRenders() {
+        _ = TagChip("Swift").body
+    }
+
+    @Test("TagChip renders as a control when it has an action")
+    func tagChipButtonBodyRenders() {
+        _ = TagChip("Swift", isSelected: true) {}.body
+    }
+
+    /// `FlowLayout`'s own body is its `Layout` conformance rather than a view
+    /// tree, so what is checked here is that a flow can be built around
+    /// content at all — the placement itself is `FlowLayoutRenderTests`.
+    @Test("A FlowLayout of chips can be built")
+    func flowLayoutOfChipsBuilds() {
+        let view = FlowLayout(spacing: 8, lineSpacing: 8) {
+            TagChip("Swift")
+            TagChip("SwiftUI")
+        }
+        _ = view
+    }
 }
 
 // MARK: - Auth Preview Tests
