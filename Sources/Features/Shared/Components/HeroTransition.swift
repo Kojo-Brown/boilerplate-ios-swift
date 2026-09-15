@@ -402,10 +402,12 @@ private struct HeroGalleryPreview: View {
     HeroGalleryPreview()
 }
 
-#Preview("Hero gallery – reduce motion") {
-    HeroGalleryPreview()
-        .environment(\.accessibilityReduceMotion, true)
-}
+// There is deliberately no "reduce motion" preview beside the one above.
+// `EnvironmentValues.accessibilityReduceMotion` is get-only — its key path is
+// not `WritableKeyPath`, so `.environment(\.accessibilityReduceMotion, true)`
+// does not compile — because the value is read from the device rather than set
+// by a view. To see that path, turn Reduce Motion on in Settings ›
+// Accessibility › Motion on the simulator running the preview.
 
 #Preview("Dismiss layer on its own") {
     ZStack {
