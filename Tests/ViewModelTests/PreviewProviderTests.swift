@@ -176,6 +176,38 @@ struct ComponentPreviewProviderTests {
         }
         _ = view
     }
+
+    // MARK: - Hero transitions
+
+    /// `HeroScope` reads `@Namespace` and `@Environment` while building its
+    /// body, so it is verified by instantiation here and rendered for real in
+    /// `HeroTransitionRenderTests`, which hosts it in a window. What this adds
+    /// is the call site: both ends of a pair go through the generic modifiers,
+    /// so a change to `heroSource`/`heroDestination` that no longer accepts the
+    /// shape a caller uses fails to compile here rather than in a consumer.
+    @Test("A HeroScope can be built around both ends of a pair")
+    func heroScopeCanBeBuilt() {
+        let view = HeroScope(expanded: Binding<Int?>.constant(nil)) { proxy in
+            TagChip("Swift")
+                .heroSource(1, in: proxy)
+        } detail: { id, proxy in
+            TagChip("Detail \(id)")
+                .heroDestination(id, in: proxy)
+        }
+        _ = view
+    }
+
+    /// The dismiss layer has no environment dependency of its own and its body
+    /// is a `GeometryReader`, so building it evaluates nothing that needs a
+    /// host — which makes it the one half of the transition that is safe to
+    /// render in a plain unit test.
+    @Test("InteractiveDismissLayer renders")
+    func interactiveDismissLayerRenders() {
+        let view = InteractiveDismissLayer(onDismiss: {}) {
+            TagChip("Card")
+        }
+        _ = view.body
+    }
 }
 
 // MARK: - Auth Preview Tests
