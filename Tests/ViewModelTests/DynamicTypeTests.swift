@@ -27,18 +27,14 @@ import Testing
 @MainActor
 struct DynamicTypeTests {
 
-    /// The tallest element published under `content` at `typeSize`.
-    ///
-    /// The tallest rather than the first: a control is one element in these
-    /// harnesses, but taking a maximum means a test does not silently start
-    /// measuring a label that happens to be published ahead of the button it
-    /// belongs to.
+    /// The height `content` asks for at `typeSize`, from the layout system
+    /// rather than from the accessibility tree — see ``measuredHeight(of:at:width:)``
+    /// for why the distinction is load-bearing.
     private static func height(
         of content: some View,
         at typeSize: DynamicTypeSize
     ) async -> CGFloat {
-        let published = await publishedElements(at: typeSize, of: content)
-        return published.map(\.frame.height).max() ?? 0
+        await measuredHeight(of: content, at: typeSize)
     }
 
     // MARK: - AppButton
@@ -48,7 +44,7 @@ struct DynamicTypeTests {
         let atDefault = await Self.height(of: AppButton("Sign In") {}, at: .large)
         let atAccessibility = await Self.height(of: AppButton("Sign In") {}, at: .accessibility5)
 
-        #expect(atDefault > 0, "nothing was published at .large")
+        #expect(atDefault > 0, "the control measured zero at .large")
         #expect(
             atAccessibility > atDefault,
             "AX5: \(atAccessibility), large: \(atDefault) — a pinned height reads the same at both"
@@ -88,7 +84,7 @@ struct DynamicTypeTests {
         let atDefault = await Self.height(of: Self.biometricButton(), at: .large)
         let atAccessibility = await Self.height(of: Self.biometricButton(), at: .accessibility5)
 
-        #expect(atDefault > 0, "nothing was published at .large")
+        #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")
     }
 
@@ -110,7 +106,7 @@ struct DynamicTypeTests {
         let atDefault = await Self.height(of: field, at: .large)
         let atAccessibility = await Self.height(of: field, at: .accessibility5)
 
-        #expect(atDefault > 0, "nothing was published at .large")
+        #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")
     }
 
@@ -122,7 +118,7 @@ struct DynamicTypeTests {
         let atDefault = await Self.height(of: banner, at: .large)
         let atAccessibility = await Self.height(of: banner, at: .accessibility5)
 
-        #expect(atDefault > 0, "nothing was published at .large")
+        #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")
     }
 }

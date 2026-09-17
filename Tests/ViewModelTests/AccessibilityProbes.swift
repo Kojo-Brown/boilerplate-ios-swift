@@ -86,6 +86,39 @@ enum AccessibilityTree {
         return found
     }
 
+    /// The view hierarchy under `root`, annotated with what each node offers
+    /// the accessibility system.
+    ///
+    /// This exists because of how the first CI run of these suites failed:
+    /// every assertion reported `published: []`, which says the walk found
+    /// nothing and says nothing whatsoever about why — whether the tree was
+    /// never built, or was built somewhere the walk does not reach, or was
+    /// built with every node declining to be an element. One run spent, no
+    /// information gained. Printed alongside an empty result, this answers the
+    /// question in the same run that raises it.
+    static func hierarchy(under root: NSObject, depth: Int = 0) -> String {
+        guard depth < maximumDepth else { return "" }
+
+        let indent = String(repeating: "  ", count: depth)
+        let elements = root.accessibilityElements?.count
+        let counted = root.accessibilityElementCount()
+        var line = "\(indent)\(type(of: root))"
+        line += " element=\(root.isAccessibilityElement)"
+        line += " elements=\(elements.map { "\($0)" } ?? "nil")"
+        line += " count=\(counted == NSNotFound ? "NSNotFound" : String(counted))"
+        if let view = root as? UIView {
+            line += " subviews=\(view.subviews.count) frame=\(view.frame.integral)"
+        }
+        if let label = root.accessibilityLabel, !label.isEmpty {
+            line += " label=\(label.debugDescription)"
+        }
+
+        let children = everythingUnder(root)
+            .map { hierarchy(under: $0, depth: depth + 1) }
+            .joined(separator: "\n")
+        return children.isEmpty ? line : line + "\n" + children
+    }
+
     /// The names of every custom rotor published anywhere under `root`.
     ///
     /// Rotors are not elements and do not appear in ``elements(under:)``: they
@@ -189,31 +222,111 @@ struct ControlHarness<Content: View>: View {
     }
 }
 
+// MARK: - The result
+
+/// What a view published, and — when that is nothing — the hierarchy that
+/// published nothing.
+///
+/// A `Collection`, so every assertion reads it as the plain array it replaced:
+/// `first(where:)`, `count`, `filter`, `contains(where:)`. What it adds is the
+/// one case an array cannot describe. `published: []` is a failure message that
+/// costs a CI round to act on; the same failure printing the view tree, with
+/// each node's element status beside it, usually costs none.
+struct PublishedTree: RandomAccessCollection, CustomStringConvertible {
+
+    let nodes: [AccessibilityNode]
+
+    /// Captured eagerly rather than on demand: by the time an assertion fails
+    /// the window has been dismounted and there is no hierarchy left to walk.
+    private let hierarchy: String
+
+    init(nodes: [AccessibilityNode], hierarchy: String) {
+        self.nodes = nodes
+        self.hierarchy = hierarchy
+    }
+
+    var startIndex: Int { nodes.startIndex }
+    var endIndex: Int { nodes.endIndex }
+    subscript(position: Int) -> AccessibilityNode { nodes[position] }
+
+    var description: String {
+        nodes.isEmpty
+            ? "no elements were published. The hierarchy under the host was:\n\(hierarchy)"
+            : nodes.description
+    }
+}
+
 // MARK: - Mounting
 
 /// Mounts `content`, reads the tree it publishes, and takes the window down.
 ///
-/// A free function rather than a method on the suites, because three of them
-/// want it and it is the same four lines each time — mount, settle, read,
+/// A free function rather than a method on the suites, because both of them
+/// want it and it is the same four steps each time — mount, settle, read,
 /// dismount, in that order. Skipping the second leaves the tree empty often
-/// enough to be a flake; skipping the fourth leaves a key-window candidate
-/// behind for every later test in the process.
+/// enough to be a flake; skipping the fourth leaves a key window behind for
+/// every later test in the process.
+///
+/// `onScreen: true` is the part that is not boilerplate: the accessibility
+/// tree, unlike layout, is only built for a view on a real scene.
 @MainActor
 func publishedElements(
     at typeSize: DynamicTypeSize = .large,
     of content: some View
-) async -> [AccessibilityNode] {
-    let harness = await RenderHarness.mount(ControlHarness(typeSize: typeSize, content: content))
+) async -> PublishedTree {
+    let harness = await RenderHarness.mount(
+        ControlHarness(typeSize: typeSize, content: content),
+        onScreen: true
+    )
     defer { harness.dismount() }
     await harness.settle()
-    return AccessibilityTree.elements(under: harness.rootView)
+    // The hierarchy only when there is nothing to report without it: walking
+    // it is cheap but printing it beside a tree that did publish is noise.
+    let nodes = AccessibilityTree.elements(under: harness.rootView)
+    let hierarchy = nodes.isEmpty ? AccessibilityTree.hierarchy(under: harness.rootView) : ""
+    return PublishedTree(nodes: nodes, hierarchy: hierarchy)
 }
 
 /// The same, for the rotors rather than the elements.
 @MainActor
 func publishedRotorNames(of content: some View) async -> [String] {
-    let harness = await RenderHarness.mount(ControlHarness(content: content))
+    let harness = await RenderHarness.mount(ControlHarness(content: content), onScreen: true)
     defer { harness.dismount() }
     await harness.settle()
     return AccessibilityTree.rotorNames(under: harness.rootView)
+}
+
+/// The height `content` asks for at `typeSize`, given `width`.
+///
+/// Deliberately nothing to do with the accessibility tree. Whether a control
+/// grows with the reader's text size is a layout question, and
+/// `UIHostingController.sizeThatFits(in:)` is the layout system answering it —
+/// the same call SwiftUI makes of a hosted view in an app. Measuring it off an
+/// accessibility element's frame instead would make every Dynamic Type
+/// assertion depend on a mechanism none of them is about, which is precisely
+/// how nine of them first failed for a reason that was not theirs.
+@MainActor
+func measuredHeight(
+    of content: some View,
+    at typeSize: DynamicTypeSize,
+    width: CGFloat = 320
+) async -> CGFloat {
+    let harness = await RenderHarness.mount(MeasuredControl(typeSize: typeSize, content: content))
+    defer { harness.dismount() }
+    // A large finite proposal rather than `.greatestFiniteMagnitude`: a
+    // control here is sized by its contents, and an infinity is the one value
+    // a layout can turn into a NaN.
+    let proposal = CGSize(width: width, height: 10_000)
+    return harness.idealSize(fitting: proposal).height
+}
+
+/// One control and the text size to render it at — nothing around it, so the
+/// size that comes back is the control's own.
+struct MeasuredControl<Content: View>: View {
+
+    let typeSize: DynamicTypeSize
+    let content: Content
+
+    var body: some View {
+        content.dynamicTypeSize(typeSize)
+    }
 }
