@@ -34,62 +34,24 @@ final class RenderHarness<Root: View> {
     ///
     /// A factory rather than an initialiser because settling is `async`, and
     /// that is not an implementation detail — see ``settle(for:)``.
-    /// - Parameter onScreen: puts the window on a real `UIWindowScene` and makes
-    ///   it key, rather than merely unhiding it. Default `false`, which is what
-    ///   every body-evaluation suite wants: those measure SwiftUI's work, which
-    ///   a laid-out tree in an unhidden window is enough for, and a suite that
-    ///   took key-window status would take it from whatever else in the process
-    ///   had it.
-    ///
-    ///   `AccessibilityAuditTests` needs the stronger thing, because the
-    ///   accessibility tree is not part of layout. SwiftUI builds its UIKit
-    ///   accessibility bridge for a view that is genuinely on a screen, and a
-    ///   window with no scene is not on one however laid out it is — which is
-    ///   what an empty `accessibilityElements` on a perfectly rendered tree
-    ///   turned out to mean.
-    static func mount(_ root: Root, onScreen: Bool = false) async -> RenderHarness {
-        let harness = RenderHarness(root, onScreen: onScreen)
+    static func mount(_ root: Root) async -> RenderHarness {
+        let harness = RenderHarness(root)
         await harness.settle()
         return harness
     }
 
-    private init(_ root: Root, onScreen: Bool) {
+    private init(_ root: Root) {
         let controller = UIHostingController(rootView: root)
         let frame = CGRect(x: 0, y: 0, width: 402, height: 874)
         let hostWindow = UIWindow(frame: frame)
         hostWindow.rootViewController = controller
-
-        if onScreen, let scene = Self.foregroundScene {
-            // The scene first, then the frame: adopting a scene resizes the
-            // window to it, and these harnesses measure against a known width.
-            hostWindow.windowScene = scene
-            hostWindow.frame = frame
-            hostWindow.makeKeyAndVisible()
-        } else {
-            hostWindow.isHidden = false
-        }
+        hostWindow.isHidden = false
         controller.view.frame = frame
 
         host = controller
         window = hostWindow
 
         host.view.layoutIfNeeded()
-    }
-
-    /// A scene to hang an on-screen window from, if the test host has one.
-    ///
-    /// It is an `if let` at the call site rather than a precondition because
-    /// the absence is not this harness's to fail on: a bundle with no scene
-    /// still runs every body-evaluation suite correctly, and the accessibility
-    /// suites report the empty tree themselves, with the hierarchy that
-    /// produced it.
-    private static var foregroundScene: UIWindowScene? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-            ?? UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first
     }
 
     /// Gives SwiftUI a chance to apply whatever the last mutation scheduled,
@@ -112,28 +74,6 @@ final class RenderHarness<Root: View> {
         host.view.layoutIfNeeded()
     }
 
-    /// The hosted view, for a suite that reads the tree UIKit publishes rather
-    /// than counting body evaluations.
-    ///
-    /// Everything above measures SwiftUI's *work*; `AccessibilityAuditTests`
-    /// measures its *output* — the labels, values and traits an assistive
-    /// client is handed — and that output only exists once a hosting
-    /// controller has laid the tree out inside a window, which is precisely
-    /// what this harness already builds.
-    var rootView: UIView { host.view }
-
-    /// The size the hosted view asks for, given `proposal`.
-    ///
-    /// `DynamicTypeTests` measures with this rather than off an accessibility
-    /// element's frame, and the independence is the point: whether a control
-    /// grows with the reader's text size is a layout question, and answering it
-    /// through the accessibility tree would make every one of those assertions
-    /// fail for a reason that has nothing to do with Dynamic Type — which is
-    /// exactly what happened the first time round.
-    func idealSize(fitting proposal: CGSize) -> CGSize {
-        host.sizeThatFits(in: proposal)
-    }
-
     /// Takes the window back down.
     ///
     /// A visible `UIWindow` is retained by UIKit, not only by whoever made it,
@@ -144,10 +84,6 @@ final class RenderHarness<Root: View> {
     func dismount() {
         window.isHidden = true
         window.rootViewController = nil
-        // Only ever set by `onScreen`, and clearing it is what hands key-window
-        // status back rather than leaving this window holding it for the rest
-        // of the process.
-        window.windowScene = nil
     }
 }
 

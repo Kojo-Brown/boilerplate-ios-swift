@@ -1,7 +1,51 @@
 import SwiftUI
 import Testing
+import UIKit
 @testable import Core
 @testable import Features
+
+// MARK: - Measuring
+
+/// One control and the text size to render it at — nothing around it, so the
+/// size that comes back is the control's own.
+struct MeasuredControl<Content: View>: View {
+
+    let typeSize: DynamicTypeSize
+    let content: Content
+
+    var body: some View {
+        content.dynamicTypeSize(typeSize)
+    }
+}
+
+/// The height `content` asks for at `typeSize`, given `width`.
+///
+/// No window, no scene, no settling, and deliberately nothing to do with the
+/// accessibility tree. `UIHostingController.sizeThatFits(in:)` is the layout
+/// system answering a layout question — the same call SwiftUI makes of a hosted
+/// view in an app — and whether a control grows with the reader's text size is
+/// a layout question.
+///
+/// The independence is not incidental. These assertions were first written to
+/// read heights off accessibility elements, and every one of them failed for a
+/// reason that had nothing to do with Dynamic Type: a single unrelated
+/// mechanism held the whole suite hostage. Not mounting a window also keeps
+/// this suite from competing for the main actor with the body-evaluation
+/// suites, which measure timing-sensitive counts.
+@MainActor
+func measuredHeight(
+    of content: some View,
+    at typeSize: DynamicTypeSize,
+    width: CGFloat = 320
+) -> CGFloat {
+    let controller = UIHostingController(
+        rootView: MeasuredControl(typeSize: typeSize, content: content)
+    )
+    // A large finite proposal rather than `.greatestFiniteMagnitude`: a control
+    // here is sized by its contents, and an infinity is the one value a layout
+    // can turn into a NaN.
+    return controller.sizeThatFits(in: CGSize(width: width, height: 10_000)).height
+}
 
 // MARK: - Dynamic Type
 
@@ -27,22 +71,20 @@ import Testing
 @MainActor
 struct DynamicTypeTests {
 
-    /// The height `content` asks for at `typeSize`, from the layout system
-    /// rather than from the accessibility tree — see ``measuredHeight(of:at:width:)``
-    /// for why the distinction is load-bearing.
+    /// Shorthand for ``measuredHeight(of:at:width:)`` at this suite's width.
     private static func height(
         of content: some View,
         at typeSize: DynamicTypeSize
-    ) async -> CGFloat {
-        await measuredHeight(of: content, at: typeSize)
+    ) -> CGFloat {
+        measuredHeight(of: content, at: typeSize)
     }
 
     // MARK: - AppButton
 
     @Test("A button is taller at an accessibility text size than at the default")
-    func appButtonGrowsWithTheTextSize() async {
-        let atDefault = await Self.height(of: AppButton("Sign In") {}, at: .large)
-        let atAccessibility = await Self.height(of: AppButton("Sign In") {}, at: .accessibility5)
+    func appButtonGrowsWithTheTextSize() {
+        let atDefault = Self.height(of: AppButton("Sign In") {}, at: .large)
+        let atAccessibility = Self.height(of: AppButton("Sign In") {}, at: .accessibility5)
 
         #expect(atDefault > 0, "the control measured zero at .large")
         #expect(
@@ -56,8 +98,8 @@ struct DynamicTypeTests {
     /// assertion is against the guideline, so a future change to the constant
     /// is free and a change that goes below the guideline is not.
     @Test("A button clears the minimum target size at the default text size")
-    func appButtonClearsTheMinimumTargetSize() async {
-        let atDefault = await Self.height(of: AppButton("Sign In") {}, at: .large)
+    func appButtonClearsTheMinimumTargetSize() {
+        let atDefault = Self.height(of: AppButton("Sign In") {}, at: .large)
 
         #expect(atDefault >= 44, "height: \(atDefault)")
     }
@@ -68,8 +110,8 @@ struct DynamicTypeTests {
     /// nothing else in the control that grew — which makes it the sharpest of
     /// the three: a pinned 50-point frame reads exactly 50 here.
     @Test("A button in flight is sized by the scaled floor, not by its spinner")
-    func loadingButtonKeepsItsHeight() async {
-        let loading = await Self.height(
+    func loadingButtonKeepsItsHeight() {
+        let loading = Self.height(
             of: AppButton("Sign In", isLoading: true) {},
             at: .accessibility3
         )
@@ -80,9 +122,9 @@ struct DynamicTypeTests {
     // MARK: - BiometricAuthButton
 
     @Test("The biometric button grows with the text size too")
-    func biometricButtonGrowsWithTheTextSize() async {
-        let atDefault = await Self.height(of: Self.biometricButton(), at: .large)
-        let atAccessibility = await Self.height(of: Self.biometricButton(), at: .accessibility5)
+    func biometricButtonGrowsWithTheTextSize() {
+        let atDefault = Self.height(of: Self.biometricButton(), at: .large)
+        let atAccessibility = Self.height(of: Self.biometricButton(), at: .accessibility5)
 
         #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")
@@ -101,10 +143,10 @@ struct DynamicTypeTests {
     /// right, and worth holding there: a fixed height added to it later would
     /// fail here rather than in somebody's hands.
     @Test("A text field grows with the text size")
-    func appTextFieldGrowsWithTheTextSize() async {
+    func appTextFieldGrowsWithTheTextSize() {
         let field = AppTextField("Email", text: .constant("someone@example.com"))
-        let atDefault = await Self.height(of: field, at: .large)
-        let atAccessibility = await Self.height(of: field, at: .accessibility5)
+        let atDefault = Self.height(of: field, at: .large)
+        let atAccessibility = Self.height(of: field, at: .accessibility5)
 
         #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")
@@ -113,10 +155,10 @@ struct DynamicTypeTests {
     // MARK: - InlineErrorBanner
 
     @Test("The error banner grows with the text size")
-    func errorBannerGrowsWithTheTextSize() async {
+    func errorBannerGrowsWithTheTextSize() {
         let banner = InlineErrorBanner("Incorrect email or password.")
-        let atDefault = await Self.height(of: banner, at: .large)
-        let atAccessibility = await Self.height(of: banner, at: .accessibility5)
+        let atDefault = Self.height(of: banner, at: .large)
+        let atAccessibility = Self.height(of: banner, at: .accessibility5)
 
         #expect(atDefault > 0, "the control measured zero at .large")
         #expect(atAccessibility > atDefault, "AX5: \(atAccessibility), large: \(atDefault)")

@@ -77,8 +77,8 @@ struct RecognizedTextPanel: View {
 /// section is called, and a reader who wants the section wants to skip to it.
 ///
 /// Its own view because the screen composes it into a row with two buttons, and
-/// because a heading with nothing else in it is the smallest thing
-/// ``AccessibilityAuditTests`` can mount to check the trait survived.
+/// because the count and its pluralisation are the one part of this heading
+/// with a decision in it.
 struct RecognizedTextHeading: View {
 
     let blockCount: Int
@@ -119,11 +119,6 @@ extension RecognitionResult {
     /// Enough blocks that reading them as one paragraph is visibly the wrong
     /// shape, which is what the rotor is for.
     static var previewReceipt: RecognitionResult {
-        // Single-spaced on purpose. A run of spaces is how a receipt lines its
-        // columns up, and it is also the one thing in a fixture that an
-        // assertion on a published label cannot rely on surviving: what a
-        // reader hears is normalised, and the string compared against it here
-        // should be the string the panel is actually asked to render.
         let lines = [
             "CORNER STORE",
             "12 Rue Lafayette",

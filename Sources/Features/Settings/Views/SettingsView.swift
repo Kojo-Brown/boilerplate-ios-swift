@@ -169,9 +169,12 @@ package struct SettingsView: View {
 /// checkmark is drawing — so the glyph is hidden, since a row that announced
 /// both would say it twice.
 ///
-/// Internal rather than private so `AccessibilityAuditTests` can mount it on
-/// its own: the assertion is about what one row publishes, and reaching it
-/// through `SettingsView` would need a store, an `AppState` and a `List`.
+/// Its own type rather than a closure inside `appearancePicker`, because the
+/// three things above are a contract a row either keeps or does not, and a
+/// named type is where that contract can be written down and read. It is
+/// internal rather than private so a test can reach it without a store, an
+/// `AppState` and a `List` around it — see `docs/accessibility.md` for why
+/// that test reads the source rather than the published tree.
 struct AppearanceOptionRow: View {
 
     let scheme: AppColorScheme

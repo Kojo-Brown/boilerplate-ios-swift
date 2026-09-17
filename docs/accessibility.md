@@ -9,33 +9,50 @@ badly — it is a pass that had not happened. What follows is the pass, the four
 things it covers, and the parts that were considered and deliberately left
 alone.
 
-## The instrument
+## How this is checked, and what could not be
 
-`Tests/ViewModelTests/AccessibilityProbes.swift` mounts a view in a real
-`UIHostingController` inside a `UIWindow` (the `RenderHarness` Phase 10 item 1
-built) and walks the accessibility tree UIKit publishes from it, returning one
-`AccessibilityNode` per element: label, value, hint, traits, frame.
+The item set out to check the labels and traits below at runtime: host each
+control, read the accessibility tree UIKit publishes from it, assert on what
+came out. **That does not work in a unit-test process**, and the finding is
+worth recording because it will come up again.
 
-Reading the published tree rather than the source is the whole point, because
-the two disagree in both directions and the source is the one that looks right:
+SwiftUI does not build its UIKit accessibility bridge unless an assistive
+client is attached. `_UIHostingView.accessibilityElements` returns an *empty
+array* — not nil, not a tree built on first access — and the text is drawn into
+a `CGDrawingView` which is not an element and vends nothing:
 
-* `.accessibilityLabel` on a container with two children may be overridden by
-  the children.
-* `.accessibilityHidden(true)` on a view that was never an element changes
-  nothing, and reads as though it did.
-* A `Button` whose label branch holds no text is a control with no name at all.
-* `.contentShape(Rectangle())` plus `.onTapGesture` looks exactly like a button
-  in a diff and publishes neither a trait nor an activation point.
+```
+_UIHostingView<...>       element=false elements=0   count=0 subviews=1
+  PlatformContainer       element=false elements=nil count=0 subviews=1
+    HostingScrollView     element=false elements=nil count=0 subviews=2
+      PlatformGroupContainer element=false elements=nil count=0 subviews=1
+        CGDrawingView     element=false elements=nil count=0 subviews=0
+```
 
-Every one of those is invisible in review. None is invisible in the tree.
+That was read off a window with a real `UIWindowScene`, made key and visible,
+fully laid out, on the iOS 18.5 simulator, after the tree had rendered. It is a
+gate rather than laziness, and no arrangement of windows gets past it. Reading
+the published tree needs an XCUITest target with a host app, which this package
+does not have — it belongs with the simulator-matrix item in Phase 12.
 
-The walk follows UIKit's three container mechanisms in order — the object *is*
-an element, it vends `accessibilityElements`, it implements the indexed
-`UIAccessibilityContainer` methods — and only falls through to `subviews` when
-none applies, because `subviews` is the view hierarchy and not the
-accessibility one. It stops *at* an element rather than descending into it,
-which is what makes a count meaningful: a combined element still has children
-in the view hierarchy and is, to VoiceOver, one stop.
+So the pass is verified two ways, and neither is the one that was wanted:
+
+* **`Tools/assert-accessibility-audit.py`** checks the *shape* of the three
+  defects in the source — a tap gesture with no `.accessibilityAction(named:)`
+  beside it, a `.frame(maxWidth: .infinity)` followed by a `.frame(height:)`,
+  an `Image(systemName:)` that is neither hidden nor named. Every exception is
+  recorded with a reason and every recorded exception must still exist, the
+  same both-directions rule the Sendable audit uses. It is syntactic, so it
+  runs in the lint job on Linux — which is where the scheduled agent can run it
+  before pushing, unlike every other gate in this repository.
+* **`DynamicTypeTests`** measures heights through
+  `UIHostingController.sizeThatFits(in:)`, which is the layout system rather
+  than the accessibility system, and is unaffected by any of the above.
+
+The gap this leaves is stated plainly: **nothing here verifies what VoiceOver
+would actually say.** The labels, values, traits and rotor below are asserted
+by reading the code, not by reading the tree. Each was checked against Apple's
+documented behaviour for the modifier in question; none was observed.
 
 ## Labels
 
@@ -190,11 +207,11 @@ Stated rather than implied, because a document claiming a "full pass" invites
 the assumption that everything below was done.
 
 * **No VoiceOver was run.** The scheduled agent runs on Linux; CI runs a
-  simulator. Every claim here is a claim about the published tree, which is
-  what VoiceOver reads, and is not the same as having listened to a screen.
-  `xcodebuild` cannot run VoiceOver either, so this is a gap the gates cannot
-  close — an XCUITest journey with `XCUIDevice` accessibility auditing is the
-  route, and it belongs with the simulator-matrix item in Phase 12.
+  simulator, and — as the section at the top of this file records — the
+  published tree cannot be read from a unit-test process either. `xcodebuild`
+  cannot run VoiceOver, so this is a gap the gates here cannot close: an
+  XCUITest journey with `XCUIDevice` accessibility auditing is the route, and
+  it belongs with the simulator-matrix item in Phase 12.
 * **Contrast is unmeasured.** Nothing here checks colour contrast ratios, and
   several of the semantic colours are opacity-modulated
   (`.secondary.opacity(0.3)`, `Color.red.opacity(0.1)`), which is where
@@ -209,8 +226,12 @@ the assumption that everything below was done.
 * **Voice Control labels are whatever the VoiceOver labels are.** No
   `.accessibilityInputLabels` are declared, so a control with a long name is
   spoken in full to activate it.
-* **No screen is audited end to end.** The suites mount components, not
-  screens: `LoginView` and `HomeView` own their view models through `@State`,
-  so a test cannot drive them into the states worth auditing. Extracting the
-  two banners and the appearance row is what made those states reachable, and
-  the same move is what the rest would need.
+* **No screen is audited end to end**, and no *control* is either: see the
+  section above. `LoginView` and `HomeView` also own their view models through
+  `@State`, so even with a readable tree a test could not drive them into the
+  states worth auditing. Extracting the two banners and the appearance row is
+  what would make those states reachable, and the same move is what the rest
+  would need.
+* **The static audit checks shapes, not meanings.** It can tell that a symbol
+  carries an `.accessibilityLabel`; it cannot tell that the label is a good
+  one. "Button" would satisfy it.
