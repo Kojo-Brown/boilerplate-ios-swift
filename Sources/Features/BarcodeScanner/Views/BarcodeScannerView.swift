@@ -47,6 +47,10 @@ package struct BarcodeScannerView: View {
                 }
             }
         }
+        // The feed and the boxes drawn over it are a picture of what the camera
+        // can see. Every payload they highlight is read, as its own stop, from
+        // the results panel below.
+        .accessibilityHidden(true)
     }
 
     // MARK: - Per-barcode bounding-box highlights
@@ -111,6 +115,10 @@ package struct BarcodeScannerView: View {
             )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
+            // The results panel's heading, which is what puts it on the
+            // heading rotor rather than at the end of a swipe through the
+            // toolbar.
+            .accessibilityAddTraits(.isHeader)
             Spacer()
             copyButton
             clearButton
@@ -119,6 +127,9 @@ package struct BarcodeScannerView: View {
         .padding(.vertical, 10)
     }
 
+    /// The same label/value split `HomeView`'s rows use: the symbology is what
+    /// the row is, the payload is what it currently says. Uncombined this is
+    /// two stops, the first of them a bare "QR" with nothing attached to it.
     private func barcodeRow(_ barcode: DetectedBarcode) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(barcode.symbology.rawValue)
@@ -129,6 +140,9 @@ package struct BarcodeScannerView: View {
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(barcode.symbology.rawValue)
+        .accessibilityValue(barcode.payload)
     }
 
     private var copyButton: some View {
@@ -156,6 +170,9 @@ package struct BarcodeScannerView: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
+        // Otherwise announced as "xmark circle fill" — the asset's name, not an
+        // answer to what pressing it does.
+        .accessibilityLabel("Clear scanned codes")
     }
 
     // MARK: - Toolbar
@@ -173,6 +190,7 @@ package struct BarcodeScannerView: View {
                     .imageScale(.large)
             }
             .disabled(viewModel.permissionDenied)
+            .accessibilityLabel(viewModel.isScanning ? "Pause scanning" : "Start scanning")
         }
     }
 
@@ -183,8 +201,10 @@ package struct BarcodeScannerView: View {
             Image(systemName: "camera.slash")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Camera Access Required")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Text("Go to Settings > Privacy > Camera and enable access for this app.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

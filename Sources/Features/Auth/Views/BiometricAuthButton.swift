@@ -39,19 +39,26 @@ package struct BiometricAuthButton: View {
                     ProgressView()
                         .progressViewStyle(.circular)
                         .controlSize(.small)
+                        .accessibilityHidden(true)
                 } else {
+                    // The glyph names the modality the text beside it already
+                    // names. Left in the tree it is read as "faceid" — the
+                    // symbol's identifier, not a word anybody says.
                     Image(systemName: biometricSymbol)
                         .font(.title3)
+                        .accessibilityHidden(true)
                 }
                 Text(biometricLabel)
                     .font(.body.weight(.medium))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .scaledControlHeight()
         }
         .buttonStyle(.borderedProminent)
         .disabled(!viewModel.isAvailable || viewModel.isLoading)
         .animation(.default, value: viewModel.isLoading)
+        .accessibilityLabel(biometricLabel)
+        .accessibilityBusy(viewModel.isLoading, doing: "Authenticating")
     }
 
     // MARK: - Private

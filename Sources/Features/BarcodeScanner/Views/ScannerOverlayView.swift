@@ -35,6 +35,12 @@ package struct ScannerOverlayView: View {
             }
         }
         .ignoresSafeArea()
+        // Entirely decoration: a dimmed cut-out, four brackets and a moving
+        // line. It tells a sighted user where to aim the camera, and there is
+        // nothing under it to read — left in the tree it would be a wall of
+        // nameless elements between the toolbar and the results, one of them
+        // animating.
+        .accessibilityHidden(true)
         .onChange(of: isScanning) { _, scanning in
             if scanning { startScanLineAnimation() } else { scanLineAnimating = false }
         }

@@ -93,6 +93,10 @@ package struct SettingsView: View {
                 Text("Loading profile…")
                     .foregroundStyle(.secondary)
             }
+            // A spinner beside a sentence is two stops, the first of them
+            // nameless. Combined it is one, and the sentence is the name.
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Loading profile")
         }
     }
 
@@ -102,7 +106,10 @@ package struct SettingsView: View {
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
             if store.state.isSaving {
+                // The Save button is gone while this is on screen, so the
+                // spinner is the only thing left to say what happened to it.
                 ProgressView()
+                    .accessibilityLabel("Saving")
             } else {
                 Button("Save") {
                     store.send(.saveTapped)
@@ -125,17 +132,12 @@ package struct SettingsView: View {
     @ViewBuilder
     private func appearancePicker(selection: Binding<AppColorScheme>) -> some View {
         ForEach(AppColorScheme.allCases) { scheme in
-            HStack {
-                Label(scheme.label, systemImage: scheme.systemImage)
-                Spacer()
-                if selection.wrappedValue == scheme {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(AppColors.accent)
-                        .fontWeight(.semibold)
-                }
+            AppearanceOptionRow(
+                scheme: scheme,
+                isSelected: selection.wrappedValue == scheme
+            ) {
+                selection.wrappedValue = scheme
             }
-            .contentShape(Rectangle())
-            .onTapGesture { selection.wrappedValue = scheme }
         }
     }
 
@@ -145,6 +147,69 @@ package struct SettingsView: View {
         case .light:  "Always uses the light appearance."
         case .dark:   "Always uses the dark appearance."
         }
+    }
+}
+
+// MARK: - Appearance row
+
+/// One row of the appearance picker: a control that says what it is, that it is
+/// a control, and whether it is the one currently in effect.
+///
+/// It was an `HStack` with `.contentShape(Rectangle())` and
+/// `.onTapGesture { selection.wrappedValue = scheme }`, which is three separate
+/// failures wearing one costume. A tap gesture publishes no `.isButton` trait,
+/// so VoiceOver announced the row as text and never offered to activate it; it
+/// is not an activation point either, so double-tapping did nothing; and the
+/// current choice was a drawn checkmark, which means the selected row and the
+/// other two sounded exactly alike. The screen had a picker nobody using
+/// VoiceOver could operate or read the state of.
+///
+/// A `Button` fixes the first two by being one. The third is
+/// `.isSelected`, which is what VoiceOver reads as "selected" and what the
+/// checkmark is drawing — so the glyph is hidden, since a row that announced
+/// both would say it twice.
+///
+/// Its own type rather than a closure inside `appearancePicker`, because the
+/// three things above are a contract a row either keeps or does not, and a
+/// named type is where that contract can be written down and read. It is
+/// internal rather than private so a test can reach it without a store, an
+/// `AppState` and a `List` around it — see `docs/accessibility.md` for why
+/// that test reads the source rather than the published tree.
+struct AppearanceOptionRow: View {
+
+    let scheme: AppColorScheme
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Label(scheme.label, systemImage: scheme.systemImage)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(AppColors.accent)
+                        .fontWeight(.semibold)
+                        .accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(scheme.label)
+        .accessibilityAddTraits(traits)
+    }
+
+    /// Built up rather than written as a ternary over two literals, for the
+    /// reason ``TagChip`` does the same: `AccessibilityTraits` is a set, and
+    /// spelling the union out is what keeps "selected" additive to "button"
+    /// instead of replacing it.
+    private var traits: AccessibilityTraits {
+        var resolved: AccessibilityTraits = .isButton
+        if isSelected {
+            resolved.formUnion(.isSelected)
+        }
+        return resolved
     }
 }
 

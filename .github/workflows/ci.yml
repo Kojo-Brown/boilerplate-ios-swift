@@ -109,6 +109,27 @@ jobs:
       - name: Audit the module boundaries
         run: python3 Tools/assert-module-boundaries.py
 
+      # Phase 10 item 6. The three accessibility defects this package has
+      # actually shipped — a tap gesture VoiceOver cannot reach, a full-width
+      # control pinned in height, an SF Symbol with nothing to call it — each
+      # of which is invisible in review and none of which any other gate sees.
+      #
+      # It is a source check rather than the runtime one the item set out to
+      # write, and that is a limitation rather than a preference: SwiftUI does
+      # not build its UIKit accessibility bridge unless an assistive client is
+      # attached, so `_UIHostingView.accessibilityElements` is an empty array
+      # in a test process however the window is arranged. The script's own
+      # docstring carries the measurement that established it, and
+      # `docs/accessibility.md` says what reading the real tree would need.
+      #
+      # It sits in the lint job with the other two audits for the same reason
+      # they do: it is syntactic, so it needs no toolchain, no resolved
+      # packages and no simulator, it reports even when the build is broken,
+      # and it is one of the few gates the scheduled agent can run on Linux
+      # before pushing.
+      - name: Audit the accessibility of the shipped controls
+        run: python3 Tools/assert-accessibility-audit.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15
