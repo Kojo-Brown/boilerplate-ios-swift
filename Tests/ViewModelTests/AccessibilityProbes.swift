@@ -24,6 +24,13 @@ struct AccessibilityNode: CustomStringConvertible {
     let traits: UIAccessibilityTraits
     let frame: CGRect
 
+    /// `@MainActor` because every property it reads is. UIKit's accessibility
+    /// properties are declared on `NSObject` and isolated to the main actor in
+    /// the iOS 18 SDK, so a plain `init` — nonisolated, like any struct's —
+    /// cannot touch one. Taking the reading on the main actor is also correct
+    /// rather than merely permitted: these are live view state, and this type
+    /// exists to freeze them into a value a nonisolated assertion can hold.
+    @MainActor
     init(_ element: NSObject) {
         label = element.accessibilityLabel ?? ""
         value = element.accessibilityValue ?? ""
