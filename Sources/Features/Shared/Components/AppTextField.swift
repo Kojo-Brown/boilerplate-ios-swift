@@ -52,9 +52,15 @@ package struct AppTextField: View {
 
     package var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Hidden, not removed. It is the field's caption for anyone reading
+            // the screen, and for VoiceOver it is the field's own label said a
+            // second time: a `TextField` takes its accessibility label from its
+            // placeholder, which is this same string, so the form used to
+            // announce "Email. Email, text field." on every stop.
             Text(label)
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(labelColor)
+                .accessibilityHidden(true)
 
             inputField
                 .textContentType(textContentType)
@@ -69,22 +75,41 @@ package struct AppTextField: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
                 .animation(.easeInOut(duration: 0.15), value: errorMessage)
+                .accessibilityLabel(label)
+                // The rule the field is failing, said where somebody who is
+                // *in* the field can hear it. The message below is its own stop
+                // for a reader going down the form, but a reader who is already
+                // typing never reaches it — a hint is what VoiceOver has for
+                // exactly that, spoken after the value and only when hints are
+                // on.
+                .accessibilityHint(errorMessage ?? "")
 
             if let error = errorMessage {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .imageScale(.small)
-                    Text(error)
-                        .font(.caption)
-                }
-                .foregroundStyle(.red)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                errorRow(error)
             }
         }
         .animation(.default, value: errorMessage)
     }
 
     // MARK: - Private
+
+    /// One element, labelled with the word the icon is drawing.
+    ///
+    /// Uncombined this is two stops — a glyph that announces itself as
+    /// "exclamation mark circle fill" and then the sentence — and the first of
+    /// them is the one a reader hits first.
+    private func errorRow(_ error: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .imageScale(.small)
+            Text(error)
+                .font(.caption)
+        }
+        .foregroundStyle(.red)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Error: \(error)"))
+    }
 
     @ViewBuilder
     private var inputField: some View {

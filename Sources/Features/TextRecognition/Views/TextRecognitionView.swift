@@ -50,6 +50,12 @@ package struct TextRecognitionView: View {
                 }
             }
         }
+        // The feed and the boxes drawn over it are a picture of what the camera
+        // can see. There is nothing here for VoiceOver to read that the panel
+        // below does not read better, and a live preview that published
+        // elements would put a moving, nameless wall between the toolbar and
+        // the results.
+        .accessibilityHidden(true)
     }
 
     // MARK: - Block bounding-box overlay
@@ -80,14 +86,8 @@ package struct TextRecognitionView: View {
         VStack(alignment: .leading, spacing: 0) {
             header(result: result)
             Divider()
-            ScrollView {
-                Text(result.fullText)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-            }
-            .frame(maxHeight: 180)
+            RecognizedTextPanel(result: result)
+                .frame(maxHeight: 180)
         }
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -98,12 +98,7 @@ package struct TextRecognitionView: View {
 
     private func header(result: RecognitionResult) -> some View {
         HStack {
-            Label(
-                "\(result.blocks.count) block\(result.blocks.count == 1 ? "" : "s") detected",
-                systemImage: "text.viewfinder"
-            )
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+            RecognizedTextHeading(blockCount: result.blocks.count)
             Spacer()
             copyButton
             clearButton
@@ -137,6 +132,10 @@ package struct TextRecognitionView: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
+        // An icon-only button has no text to be named after. Without this it is
+        // announced as "xmark circle fill", which is the asset's name and not
+        // an answer to what pressing it does.
+        .accessibilityLabel("Clear recognized text")
     }
 
     // MARK: - Scan toggle
@@ -153,6 +152,10 @@ package struct TextRecognitionView: View {
                 .imageScale(.large)
         }
         .disabled(viewModel.permissionDenied)
+        // The label changes with the state rather than staying "Scan" and
+        // carrying the state as a value, because this control's two states are
+        // two different verbs: the name *is* what pressing it will do.
+        .accessibilityLabel(viewModel.isScanning ? "Pause scanning" : "Start scanning")
     }
 
     // MARK: - Permission denied banner
@@ -162,8 +165,10 @@ package struct TextRecognitionView: View {
             Image(systemName: "camera.slash")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Camera Access Required")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Text("Go to Settings > Privacy > Camera and enable access for this app.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

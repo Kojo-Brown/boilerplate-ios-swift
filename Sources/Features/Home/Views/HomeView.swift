@@ -28,6 +28,7 @@ package struct HomeView: View {
                 ToolbarItem(placement: .primaryAction) {
                     if viewModel.isLoading {
                         ProgressView()
+                            .accessibilityLabel("Refreshing items")
                     } else {
                         Menu {
                             Button {
@@ -74,6 +75,18 @@ package struct HomeView: View {
 
     // MARK: - List layout (compact / iPhone)
 
+    /// The label/value split on each row is deliberate. A button whose children
+    /// are two `Text`s is announced as both of them run together — "Item 1
+    /// Description for item 1, button" — which is one long name for a control
+    /// and gives a reader skimming the list nothing short to skim by. The title
+    /// is what the row *is*, so it is the label; the subtitle is what the row
+    /// currently says, so it is the value, read after it and skippable. The
+    /// hint is where the row leads, which neither of them states.
+    ///
+    /// It sits on the `Button` rather than inside ``HomeItemRow`` because the
+    /// row has to stay `Equatable` over its one stored property — see the note
+    /// on the type — and because the grid's card needs the same three lines
+    /// against the same item.
     private var itemList: some View {
         List {
             ForEach(viewModel.filteredItems) { item in
@@ -84,6 +97,9 @@ package struct HomeView: View {
                         .equatable()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityValue(item.subtitle)
+                .accessibilityHint("Opens this item's details")
             }
             .onDelete { offsets in
                 viewModel.deleteItems(at: offsets)
@@ -112,6 +128,9 @@ package struct HomeView: View {
                                 .equatable()
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(item.title)
+                        .accessibilityValue(item.subtitle)
+                        .accessibilityHint("Opens this item's details")
                     }
                 }
                 .padding(16)

@@ -44,14 +44,23 @@ package struct AppButton: View {
                         .progressViewStyle(.circular)
                         .tint(spinnerTint)
                         .controlSize(.regular)
+                        .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .scaledControlHeight()
         }
         .buttonStyle(AppButtonPressStyle(appStyle: style))
         .disabled(isDisabled || isLoading)
         .animation(.default, value: isLoading)
+        // Stated rather than inferred. SwiftUI would derive this button's label
+        // from its children, and the children are a `Text` at zero opacity
+        // beside a spinner — a tree whose spoken form depends on whether an
+        // invisible string is still considered readable, which is not a
+        // decision to leave to the framework. Saying it here also survives the
+        // day somebody replaces the label with an icon.
+        .accessibilityLabel(label)
+        .accessibilityBusy(isLoading, doing: "Loading")
     }
 
     // MARK: - Private
@@ -145,4 +154,16 @@ private struct AppButtonPressStyle: ButtonStyle {
         AppButton("Delete Account", style: .destructive, isLoading: true) {}
     }
     .padding()
+}
+
+/// The size the pinned 50-point height used to clip at. The label runs to two
+/// lines here and the button is as tall as it needs to be, which is the whole
+/// of what ``ScaledControlHeight`` changes.
+#Preview("At the largest accessibility text size") {
+    VStack(spacing: 16) {
+        AppButton("Sign In") {}
+        AppButton("Delete Account", style: .destructive) {}
+    }
+    .padding()
+    .dynamicTypeSize(.accessibility5)
 }

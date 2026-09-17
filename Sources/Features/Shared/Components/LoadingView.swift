@@ -40,6 +40,17 @@ package struct LoadingView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         }
         .transition(.opacity)
+        // One element, so the spinner and its message are a single stop rather
+        // than a nameless one followed by a sentence.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message ?? "Loading")
+        // The half that is not cosmetic. This overlay blocks touches for
+        // everybody — that is what it is for — and blocked nothing at all for
+        // VoiceOver, which went on swiping through the screen underneath and
+        // activating controls that were, to every other user, unreachable.
+        // `.isModal` is how a SwiftUI view says "ignore my siblings", and it is
+        // the trait that makes the block mean the same thing to both.
+        .accessibilityAddTraits(.isModal)
     }
 }
 
@@ -63,6 +74,8 @@ package struct InlineLoadingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message ?? "Loading")
     }
 }
 

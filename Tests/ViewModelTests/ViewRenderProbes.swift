@@ -74,6 +74,16 @@ final class RenderHarness<Root: View> {
         host.view.layoutIfNeeded()
     }
 
+    /// The hosted view, for a suite that reads the tree UIKit publishes rather
+    /// than counting body evaluations.
+    ///
+    /// Everything above measures SwiftUI's *work*; `AccessibilityAuditTests`
+    /// measures its *output* — the labels, values and traits an assistive
+    /// client is handed — and that output only exists once a hosting
+    /// controller has laid the tree out inside a window, which is precisely
+    /// what this harness already builds.
+    var rootView: UIView { host.view }
+
     /// Takes the window back down.
     ///
     /// A visible `UIWindow` is retained by UIKit, not only by whoever made it,
