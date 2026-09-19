@@ -61,7 +61,7 @@ package struct LoginView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Sign In")
+            .navigationTitle(Text(FeatureStrings.Login.signIn))
             .navigationBarTitleDisplayMode(.large)
             .onChange(of: errorMessage) { _, message in
                 errorIsFocused = message != nil
@@ -106,7 +106,7 @@ package struct LoginView: View {
             // The navigation title is already one; this is the other, and
             // between them a reader can skip the form rather than swiping
             // through it. See `docs/accessibility.md`.
-            Text("Boilerplate iOS")
+            Text(FeatureStrings.Login.heading)
                 .font(.title2.bold())
                 .accessibilityAddTraits(.isHeader)
         }
@@ -120,7 +120,7 @@ package struct LoginView: View {
     /// a control VoiceOver cannot be told to find again.
     private var fields: some View {
         VStack(spacing: 16) {
-            TextField("Email", text: $viewModel.email)
+            TextField(FeatureStrings.Login.email.string, text: $viewModel.email)
                 .textContentType(.emailAddress)
                 .keyboardType(.emailAddress)
                 .autocorrectionDisabled()
@@ -128,15 +128,15 @@ package struct LoginView: View {
                 .padding()
                 .background(.regularMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel("Email")
+                .accessibilityLabel(Text(FeatureStrings.Login.email))
 
-            SecureField("Password (8+ chars)", text: $viewModel.password)
+            SecureField(FeatureStrings.Login.passwordPlaceholder.string, text: $viewModel.password)
                 .textContentType(.password)
                 .padding()
                 .background(.regularMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel("Password")
-                .accessibilityHint("At least 8 characters")
+                .accessibilityLabel(Text(FeatureStrings.Login.password))
+                .accessibilityHint(Text(FeatureStrings.Login.passwordHint))
         }
     }
 
@@ -164,7 +164,7 @@ package struct LoginView: View {
                         .tint(.white)
                         .accessibilityHidden(true)
                 } else {
-                    Text("Sign In")
+                    Text(FeatureStrings.Login.signIn)
                         .font(.body.bold())
                 }
             }
@@ -177,8 +177,8 @@ package struct LoginView: View {
         // Without this the button is genuinely nameless while the request is in
         // flight: the branch that holds the word "Sign In" is not in the tree,
         // and the one that replaces it is a spinner.
-        .accessibilityLabel("Sign In")
-        .accessibilityBusy(viewModel.isLoading, doing: "Signing in")
+        .accessibilityLabel(Text(FeatureStrings.Login.signIn))
+        .accessibilityBusy(viewModel.isLoading, doing: FeatureStrings.Login.signingIn)
     }
 
     /// Two rules and the word between them. The rules are drawing; the word is
@@ -188,11 +188,11 @@ package struct LoginView: View {
     private var divider: some View {
         HStack {
             Rectangle().fill(.secondary.opacity(0.3)).frame(height: 1)
-            Text("or").font(.footnote).foregroundStyle(.secondary)
+            Text(FeatureStrings.Login.dividerOr).font(.footnote).foregroundStyle(.secondary)
             Rectangle().fill(.secondary.opacity(0.3)).frame(height: 1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("or, sign in another way")
+        .accessibilityLabel(Text(FeatureStrings.Login.dividerLabel))
     }
 
     private var biometricSection: some View {
@@ -235,7 +235,7 @@ package struct LoginView: View {
                         .accessibilityHidden(true)
                 }
             }
-            .accessibilityBusy(socialViewModel.isLoadingApple, doing: "Signing in")
+            .accessibilityBusy(socialViewModel.isLoadingApple, doing: FeatureStrings.Login.signingIn)
 
             GoogleSignInButton(scheme: .dark, style: .wide, state: .normal) {
                 Task {

@@ -1,3 +1,4 @@
+import Core
 import CoreMedia
 import Foundation
 import Vision
@@ -9,7 +10,7 @@ package enum BarcodeScanError: Error, LocalizedError {
 
     package var errorDescription: String? {
         switch self {
-        case .processingFailed(let reason): return "Scan failed: \(reason)"
+        case .processingFailed(let reason): return FeatureStrings.BarcodeError.processingFailed(reason).string
         }
     }
 }

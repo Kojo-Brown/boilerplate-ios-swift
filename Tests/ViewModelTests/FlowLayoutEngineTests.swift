@@ -283,12 +283,20 @@ struct FlowLayoutCacheTests {
         derivedLineSpacing: 12
     )
 
-    private func solve(_ cache: inout FlowLayoutCache, width: CGFloat) -> FlowLayoutEngine.Solution {
+    private func solve(
+        _ cache: inout FlowLayoutCache,
+        width: CGFloat,
+        alignment: FlowLayoutEngine.Alignment = .leading
+    ) -> FlowLayoutEngine.Solution {
         cache.solution(
             forWidth: width,
             measuring: { Self.measurements },
             engine: { measurements in
-                FlowLayoutEngine(lineAlignment: .top, lineSpacing: measurements.derivedLineSpacing)
+                FlowLayoutEngine(
+                    alignment: alignment,
+                    lineAlignment: .top,
+                    lineSpacing: measurements.derivedLineSpacing
+                )
             }
         )
     }
@@ -358,5 +366,43 @@ struct FlowLayoutCacheTests {
 
         #expect(solution.lines.count == 3)
         #expect(isClose(solution.lines[1].minY, 52))
+    }
+
+    /// A solution cached at one width is not a solution for a different
+    /// alignment, and the cache has no way to know that from the width alone.
+    ///
+    /// `updateCache` is SwiftUI's signal that the *subviews* changed, and this
+    /// is the case it does not cover: a flow handed a new alignment while its
+    /// subviews and the width it is proposed both stand still. Keyed on the
+    /// width alone that reads as a hit, and the flow goes on placing the frames
+    /// it solved for the alignment before — correct arithmetic, cached under
+    /// the wrong question. Keying on the engine is what closes it, and it
+    /// covers line alignment and line spacing at the same time.
+    @Test("Changing the alignment invalidates a solution cached for the other one")
+    func alignmentIsPartOfTheCacheKey() {
+        var cache = FlowLayoutCache()
+
+        let leading = solve(&cache, width: 250, alignment: .leading)
+        let trailing = solve(&cache, width: 250, alignment: .trailing)
+
+        #expect(cache.measurePasses == 1)
+        #expect(cache.solvePasses == 2)
+        #expect(isClose(leading.frames[2].minX, 0))
+        #expect(isClose(trailing.frames[2].minX, 108))
+    }
+
+    /// The other half of that: asking the same question twice is still one
+    /// solve. A cache keyed on the engine could easily have become a cache that
+    /// never hits, which would be correct and also pointless.
+    @Test("The same engine at the same width is still a cache hit")
+    func repeatingTheSameQuestionIsStillOneSolve() {
+        var cache = FlowLayoutCache()
+
+        for _ in 0..<4 {
+            _ = solve(&cache, width: 250, alignment: .trailing)
+        }
+
+        #expect(cache.measurePasses == 1)
+        #expect(cache.solvePasses == 1)
     }
 }

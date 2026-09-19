@@ -26,6 +26,10 @@ import PackageDescription
 // toolchain and no simulator.
 let package = Package(
     name: "boilerplate-ios-swift",
+    // Phase 10 item 7. Required the moment a target carries a String Catalog,
+    // and it is also the answer to "what does an untranslated key fall back
+    // to": `en`, from the catalog, rather than the key itself.
+    defaultLocalization: "en",
     platforms: [.iOS(.v17)],
     products: [
         .library(
@@ -55,6 +59,12 @@ let package = Package(
         .target(
             name: "Core",
             path: "Sources/Core",
+            // Each target carries its own catalog, because `Bundle.module` is
+            // per-target: a string declared here and looked up from `Features`
+            // would miss. See `docs/localisation.md`.
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
@@ -68,6 +78,9 @@ let package = Package(
             name: "Networking",
             dependencies: ["Core"],
             path: "Sources/Networking",
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
@@ -86,6 +99,9 @@ let package = Package(
                 .product(name: "GoogleSignInSwift", package: "GoogleSignIn-iOS"),
             ],
             path: "Sources/Features",
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

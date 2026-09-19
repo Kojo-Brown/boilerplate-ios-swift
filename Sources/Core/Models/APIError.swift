@@ -12,18 +12,22 @@ package enum APIError: LocalizedError, Sendable {
     package var errorDescription: String? {
         switch self {
         case .invalidURL:
-            "The request URL is invalid."
+            CoreStrings.API.invalidURL.string
         case .invalidResponse:
-            "The server returned an unexpected response."
+            CoreStrings.API.invalidResponse.string
         case .unauthorized:
-            "You are not authorised. Please sign in again."
+            CoreStrings.API.unauthorized.string
         case .tokenRefreshFailed:
-            "Your session has expired. Please sign in again."
+            CoreStrings.API.tokenRefreshFailed.string
         case let .httpError(statusCode, _):
-            "Request failed with status \(statusCode)."
+            CoreStrings.API.httpStatus(statusCode).string
         case let .decodingFailed(message):
-            "Failed to decode response: \(message)"
+            CoreStrings.API.decodingFailed(message).string
         case let .networkUnavailable(error):
+            // `URLError` is already localised by Foundation, in the reader's
+            // language, and with more detail than a catalog entry here could
+            // carry. Re-wording it would be a worse sentence in fewer
+            // languages.
             error.localizedDescription
         }
     }

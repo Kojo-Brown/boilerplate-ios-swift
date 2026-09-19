@@ -28,7 +28,7 @@ package struct BarcodeScannerView: View {
             }
         }
         .ignoresSafeArea(edges: .horizontal)
-        .navigationTitle("Barcode Scanner")
+        .navigationTitle(Text(FeatureStrings.BarcodeScanner.title))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { scanToggle }
         .task { await viewModel.onAppear() }
@@ -110,7 +110,7 @@ package struct BarcodeScannerView: View {
     private func panelHeader(result: ScanResult) -> some View {
         HStack {
             Label(
-                "\(result.barcodes.count) code\(result.barcodes.count == 1 ? "" : "s") detected",
+                FeatureStrings.BarcodeScanner.codesDetected(result.barcodes.count).string,
                 systemImage: "qrcode.viewfinder"
             )
             .font(.subheadline.weight(.semibold))
@@ -150,7 +150,7 @@ package struct BarcodeScannerView: View {
             viewModel.copyPayload()
         } label: {
             Label(
-                viewModel.didCopyToClipboard ? "Copied!" : "Copy",
+                (viewModel.didCopyToClipboard ? FeatureStrings.Scanner.copied : FeatureStrings.Scanner.copy).string,
                 systemImage: viewModel.didCopyToClipboard ? "checkmark" : "doc.on.doc"
             )
             .font(.subheadline)
@@ -172,7 +172,7 @@ package struct BarcodeScannerView: View {
         .buttonStyle(.plain)
         // Otherwise announced as "xmark circle fill" — the asset's name, not an
         // answer to what pressing it does.
-        .accessibilityLabel("Clear scanned codes")
+        .accessibilityLabel(Text(FeatureStrings.Scanner.clearCodes))
     }
 
     // MARK: - Toolbar
@@ -190,7 +190,9 @@ package struct BarcodeScannerView: View {
                     .imageScale(.large)
             }
             .disabled(viewModel.permissionDenied)
-            .accessibilityLabel(viewModel.isScanning ? "Pause scanning" : "Start scanning")
+            .accessibilityLabel(
+                Text(viewModel.isScanning ? FeatureStrings.Scanner.pause : FeatureStrings.Scanner.start)
+            )
         }
     }
 
@@ -202,14 +204,14 @@ package struct BarcodeScannerView: View {
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text("Camera Access Required")
+            Text(FeatureStrings.CameraPermission.title)
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
-            Text("Go to Settings > Privacy > Camera and enable access for this app.")
+            Text(FeatureStrings.CameraPermission.body)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Open Settings") {
+            Button(FeatureStrings.CameraPermission.openSettings.string) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }

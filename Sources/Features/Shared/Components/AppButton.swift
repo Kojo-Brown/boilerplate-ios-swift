@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 // MARK: - Style
@@ -24,7 +25,16 @@ package enum AppButtonStyle: Equatable {
 /// }
 /// ```
 package struct AppButton: View {
-    package let label: String
+    /// The button's title.
+    ///
+    /// A `LocalizedStringResource` rather than a `String`, so that a shipped
+    /// call site has to hand this component something that came out of a
+    /// catalog. The type is `ExpressibleByStringLiteral`, so
+    /// `AppButton("Sign In")` still compiles — but the literal it builds is
+    /// bound to `Bundle.main` and resolves to itself, which is right for the
+    /// previews below and wrong on a screen.
+    /// `Tools/assert-localisation.py` is what tells the two apart.
+    package let label: LocalizedStringResource
     package var style: AppButtonStyle = .primary
     package var isLoading: Bool = false
     package var isDisabled: Bool = false
@@ -59,8 +69,8 @@ package struct AppButton: View {
         // invisible string is still considered readable, which is not a
         // decision to leave to the framework. Saying it here also survives the
         // day somebody replaces the label with an icon.
-        .accessibilityLabel(label)
-        .accessibilityBusy(isLoading, doing: "Loading")
+        .accessibilityLabel(Text(label))
+        .accessibilityBusy(isLoading, doing: FeatureStrings.Component.loading)
     }
 
     // MARK: - Private
@@ -80,7 +90,7 @@ extension AppButton {
     /// Creates an `AppButton` whose action is an `async` closure.
     /// Wraps the call in a detached `Task` so the button itself stays synchronous.
     package init(
-        _ label: String,
+        _ label: LocalizedStringResource,
         style: AppButtonStyle = .primary,
         isLoading: Bool = false,
         isDisabled: Bool = false,

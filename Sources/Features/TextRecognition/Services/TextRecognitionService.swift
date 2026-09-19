@@ -1,3 +1,4 @@
+import Core
 import CoreMedia
 import Foundation
 import Vision
@@ -10,8 +11,10 @@ package enum TextRecognitionError: Error, LocalizedError {
 
     package var errorDescription: String? {
         switch self {
-        case .noResult: return "No text found in the image."
-        case .processingFailed(let reason): return "Recognition failed: \(reason)"
+        case .noResult:
+            return FeatureStrings.RecognitionError.noResult.string
+        case .processingFailed(let reason):
+            return FeatureStrings.RecognitionError.processingFailed(reason).string
         }
     }
 }

@@ -130,6 +130,27 @@ jobs:
       - name: Audit the accessibility of the shipped controls
         run: python3 Tools/assert-accessibility-audit.py
 
+      # Phase 10 item 7. An app target gets most of this from Xcode: it
+      # extracts every `Text("…")` into the catalog, marks the entries whose
+      # strings are gone, and resolves lookups against `Bundle.main`, where the
+      # catalog it just built happens to be. A package gets none of it —
+      # including, and this is the one that bites, the resolution: a package's
+      # catalog lives in `Bundle.module`, an ordinary lookup asks
+      # `Bundle.main`, and Foundation's fallback for a missing key is to return
+      # the key. The screen then renders `home.title` in every language.
+      #
+      # So this checks both directions between source and catalog, that every
+      # key has a resolution test behind it, that no plural is chosen in Swift,
+      # and that no `Layout` conformance ignores the reading direction —
+      # SwiftUI does not mirror a custom layout. Each rule was verified by
+      # reintroducing the defect it names; see `docs/localisation.md`.
+      #
+      # It sits with the other three audits because it is syntactic: no
+      # toolchain, no resolved packages, no simulator, and it is one of the few
+      # gates the scheduled agent can run on Linux before pushing.
+      - name: Audit the String Catalogs and the right-to-left pass
+        run: python3 Tools/assert-localisation.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

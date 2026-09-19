@@ -60,9 +60,9 @@ package enum UserRepositoryError: LocalizedError, Equatable {
 
     package var errorDescription: String? {
         switch self {
-        case .notFound: "User not found."
-        case .unauthorized: "You must be signed in."
-        case .networkUnavailable: "No network connection."
+        case .notFound: NetworkingStrings.UserRepository.notFound.string
+        case .unauthorized: NetworkingStrings.UserRepository.unauthorized.string
+        case .networkUnavailable: NetworkingStrings.UserRepository.networkUnavailable.string
         }
     }
 }

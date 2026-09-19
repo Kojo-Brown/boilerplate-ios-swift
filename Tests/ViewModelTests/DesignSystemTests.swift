@@ -28,7 +28,7 @@ struct AppButtonTests {
     // cases below. No assertion is lost: nothing ever checked it.
     @Test func defaultStyleIsPrimary() {
         let sut = AppButton("Tap me") {}
-        #expect(sut.label == "Tap me")
+        #expect(sut.label.string == "Tap me")
         #expect(sut.style == .primary)
         #expect(!sut.isLoading)
         #expect(!sut.isDisabled)
@@ -63,7 +63,7 @@ struct AppButtonTests {
 
     @Test func asyncInitialisesWithCorrectLabel() {
         let sut = AppButton("Sign In", asyncAction: {})
-        #expect(sut.label == "Sign In")
+        #expect(sut.label.string == "Sign In")
         #expect(sut.style == .primary)
     }
 
@@ -114,7 +114,7 @@ struct AppTextFieldTests {
     @Test func defaultConfigurationIsPlainText() {
         let binding = Binding.constant("")
         let sut = AppTextField("Username", text: binding)
-        #expect(sut.label == "Username")
+        #expect(sut.label.string == "Username")
         #expect(!sut.isSecure)
         #expect(sut.errorMessage == nil)
     }

@@ -117,6 +117,10 @@ build its own previews from doubles it ships itself.
   Instruments trace: what separates a hitch from a hang, where the app's own
   signposts appear, and the search-field hotspot that was four locale-aware
   passes over the list per keystroke
+- [docs/localisation.md](./docs/localisation.md) — why a package's strings do
+  not resolve against a package's catalog, what that silently renders instead,
+  where a plural rule has to live so that more than two forms are reachable,
+  and a right-to-left "fix" to a custom `Layout` that was itself the defect
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
 

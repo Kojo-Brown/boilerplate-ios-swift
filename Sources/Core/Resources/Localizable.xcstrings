@@ -1,0 +1,282 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "appearance.dark": {
+      "comment": "Appearance option: always use the dark appearance.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark"
+          }
+        }
+      }
+    },
+    "appearance.light": {
+      "comment": "Appearance option: always use the light appearance.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light"
+          }
+        }
+      }
+    },
+    "appearance.system": {
+      "comment": "Appearance option: follow the device setting.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "error.api.decodingFailed %@": {
+      "comment": "The response arrived but could not be decoded. %@ is the decoder's own message.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to decode response: %@"
+          }
+        }
+      }
+    },
+    "error.api.httpStatus %lld": {
+      "comment": "The server answered with a failing HTTP status. %lld is the status code.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request failed with status %lld."
+          }
+        }
+      }
+    },
+    "error.api.invalidResponse": {
+      "comment": "The server answered with something the client cannot make sense of.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server returned an unexpected response."
+          }
+        }
+      }
+    },
+    "error.api.invalidURL": {
+      "comment": "The request could not be turned into a URL.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request URL is invalid."
+          }
+        }
+      }
+    },
+    "error.api.tokenRefreshFailed": {
+      "comment": "The refresh token was rejected, so the session cannot be extended.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session has expired. Please sign in again."
+          }
+        }
+      }
+    },
+    "error.api.unauthorized": {
+      "comment": "The request was rejected for lack of a valid credential.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are not authorised. Please sign in again."
+          }
+        }
+      }
+    },
+    "error.biometrics.lockout": {
+      "comment": "Too many failed attempts; the passcode is the only way back in.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biometrics are locked out. Please enter your passcode to re-enable."
+          }
+        }
+      }
+    },
+    "error.biometrics.notAvailable": {
+      "comment": "The device has no biometric hardware, or it is unusable.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biometric authentication is not available on this device."
+          }
+        }
+      }
+    },
+    "error.biometrics.notEnrolled": {
+      "comment": "The hardware is there but no face or fingerprint has been registered.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No biometrics are enrolled. Please set up Face ID or Touch ID in Settings."
+          }
+        }
+      }
+    },
+    "error.biometrics.passcodeNotSet": {
+      "comment": "Biometrics need a passcode behind them and there is none.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device passcode is required to use biometric authentication."
+          }
+        }
+      }
+    },
+    "error.biometrics.systemCancelled": {
+      "comment": "The OS took the prompt away — an incoming call, the app backgrounding.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication was cancelled by the system."
+          }
+        }
+      }
+    },
+    "error.biometrics.userCancelled": {
+      "comment": "The reader dismissed the prompt.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication was cancelled."
+          }
+        }
+      }
+    },
+    "error.biometrics.userFallback": {
+      "comment": "The reader chose the passcode route instead of the biometric one.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biometric authentication was skipped."
+          }
+        }
+      }
+    },
+    "error.merge.staleServerCopy": {
+      "comment": "A save was answered with an older revision than the device already held.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This profile was changed elsewhere. The server replied with an older copy than the one on this device, so the change was not saved."
+          }
+        }
+      }
+    },
+    "error.pagination.cursorDidNotAdvance": {
+      "comment": "The next-page cursor came back unchanged, which would page forever.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server returned the same page cursor it was given."
+          }
+        }
+      }
+    },
+    "error.pagination.emptyPageLimit %lld": {
+      "comment": "Pagination gave up after a run of pages with no rows in them. %lld is how many empty pages in a row were tolerated.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped after %lld empty page in a row."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Stopped after %lld empty pages in a row."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "error.pagination.moreItemsPromisedWithoutCursor": {
+      "comment": "The page says more rows exist but carries no way to ask for them.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server reported more items but sent no cursor to reach them."
+          }
+        }
+      }
+    },
+    "error.pagination.unusableCursor": {
+      "comment": "The cursor failed validation — empty, over-long, or carrying control characters.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server sent a page cursor that cannot be used."
+          }
+        }
+      }
+    },
+    "error.persistence.userNotFound": {
+      "comment": "Nothing for the signed-in user in the on-device store.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No user record found in local storage."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

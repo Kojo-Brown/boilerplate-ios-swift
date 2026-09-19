@@ -32,6 +32,10 @@ package struct FlowLayoutEngine: Equatable, Sendable {
     /// The flow reports the width it actually used — see ``Solution/size`` — so
     /// this is alignment of the short lines against the long ones, not against
     /// whatever the parent proposed.
+    /// `leading` and `trailing` are the *reading* edges, and they swap for a
+    /// right-to-left reader exactly as the same words do on an `HStack` —
+    /// without this type doing anything about it. See
+    /// ``layout(_:inWidth:)`` for who does.
     package enum Alignment: Equatable, Sendable {
         case leading
         case center
@@ -60,9 +64,9 @@ package struct FlowLayoutEngine: Equatable, Sendable {
         /// size. A flow never squeezes an item to make it fit; it wraps.
         package var size: CGSize
 
-        /// The gap this item asks for between itself and the item to its left,
-        /// used only when the two end up on the same line. Dropped when this
-        /// item starts a line.
+        /// The gap this item asks for between itself and the item before it in
+        /// reading order, used only when the two end up on the same line.
+        /// Dropped when this item starts a line.
         package var leadingSpacing: CGFloat
 
         /// Distance from the item's top edge down to its first text baseline.
@@ -163,6 +167,27 @@ package struct FlowLayoutEngine: Equatable, Sendable {
     /// custom layout ends up drawing outside its own bounds with nothing in the
     /// API to say so. `.infinity` puts everything on one line, which is what a
     /// flow's ideal width means.
+    ///
+    /// ## This is left-to-right arithmetic, and that is correct
+    ///
+    /// There is no right-to-left branch here, and its absence is a decision
+    /// rather than an omission. SwiftUI **does** mirror a custom `Layout`: the
+    /// framework flips the x position of every subview a layout places when
+    /// the reader's direction is right-to-left, so placement is written once,
+    /// for left-to-right, and is right in both.
+    ///
+    /// That was worth measuring rather than assuming, because assuming the
+    /// opposite is an easy mistake and a silent one. A flow that mirrors its
+    /// own frames is flipped a *second* time once the framework has had its
+    /// turn, so it comes out reading left-to-right in Arabic — the exact
+    /// defect the mirror was added to prevent, and indistinguishable in the
+    /// source from the version that works. `FlowLayoutRenderTests` measures it
+    /// on a simulator; WWDC22's *Compose custom layouts with SwiftUI* states
+    /// it: "the framework automatically flips the x position of each view when
+    /// laying out views in that direction".
+    ///
+    /// ``Alignment/leading`` therefore means the reader's starting edge, and
+    /// means it without this type knowing which edge that is.
     package func layout(_ items: [Item], inWidth maxWidth: CGFloat) -> Solution {
         guard !items.isEmpty else { return .empty }
 

@@ -51,6 +51,7 @@ package struct FlowLayoutCache {
 
     private var measurements: Measurements?
     private var solvedWidth: CGFloat?
+    private var solvedEngine: FlowLayoutEngine?
     private var solution: FlowLayoutEngine.Solution?
 
     /// How many times the subviews have been measured since the cache was last
@@ -75,6 +76,7 @@ package struct FlowLayoutCache {
     package mutating func invalidate() {
         measurements = nil
         solvedWidth = nil
+        solvedEngine = nil
         solution = nil
         measurePasses = 0
         solvePasses = 0
@@ -85,9 +87,15 @@ package struct FlowLayoutCache {
     ///
     /// - Parameters:
     ///   - measure: Called at most once per invalidation.
-    ///   - makeEngine: Called for each distinct width, because the engine it
-    ///     returns may depend on the measurements — that is how a caller that
-    ///     named no line spacing gets the derived one.
+    ///   - makeEngine: Called on every solve, and the engine it returns is
+    ///     half of the cache key. It has to be: `updateCache` is SwiftUI's
+    ///     signal that the *subviews* changed, and a flow can be handed a new
+    ///     alignment, line alignment or line spacing while its subviews and
+    ///     the width it is proposed both stand still — which is exactly the
+    ///     case a width-keyed cache reports as a hit, so the flow would go on
+    ///     placing the frames it solved for the alignment before. Building an
+    ///     engine is a struct initialiser over three scalars, so paying for it
+    ///     per probe is cheaper than the branch that avoids it.
     package mutating func solution(
         forWidth width: CGFloat,
         measuring measure: () -> Measurements,
@@ -102,21 +110,23 @@ package struct FlowLayoutCache {
             measurements = measured
         }
 
-        if let solution, solvedWidth == width {
+        let engine = makeEngine(measured)
+        if let solution, solvedWidth == width, solvedEngine == engine {
             return solution
         }
 
         solvePasses += 1
-        let fresh = makeEngine(measured).layout(measured.items, inWidth: width)
+        let fresh = engine.layout(measured.items, inWidth: width)
         solution = fresh
         solvedWidth = width
+        solvedEngine = engine
         return fresh
     }
 }
 
 // MARK: - FlowLayout
 
-/// A container that lays its subviews out left to right and wraps to a new
+/// A container that lays its subviews out in reading order and wraps to a new
 /// line when the next one does not fit — a row of tags, a keyword cloud, a set
 /// of filter chips.
 ///
@@ -161,6 +171,16 @@ package struct FlowLayoutCache {
 /// spacing is resolved per adjacent pair, exactly as `HStack` does it; line
 /// spacing is one value for the whole flow, for the reason recorded on
 /// ``FlowLayoutCache/Measurements/derivedLineSpacing``.
+///
+/// ## Right-to-left
+///
+/// Nothing to do, and that is the finding rather than the default. SwiftUI
+/// flips the x position of every subview a custom `Layout` places when the
+/// reader's direction is right-to-left, so this conformance never reads
+/// `subviews.layoutDirection` and never mirrors anything — a flow that
+/// mirrored its own frames would be flipped twice and come out reading
+/// left-to-right in Arabic. `FlowLayoutRenderTests` pins it on a simulator;
+/// ``FlowLayoutEngine/layout(_:inWidth:)`` records why it is worth pinning.
 package struct FlowLayout: Layout {
 
     package typealias Cache = FlowLayoutCache

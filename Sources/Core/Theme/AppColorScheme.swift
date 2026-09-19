@@ -13,12 +13,15 @@ package enum AppColorScheme: String, CaseIterable, Identifiable, Sendable {
 
     package var id: String { rawValue }
 
-    package var label: String {
-        switch self {
-        case .system: "System"
-        case .light:  "Light"
-        case .dark:   "Dark"
-        }
+    /// The name shown in the settings picker.
+    ///
+    /// A `LocalizedStringResource` rather than a `String`, because the three
+    /// words here are the ones a reader sees and a `String` returned from a
+    /// model type is a string that never gets translated — it is already
+    /// resolved by the time any view could have asked for it in another
+    /// language. `CoreStrings` holds the key; `Text(_:)` and `.string` resolve.
+    package var label: LocalizedStringResource {
+        CoreStrings.appearance(self)
     }
 
     package var systemImage: String {

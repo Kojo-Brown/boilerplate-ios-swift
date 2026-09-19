@@ -27,7 +27,7 @@ package struct TextRecognitionView: View {
             }
         }
         .ignoresSafeArea(edges: .horizontal)
-        .navigationTitle("Text Scanner")
+        .navigationTitle(Text(FeatureStrings.TextScanner.title))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -112,7 +112,7 @@ package struct TextRecognitionView: View {
             viewModel.copyToClipboard()
         } label: {
             Label(
-                viewModel.didCopyToClipboard ? "Copied!" : "Copy",
+                (viewModel.didCopyToClipboard ? FeatureStrings.Scanner.copied : FeatureStrings.Scanner.copy).string,
                 systemImage: viewModel.didCopyToClipboard ? "checkmark" : "doc.on.doc"
             )
             .font(.subheadline)
@@ -135,7 +135,7 @@ package struct TextRecognitionView: View {
         // An icon-only button has no text to be named after. Without this it is
         // announced as "xmark circle fill", which is the asset's name and not
         // an answer to what pressing it does.
-        .accessibilityLabel("Clear recognized text")
+        .accessibilityLabel(Text(FeatureStrings.Scanner.clearText))
     }
 
     // MARK: - Scan toggle
@@ -155,7 +155,9 @@ package struct TextRecognitionView: View {
         // The label changes with the state rather than staying "Scan" and
         // carrying the state as a value, because this control's two states are
         // two different verbs: the name *is* what pressing it will do.
-        .accessibilityLabel(viewModel.isScanning ? "Pause scanning" : "Start scanning")
+        .accessibilityLabel(
+            Text(viewModel.isScanning ? FeatureStrings.Scanner.pause : FeatureStrings.Scanner.start)
+        )
     }
 
     // MARK: - Permission denied banner
@@ -166,14 +168,14 @@ package struct TextRecognitionView: View {
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text("Camera Access Required")
+            Text(FeatureStrings.CameraPermission.title)
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
-            Text("Go to Settings > Privacy > Camera and enable access for this app.")
+            Text(FeatureStrings.CameraPermission.body)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Open Settings") {
+            Button(FeatureStrings.CameraPermission.openSettings.string) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
