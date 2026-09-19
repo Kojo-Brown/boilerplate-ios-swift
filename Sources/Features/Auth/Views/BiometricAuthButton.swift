@@ -22,7 +22,10 @@ import SwiftUI
 /// action and announce nothing.
 package struct BiometricAuthButton: View {
     package let viewModel: BiometricAuthViewModel
-    package var reason = "Authenticate to access your account"
+    /// What the system prompt says the app is asking for. Resolved at the
+    /// point it is handed to `LAContext`, which is the one string in this file
+    /// that is read out by something other than this process.
+    package var reason = FeatureStrings.Biometric.reason.string
     package var onSuccess: (() -> Void)?
 
     package var body: some View {
@@ -57,8 +60,8 @@ package struct BiometricAuthButton: View {
         .buttonStyle(.borderedProminent)
         .disabled(!viewModel.isAvailable || viewModel.isLoading)
         .animation(.default, value: viewModel.isLoading)
-        .accessibilityLabel(biometricLabel)
-        .accessibilityBusy(viewModel.isLoading, doing: "Authenticating")
+        .accessibilityLabel(Text(biometricLabel))
+        .accessibilityBusy(viewModel.isLoading, doing: FeatureStrings.Biometric.authenticating)
     }
 
     // MARK: - Private
@@ -71,11 +74,11 @@ package struct BiometricAuthButton: View {
         }
     }
 
-    private var biometricLabel: String {
+    private var biometricLabel: LocalizedStringResource {
         switch viewModel.biometricType {
-        case .faceID:   "Sign in with Face ID"
-        case .touchID:  "Sign in with Touch ID"
-        case .none:     "Biometrics Unavailable"
+        case .faceID:   FeatureStrings.Biometric.faceID
+        case .touchID:  FeatureStrings.Biometric.touchID
+        case .none:     FeatureStrings.Biometric.unavailable
         }
     }
 }

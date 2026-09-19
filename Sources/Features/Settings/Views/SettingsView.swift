@@ -29,12 +29,12 @@ package struct SettingsView: View {
     package var body: some View {
         @Bindable var appState = appState
         List {
-            Section("Account") {
+            Section(FeatureStrings.Settings.accountSection.string) {
                 accountRows
                 // Was `appState.signOut()`, which cleared two booleans and left
                 // both tokens in the Keychain. The effect announces instead and
                 // `SessionObserver` does both halves — see `docs/events.md`.
-                Button("Sign Out", role: .destructive) {
+                Button(FeatureStrings.Settings.signOut.string, role: .destructive) {
                     store.send(.signOutTapped)
                 }
             }
@@ -42,17 +42,17 @@ package struct SettingsView: View {
             Section {
                 appearancePicker(selection: $appState.colorSchemePreference)
             } header: {
-                Text("Appearance")
+                Text(FeatureStrings.Settings.appearanceSection)
             } footer: {
-                Text(appearanceFooter)
+                Text(FeatureStrings.Settings.appearanceFooter(appState.colorSchemePreference))
             }
 
-            Section("App") {
-                LabeledContent("Version", value: Bundle.main.appVersion)
-                LabeledContent("Build", value: Bundle.main.buildNumber)
+            Section(FeatureStrings.Settings.appSection.string) {
+                LabeledContent(FeatureStrings.Settings.version.string, value: Bundle.main.appVersion)
+                LabeledContent(FeatureStrings.Settings.build.string, value: Bundle.main.buildNumber)
             }
         }
-        .navigationTitle("Settings")
+        .navigationTitle(Text(FeatureStrings.Settings.title))
         .navigationBarTitleDisplayMode(.large)
         .task { await store.send(.appeared) }
         .refreshable { await store.send(.refreshRequested) }
@@ -67,10 +67,10 @@ package struct SettingsView: View {
     @ViewBuilder
     private var accountRows: some View {
         if let user = store.state.user {
-            LabeledContent("Email", value: user.email)
+            LabeledContent(FeatureStrings.Settings.email.string, value: user.email)
             nameEditor
             if store.state.origin == .localCache {
-                Label("Showing a saved copy — you appear to be offline.", systemImage: "wifi.slash")
+                Label(FeatureStrings.Settings.offlineCopy.string, systemImage: "wifi.slash")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -83,35 +83,35 @@ package struct SettingsView: View {
             // The email from the login response is still the best thing on
             // hand when the profile fetch fails, so the row keeps working and
             // the failure is stated rather than swallowed.
-            LabeledContent("Email", value: appState.currentUserEmail ?? "—")
+            LabeledContent(FeatureStrings.Settings.email.string, value: appState.currentUserEmail ?? "—")
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else {
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Loading profile…")
+                Text(FeatureStrings.Settings.loadingProfile)
                     .foregroundStyle(.secondary)
             }
             // A spinner beside a sentence is two stops, the first of them
             // nameless. Combined it is one, and the sentence is the name.
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Loading profile")
+            .accessibilityLabel(Text(FeatureStrings.Settings.loadingProfileLabel))
         }
     }
 
     private var nameEditor: some View {
         HStack {
-            TextField("Name", text: draftName)
+            TextField(FeatureStrings.Settings.name.string, text: draftName)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
             if store.state.isSaving {
                 // The Save button is gone while this is on screen, so the
                 // spinner is the only thing left to say what happened to it.
                 ProgressView()
-                    .accessibilityLabel("Saving")
+                    .accessibilityLabel(Text(FeatureStrings.Settings.saving))
             } else {
-                Button("Save") {
+                Button(FeatureStrings.Settings.save.string) {
                     store.send(.saveTapped)
                 }
                 .buttonStyle(.borderless)
@@ -138,14 +138,6 @@ package struct SettingsView: View {
             ) {
                 selection.wrappedValue = scheme
             }
-        }
-    }
-
-    private var appearanceFooter: String {
-        switch appState.colorSchemePreference {
-        case .system: "Matches your device's appearance setting."
-        case .light:  "Always uses the light appearance."
-        case .dark:   "Always uses the dark appearance."
         }
     }
 }
@@ -184,7 +176,7 @@ struct AppearanceOptionRow: View {
     var body: some View {
         Button(action: action) {
             HStack {
-                Label(scheme.label, systemImage: scheme.systemImage)
+                Label(scheme.label.string, systemImage: scheme.systemImage)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
@@ -196,7 +188,7 @@ struct AppearanceOptionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(scheme.label)
+        .accessibilityLabel(Text(scheme.label))
         .accessibilityAddTraits(traits)
     }
 

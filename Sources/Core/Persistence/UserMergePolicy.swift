@@ -199,8 +199,7 @@ package struct MergeConflictError: LocalizedError, Sendable, Equatable {
     }
 
     package var errorDescription: String? {
-        "This profile was changed elsewhere. The server replied with an older "
-            + "copy than the one on this device, so the change was not saved."
+        CoreStrings.Persistence.staleServerCopy.string
     }
 }
 

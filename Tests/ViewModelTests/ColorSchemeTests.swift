@@ -33,15 +33,15 @@ struct AppColorSchemeTests {
     // MARK: - Labels
 
     @Test func systemLabel() {
-        #expect(AppColorScheme.system.label == "System")
+        #expect(AppColorScheme.system.label.string == "System")
     }
 
     @Test func lightLabel() {
-        #expect(AppColorScheme.light.label == "Light")
+        #expect(AppColorScheme.light.label.string == "Light")
     }
 
     @Test func darkLabel() {
-        #expect(AppColorScheme.dark.label == "Dark")
+        #expect(AppColorScheme.dark.label.string == "Dark")
     }
 
     // MARK: - System images

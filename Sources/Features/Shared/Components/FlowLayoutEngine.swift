@@ -26,12 +26,40 @@ package struct FlowLayoutEngine: Equatable, Sendable {
 
     // MARK: - Inputs
 
+    /// Which edge the flow starts from.
+    ///
+    /// A `Layout` conformance does **not** get right-to-left for free, and
+    /// this is the part of that fact that is easy to miss: SwiftUI mirrors its
+    /// own containers, but `placeSubviews` hands a custom layout a `bounds`
+    /// whose `x` grows to the right under every layout direction there is. So
+    /// a flow that places its first item at `x == 0` places it at the *left*
+    /// edge in Arabic and Hebrew, reading order runs the wrong way, and
+    /// `.leading` — a word that means "start", not "left" — quietly means
+    /// "left" for this one container while meaning "right" for every `HStack`
+    /// beside it.
+    ///
+    /// Nothing catches that either. The layout is valid, the arithmetic is
+    /// correct, and the defect is visible only in a language the previews are
+    /// not written in. `LayoutSubviews.layoutDirection` is the environment
+    /// value SwiftUI provides precisely so a `Layout` can answer it, and
+    /// ``FlowLayout`` reads it and passes it here.
+    ///
+    /// Declared here rather than reusing `SwiftUI.LayoutDirection` because
+    /// this file has no SwiftUI in it — that is what lets the geometry be unit
+    /// tested without a host — and the adapter maps between the two.
+    package enum WritingDirection: Equatable, Sendable {
+        case leftToRight
+        case rightToLeft
+    }
+
     /// Where a line's content sits when the line is narrower than the widest
     /// line in the flow.
     ///
     /// The flow reports the width it actually used — see ``Solution/size`` — so
     /// this is alignment of the short lines against the long ones, not against
     /// whatever the parent proposed.
+    /// `leading` and `trailing` are the *reading* edges, so they swap with
+    /// ``WritingDirection`` exactly as the same words do on an `HStack`.
     package enum Alignment: Equatable, Sendable {
         case leading
         case center
@@ -60,9 +88,9 @@ package struct FlowLayoutEngine: Equatable, Sendable {
         /// size. A flow never squeezes an item to make it fit; it wraps.
         package var size: CGSize
 
-        /// The gap this item asks for between itself and the item to its left,
-        /// used only when the two end up on the same line. Dropped when this
-        /// item starts a line.
+        /// The gap this item asks for between itself and the item before it in
+        /// reading order, used only when the two end up on the same line.
+        /// Dropped when this item starts a line.
         package var leadingSpacing: CGFloat
 
         /// Distance from the item's top edge down to its first text baseline.
@@ -130,6 +158,9 @@ package struct FlowLayoutEngine: Equatable, Sendable {
     package var alignment: Alignment
     package var lineAlignment: LineAlignment
 
+    /// The reading direction the frames come back in — see ``WritingDirection``.
+    package var layoutDirection: WritingDirection
+
     /// Vertical gap between lines. Uniform, unlike the horizontal spacing —
     /// see ``FlowLayout`` for why the per-pair form is not available here.
     package var lineSpacing: CGFloat
@@ -137,11 +168,13 @@ package struct FlowLayoutEngine: Equatable, Sendable {
     package init(
         alignment: Alignment = .leading,
         lineAlignment: LineAlignment = .firstBaseline,
-        lineSpacing: CGFloat = 8
+        lineSpacing: CGFloat = 8,
+        layoutDirection: WritingDirection = .leftToRight
     ) {
         self.alignment = alignment
         self.lineAlignment = lineAlignment
         self.lineSpacing = lineSpacing
+        self.layoutDirection = layoutDirection
     }
 
     /// Slack allowed when deciding whether one more item fits.
@@ -192,6 +225,9 @@ package struct FlowLayoutEngine: Equatable, Sendable {
             width: result.lines.map(\.width).max() ?? 0,
             height: (result.lines.last?.minY ?? 0) + (result.lines.last?.height ?? 0)
         )
+        if layoutDirection == .rightToLeft {
+            mirrorHorizontally(&result)
+        }
         return result
     }
 
@@ -245,6 +281,32 @@ package struct FlowLayoutEngine: Equatable, Sendable {
             result.lines[number].minY = nextY
             result.lines[number].baseline = baseline
             nextY += height
+        }
+    }
+
+    /// Reflects every frame about the flow's vertical centre line.
+    ///
+    /// One pass at the end rather than a branch inside ``place(_:into:)``,
+    /// because a reflection is what right-to-left *is* — it has to reverse the
+    /// order items sit in along a line and move each line's content to the
+    /// opposite edge, and those are the same operation seen twice. Written as
+    /// two special cases inside the placement loop they would be two places to
+    /// get the spacing wrong, and the pair only ever agrees by inspection.
+    ///
+    /// The lines themselves are untouched: a `Line`'s width, height, `minY`
+    /// and baseline are all vertical or scalar, and none of them moves.
+    ///
+    /// Reflecting about ``Solution/size`` rather than about the width the
+    /// lines were *broken* at is deliberate, and it is what keeps the flow
+    /// inside its own bounds. A flow reports the width it actually used, which
+    /// for a short line is narrower than the container; mirroring about the
+    /// container width instead would push content past the reported size —
+    /// the same class of defect as reporting a size the content does not fit
+    /// in, which is how a custom layout ends up drawing outside its bounds.
+    private func mirrorHorizontally(_ result: inout Solution) {
+        let width = result.size.width
+        for index in result.frames.indices {
+            result.frames[index].origin.x = width - result.frames[index].maxX
         }
     }
 

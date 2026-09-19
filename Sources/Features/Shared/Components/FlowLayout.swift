@@ -51,6 +51,7 @@ package struct FlowLayoutCache {
 
     private var measurements: Measurements?
     private var solvedWidth: CGFloat?
+    private var solvedEngine: FlowLayoutEngine?
     private var solution: FlowLayoutEngine.Solution?
 
     /// How many times the subviews have been measured since the cache was last
@@ -75,6 +76,7 @@ package struct FlowLayoutCache {
     package mutating func invalidate() {
         measurements = nil
         solvedWidth = nil
+        solvedEngine = nil
         solution = nil
         measurePasses = 0
         solvePasses = 0
@@ -85,9 +87,15 @@ package struct FlowLayoutCache {
     ///
     /// - Parameters:
     ///   - measure: Called at most once per invalidation.
-    ///   - makeEngine: Called for each distinct width, because the engine it
-    ///     returns may depend on the measurements — that is how a caller that
-    ///     named no line spacing gets the derived one.
+    ///   - makeEngine: Called on every solve, and the engine it returns is
+    ///     half of the cache key. It has to be: it may depend on the
+    ///     measurements — that is how a caller that named no line spacing gets
+    ///     the derived one — and it carries the layout direction, which is an
+    ///     environment value that can change without the subviews or the width
+    ///     changing. Keyed on width alone, a flow that flipped to right-to-left
+    ///     would go on placing the frames it solved for left-to-right.
+    ///     Building one is a struct initialiser over four scalars, so paying
+    ///     for it per probe is cheaper than the branch that avoids it.
     package mutating func solution(
         forWidth width: CGFloat,
         measuring measure: () -> Measurements,
@@ -102,21 +110,23 @@ package struct FlowLayoutCache {
             measurements = measured
         }
 
-        if let solution, solvedWidth == width {
+        let engine = makeEngine(measured)
+        if let solution, solvedWidth == width, solvedEngine == engine {
             return solution
         }
 
         solvePasses += 1
-        let fresh = makeEngine(measured).layout(measured.items, inWidth: width)
+        let fresh = engine.layout(measured.items, inWidth: width)
         solution = fresh
         solvedWidth = width
+        solvedEngine = engine
         return fresh
     }
 }
 
 // MARK: - FlowLayout
 
-/// A container that lays its subviews out left to right and wraps to a new
+/// A container that lays its subviews out in reading order and wraps to a new
 /// line when the next one does not fit — a row of tags, a keyword cloud, a set
 /// of filter chips.
 ///
@@ -161,6 +171,14 @@ package struct FlowLayoutCache {
 /// spacing is resolved per adjacent pair, exactly as `HStack` does it; line
 /// spacing is one value for the whole flow, for the reason recorded on
 /// ``FlowLayoutCache/Measurements/derivedLineSpacing``.
+///
+/// ## Right-to-left
+///
+/// Handled, and it had to be handled by hand: SwiftUI does not mirror a custom
+/// `Layout`, so `bounds.minX` is the left edge in Arabic exactly as it is in
+/// English. `subviews.layoutDirection` is the value that says which one the
+/// reader is in; it is read here and answered by the engine. See
+/// ``FlowLayoutEngine/WritingDirection`` for what goes wrong without it.
 package struct FlowLayout: Layout {
 
     package typealias Cache = FlowLayoutCache
@@ -234,9 +252,10 @@ package struct FlowLayout: Layout {
             subviews[index].place(
                 // `bounds` is where the parent put this flow, and it is not
                 // necessarily at the origin. The engine works in the flow's own
-                // coordinates, so every frame is offset by it here — the one
-                // line whose absence looks like "the layout works, it is just
-                // in the wrong place".
+                // coordinates — already mirrored, under a right-to-left reader
+                // — so every frame is offset by it here, the one line whose
+                // absence looks like "the layout works, it is just in the
+                // wrong place".
                 at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
                 anchor: .topLeading,
                 // Each subview is proposed exactly what it was measured at, so
@@ -310,10 +329,28 @@ package struct FlowLayout: Layout {
                 FlowLayoutEngine(
                     alignment: alignment,
                     lineAlignment: lineAlignment,
-                    lineSpacing: lineSpacing ?? measured.derivedLineSpacing
+                    lineSpacing: lineSpacing ?? measured.derivedLineSpacing,
+                    layoutDirection: Self.writingDirection(of: subviews.layoutDirection)
                 )
             }
         )
+    }
+
+    /// Maps SwiftUI's environment value onto the engine's own, which exists so
+    /// that the geometry stays testable without SwiftUI around it.
+    ///
+    /// `@unknown default` rather than an exhaustive switch because
+    /// `LayoutDirection` is a non-frozen enum in a system framework: a third
+    /// case added in some future SDK must not stop this compiling, and
+    /// left-to-right is the safer thing to fall back to.
+    private static func writingDirection(
+        of direction: LayoutDirection
+    ) -> FlowLayoutEngine.WritingDirection {
+        switch direction {
+        case .rightToLeft: .rightToLeft
+        case .leftToRight: .leftToRight
+        @unknown default:  .leftToRight
+        }
     }
 
     /// Reads every subview's ideal size, its baseline and the gap it wants

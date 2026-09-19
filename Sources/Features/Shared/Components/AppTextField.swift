@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 // MARK: - Component
@@ -16,7 +17,10 @@ import SwiftUI
 /// AppTextField("Email", text: $email, errorMessage: viewModel.emailError)
 /// ```
 package struct AppTextField: View {
-    package let label: String
+    /// The field's caption, its placeholder and its VoiceOver label — one
+    /// string doing all three. `LocalizedStringResource` for the reason
+    /// recorded on ``AppButton/label``.
+    package let label: LocalizedStringResource
     @Binding package var text: String
     package let isSecure: Bool
     package let keyboardType: UIKeyboardType
@@ -31,7 +35,7 @@ package struct AppTextField: View {
     /// which the synthesised memberwise initialiser cannot express, so it is spelled out
     /// here. Every call site and the usage docs above already assumed this shape.
     package init(
-        _ label: String,
+        _ label: LocalizedStringResource,
         text: Binding<String>,
         isSecure: Bool = false,
         keyboardType: UIKeyboardType = .default,
@@ -75,7 +79,7 @@ package struct AppTextField: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .animation(.easeInOut(duration: 0.15), value: isFocused)
                 .animation(.easeInOut(duration: 0.15), value: errorMessage)
-                .accessibilityLabel(label)
+                .accessibilityLabel(Text(label))
                 // The rule the field is failing, said where somebody who is
                 // *in* the field can hear it. The message below is its own stop
                 // for a reader going down the form, but a reader who is already
@@ -108,15 +112,15 @@ package struct AppTextField: View {
         .foregroundStyle(.red)
         .transition(.opacity.combined(with: .move(edge: .top)))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("Error: \(error)"))
+        .accessibilityLabel(Text(FeatureStrings.Component.spokenError(error)))
     }
 
     @ViewBuilder
     private var inputField: some View {
         if isSecure {
-            SecureField(label, text: $text)
+            SecureField(label.string, text: $text)
         } else {
-            TextField(label, text: $text)
+            TextField(label.string, text: $text)
         }
     }
 

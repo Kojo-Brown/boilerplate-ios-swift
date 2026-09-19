@@ -11,9 +11,9 @@ package enum CameraError: Error, LocalizedError {
 
     package var errorDescription: String? {
         switch self {
-        case .notAuthorized: return "Camera access was denied. Enable it in Settings > Privacy > Camera."
-        case .deviceUnavailable: return "No camera device is available on this device."
-        case .configurationFailed: return "Failed to configure the capture session."
+        case .notAuthorized: return FeatureStrings.CameraError.notAuthorized.string
+        case .deviceUnavailable: return FeatureStrings.CameraError.deviceUnavailable.string
+        case .configurationFailed: return FeatureStrings.CameraError.configurationFailed.string
         }
     }
 }

@@ -91,6 +91,17 @@ struct FlowProbeHarness: View {
     let lineSpacing: CGFloat
     let recorder: FlowFrameRecorder
 
+    /// The reading direction to mount the flow in.
+    ///
+    /// A `var` with a default rather than a `let` with one, so that it joins
+    /// the memberwise initialiser with a default value and the four existing
+    /// call sites keep compiling unchanged. `layoutDirection` is one of the
+    /// environment values a test *can* write — unlike
+    /// `accessibilityReduceMotion`, whose key path reports a device setting and
+    /// is not writable — which is what makes the right-to-left case reachable
+    /// from a hosted test at all.
+    var layoutDirection: LayoutDirection = .leftToRight
+
     var body: some View {
         FlowLayout(lineAlignment: .top, spacing: spacing, lineSpacing: lineSpacing) {
             ForEach(items) { item in
@@ -112,6 +123,7 @@ struct FlowProbeHarness: View {
             }
         }
         .frame(width: containerWidth, alignment: .leading)
+        .environment(\.layoutDirection, layoutDirection)
         .onPreferenceChange(FlowItemFramePreference.self) { frames in
             MainActor.assumeIsolated { recorder.itemFrames = frames }
         }

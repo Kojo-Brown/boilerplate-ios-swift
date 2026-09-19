@@ -1,0 +1,42 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "error.user.networkUnavailable": {
+      "comment": "The profile request never reached the server.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No network connection."
+          }
+        }
+      }
+    },
+    "error.user.notFound": {
+      "comment": "The server has no profile for this account.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User not found."
+          }
+        }
+      }
+    },
+    "error.user.unauthorized": {
+      "comment": "The profile request needs a signed-in session.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You must be signed in."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

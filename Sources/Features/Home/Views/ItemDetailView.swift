@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 /// Detail view for a `HomeItem`. Reached by pushing `.itemDetail` via `AppCoordinator`.
@@ -12,9 +13,9 @@ package struct ItemDetailView: View {
 
     package var body: some View {
         List {
-            Section("Details") {
-                LabeledContent("Title", value: title)
-                LabeledContent("ID", value: id.uuidString)
+            Section(FeatureStrings.ItemDetail.section.string) {
+                LabeledContent(FeatureStrings.ItemDetail.title.string, value: title)
+                LabeledContent(FeatureStrings.ItemDetail.identifier.string, value: id.uuidString)
             }
         }
         .navigationTitle(title)

@@ -1,0 +1,978 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "barcodeScanner.codesDetected %lld": {
+      "comment": "Heading of the barcode results panel. %lld is how many codes the pass found.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld code detected"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld codes detected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "barcodeScanner.title": {
+      "comment": "Navigation title of the barcode scanner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcode Scanner"
+          }
+        }
+      }
+    },
+    "biometric.authenticating": {
+      "comment": "Accessibility value while the biometric prompt is up. Present participle.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authenticating"
+          }
+        }
+      }
+    },
+    "biometric.faceID": {
+      "comment": "Button that starts Face ID sign-in.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Face ID"
+          }
+        }
+      }
+    },
+    "biometric.reason": {
+      "comment": "Shown by the system inside the Face ID / Touch ID prompt, so it must say why the app is asking.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authenticate to access your account"
+          }
+        }
+      }
+    },
+    "biometric.touchID": {
+      "comment": "Button that starts Touch ID sign-in.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Touch ID"
+          }
+        }
+      }
+    },
+    "biometric.unavailable": {
+      "comment": "Button title when the device has no usable biometric hardware.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biometrics Unavailable"
+          }
+        }
+      }
+    },
+    "camera.permission.body": {
+      "comment": "Tells the reader where the camera switch lives. 'Settings', 'Privacy' and 'Camera' are the names of system screens and must match the ones iOS ships in this language.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Settings > Privacy > Camera and enable access for this app."
+          }
+        }
+      }
+    },
+    "camera.permission.openSettings": {
+      "comment": "Button that opens this app's page in Settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
+    "camera.permission.title": {
+      "comment": "Heading of the camera-permission banner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera Access Required"
+          }
+        }
+      }
+    },
+    "component.dismiss": {
+      "comment": "VoiceOver action that takes an error banner away. Not a button: activating it retries nothing.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        }
+      }
+    },
+    "component.loading": {
+      "comment": "Accessibility value on a design-system button mid-request. Present participle.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
+          }
+        }
+      }
+    },
+    "component.spokenError %@": {
+      "comment": "How an error banner is announced. The word carries what the hidden triangle draws, so a reader hears that the sentence is an error. %@ is the message.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error: %@"
+          }
+        }
+      }
+    },
+    "error.auth.invalidCredentials": {
+      "comment": "Sign-in was rejected. Deliberately does not say which half was wrong.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid email or password."
+          }
+        }
+      }
+    },
+    "error.auth.networkUnavailable": {
+      "comment": "The sign-in request never reached the server.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No network connection."
+          }
+        }
+      }
+    },
+    "error.barcode.processingFailed %@": {
+      "comment": "Vision could not read the frame. %@ is the framework's own message.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan failed: %@"
+          }
+        }
+      }
+    },
+    "error.camera.configurationFailed": {
+      "comment": "The capture session could not be assembled.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to configure the capture session."
+          }
+        }
+      }
+    },
+    "error.camera.deviceUnavailable": {
+      "comment": "There is no camera to capture from.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camera device is available on this device."
+          }
+        }
+      }
+    },
+    "error.camera.notAuthorized": {
+      "comment": "Camera access is denied. 'Settings', 'Privacy' and 'Camera' name system screens.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access was denied. Enable it in Settings > Privacy > Camera."
+          }
+        }
+      }
+    },
+    "error.social.invalidCredential": {
+      "comment": "The identity provider returned something unusable.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in credential was invalid."
+          }
+        }
+      }
+    },
+    "error.social.notConfigured": {
+      "comment": "The provider has no client id in this build.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in method is not configured."
+          }
+        }
+      }
+    },
+    "error.social.tokenExchangeFailed": {
+      "comment": "The provider's token was not accepted by this app's own server.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to exchange the social token for app credentials."
+          }
+        }
+      }
+    },
+    "error.social.userCancelled": {
+      "comment": "The reader dismissed the provider's sheet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in was cancelled."
+          }
+        }
+      }
+    },
+    "error.textRecognition.noResult": {
+      "comment": "The pass completed and found nothing.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No text found in the image."
+          }
+        }
+      }
+    },
+    "error.textRecognition.processingFailed %@": {
+      "comment": "Vision could not read the frame. %@ is the framework's own message.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognition failed: %@"
+          }
+        }
+      }
+    },
+    "home.empty.description": {
+      "comment": "Body of the empty state on the home screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull to refresh or check back later."
+          }
+        }
+      }
+    },
+    "home.empty.title": {
+      "comment": "Title of the empty state on the home screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Items"
+          }
+        }
+      }
+    },
+    "home.error.retry": {
+      "comment": "Button that re-runs the failed load.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        }
+      }
+    },
+    "home.error.title": {
+      "comment": "Title of the failure state on the home screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong"
+          }
+        }
+      }
+    },
+    "home.item.openHint": {
+      "comment": "VoiceOver hint on a list row: says where activating it leads.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens this item's details"
+          }
+        }
+      }
+    },
+    "home.loading": {
+      "comment": "Shown while the first page of items is in flight.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
+          }
+        }
+      }
+    },
+    "home.menu.more": {
+      "comment": "VoiceOver label for the toolbar's overflow menu.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More options"
+          }
+        }
+      }
+    },
+    "home.menu.scanBarcode": {
+      "comment": "Overflow menu item opening the barcode scanner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan Barcode / QR"
+          }
+        }
+      }
+    },
+    "home.menu.scanText": {
+      "comment": "Overflow menu item opening the text scanner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan Text"
+          }
+        }
+      }
+    },
+    "home.menu.settings": {
+      "comment": "Overflow menu item opening the settings screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
+    "home.refreshing": {
+      "comment": "VoiceOver label for the toolbar spinner that replaces the menu during a refresh.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing items"
+          }
+        }
+      }
+    },
+    "home.searchPrompt": {
+      "comment": "Placeholder in the home screen's search field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search items"
+          }
+        }
+      }
+    },
+    "home.title": {
+      "comment": "Navigation title of the home screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        }
+      }
+    },
+    "itemDetail.id": {
+      "comment": "Row naming the item's identifier.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ID"
+          }
+        }
+      }
+    },
+    "itemDetail.section": {
+      "comment": "Section header above an item's fields.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
+          }
+        }
+      }
+    },
+    "itemDetail.title": {
+      "comment": "Row naming the item's title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
+          }
+        }
+      }
+    },
+    "login.dividerLabel": {
+      "comment": "VoiceOver label for the rule-or-rule divider above the social sign-in buttons.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "or, sign in another way"
+          }
+        }
+      }
+    },
+    "login.dividerOr": {
+      "comment": "The word between the two rules above the social buttons.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "or"
+          }
+        }
+      }
+    },
+    "login.email": {
+      "comment": "Email field: its placeholder and its VoiceOver label.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
+          }
+        }
+      }
+    },
+    "login.heading": {
+      "comment": "The app's name, shown as a heading above the sign-in form.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boilerplate iOS"
+          }
+        }
+      }
+    },
+    "login.password": {
+      "comment": "VoiceOver label for the password field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        }
+      }
+    },
+    "login.passwordHint": {
+      "comment": "VoiceOver hint on the password field, stating the rule its placeholder abbreviates.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At least 8 characters"
+          }
+        }
+      }
+    },
+    "login.passwordPlaceholder": {
+      "comment": "Placeholder in the password field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password (8+ chars)"
+          }
+        }
+      }
+    },
+    "login.signIn": {
+      "comment": "The sign-in button, and the screen's navigation title.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign In"
+          }
+        }
+      }
+    },
+    "login.signingIn": {
+      "comment": "Accessibility value on a sign-in button mid-request. Present participle: it is read after the label, as 'Sign In, Signing in'.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signing in"
+          }
+        }
+      }
+    },
+    "pagination.loadingMore": {
+      "comment": "VoiceOver label for the spinner below the last row while a page is in flight.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading more items"
+          }
+        }
+      }
+    },
+    "pagination.noMoreItems": {
+      "comment": "Shown below the last row once the collection is exhausted.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No more items"
+          }
+        }
+      }
+    },
+    "pagination.tryAgain": {
+      "comment": "Button that retries the page that failed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try Again"
+          }
+        }
+      }
+    },
+    "scanner.clearCodes": {
+      "comment": "VoiceOver label for the icon-only button that clears the scanned codes.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear scanned codes"
+          }
+        }
+      }
+    },
+    "scanner.clearText": {
+      "comment": "VoiceOver label for the icon-only button that clears the recognised text.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear recognized text"
+          }
+        }
+      }
+    },
+    "scanner.copied": {
+      "comment": "The copy button, just after it copied. The exclamation mark is the feedback.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied!"
+          }
+        }
+      }
+    },
+    "scanner.copy": {
+      "comment": "Button that copies the scan result to the clipboard.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
+    "scanner.pause": {
+      "comment": "Toolbar button while scanning. It is a verb: the name is what pressing it will do.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause scanning"
+          }
+        }
+      }
+    },
+    "scanner.start": {
+      "comment": "Toolbar button while paused. A verb, like its counterpart.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start scanning"
+          }
+        }
+      }
+    },
+    "settings.appearance.footer.dark": {
+      "comment": "Footer explaining the dark appearance option.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always uses the dark appearance."
+          }
+        }
+      }
+    },
+    "settings.appearance.footer.light": {
+      "comment": "Footer explaining the light appearance option.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always uses the light appearance."
+          }
+        }
+      }
+    },
+    "settings.appearance.footer.system": {
+      "comment": "Footer explaining the system appearance option.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matches your device's appearance setting."
+          }
+        }
+      }
+    },
+    "settings.build": {
+      "comment": "Row naming the build number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build"
+          }
+        }
+      }
+    },
+    "settings.email": {
+      "comment": "Row naming the signed-in account's email address.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
+          }
+        }
+      }
+    },
+    "settings.loadingProfile": {
+      "comment": "Shown beside a spinner while the profile loads.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading profile…"
+          }
+        }
+      }
+    },
+    "settings.loadingProfileLabel": {
+      "comment": "VoiceOver label for the spinner-and-sentence pair, combined into one element.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading profile"
+          }
+        }
+      }
+    },
+    "settings.name": {
+      "comment": "Placeholder in the editable display-name field.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
+      }
+    },
+    "settings.offlineCopy": {
+      "comment": "Shown when the profile on screen came from the on-device store rather than the server.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing a saved copy — you appear to be offline."
+          }
+        }
+      }
+    },
+    "settings.save": {
+      "comment": "Button that commits the edited display name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "settings.saving": {
+      "comment": "VoiceOver label for the spinner that replaces the Save button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving"
+          }
+        }
+      }
+    },
+    "settings.section.account": {
+      "comment": "Section header above the account rows.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "settings.section.app": {
+      "comment": "Section header above the version and build rows.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        }
+      }
+    },
+    "settings.section.appearance": {
+      "comment": "Section header above the appearance picker.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
+          }
+        }
+      }
+    },
+    "settings.signOut": {
+      "comment": "Destructive button that ends the session.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Out"
+          }
+        }
+      }
+    },
+    "settings.title": {
+      "comment": "Navigation title of the settings screen.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
+    "settings.version": {
+      "comment": "Row naming the marketing version.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "textScanner.blocksDetected %lld": {
+      "comment": "Heading of the recognised-text panel. %lld is how many blocks of text the pass found.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld block detected"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld blocks detected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "textScanner.rotor.textBlocks": {
+      "comment": "Name of the VoiceOver rotor that moves between recognised blocks.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text blocks"
+          }
+        }
+      }
+    },
+    "textScanner.title": {
+      "comment": "Navigation title of the text scanner.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Scanner"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

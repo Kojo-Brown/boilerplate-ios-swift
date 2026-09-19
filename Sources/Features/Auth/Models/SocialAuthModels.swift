@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 // Credential payload returned by a social sign-in provider before backend exchange.
@@ -19,10 +20,10 @@ package enum SocialAuthError: LocalizedError, Sendable, Equatable {
 
     package var errorDescription: String? {
         switch self {
-        case .invalidCredential: "The sign-in credential was invalid."
-        case .userCancelled: "Sign-in was cancelled."
-        case .notConfigured: "This sign-in method is not configured."
-        case .tokenExchangeFailed: "Failed to exchange the social token for app credentials."
+        case .invalidCredential: FeatureStrings.SocialError.invalidCredential.string
+        case .userCancelled: FeatureStrings.SocialError.userCancelled.string
+        case .notConfigured: FeatureStrings.SocialError.notConfigured.string
+        case .tokenExchangeFailed: FeatureStrings.SocialError.tokenExchangeFailed.string
         }
     }
 }

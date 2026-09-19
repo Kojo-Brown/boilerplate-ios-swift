@@ -20,36 +20,42 @@ package struct HomeView: View {
 
     package var body: some View {
         content
-            .navigationTitle("Home")
-            .searchable(text: $viewModel.searchQuery, prompt: "Search items")
+            .navigationTitle(Text(FeatureStrings.Home.title))
+            .searchable(
+                text: $viewModel.searchQuery,
+                prompt: Text(FeatureStrings.Home.searchPrompt)
+            )
             .refreshable { await viewModel.refresh() }
             .task { await viewModel.onAppear() }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     if viewModel.isLoading {
                         ProgressView()
-                            .accessibilityLabel("Refreshing items")
+                            .accessibilityLabel(Text(FeatureStrings.Home.refreshing))
                     } else {
                         Menu {
                             Button {
                                 coordinator.push(.textRecognition)
                             } label: {
-                                Label("Scan Text", systemImage: "text.viewfinder")
+                                Label(FeatureStrings.Home.scanText.string, systemImage: "text.viewfinder")
                             }
                             Button {
                                 coordinator.push(.barcodeScanner)
                             } label: {
-                                Label("Scan Barcode / QR", systemImage: "qrcode.viewfinder")
+                                Label(
+                                    FeatureStrings.Home.scanBarcode.string,
+                                    systemImage: "qrcode.viewfinder"
+                                )
                             }
                             Button {
                                 coordinator.push(.settings)
                             } label: {
-                                Label("Settings", systemImage: "gearshape")
+                                Label(FeatureStrings.Home.settings.string, systemImage: "gearshape")
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
-                        .accessibilityLabel("More options")
+                        .accessibilityLabel(Text(FeatureStrings.Home.moreOptions))
                     }
                 }
             }
@@ -60,7 +66,7 @@ package struct HomeView: View {
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading && viewModel.filteredItems.isEmpty {
-            ProgressView("Loading…")
+            ProgressView(FeatureStrings.Home.loading.string)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let message = viewModel.errorMessage {
             errorView(message)
@@ -99,7 +105,7 @@ package struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.title)
                 .accessibilityValue(item.subtitle)
-                .accessibilityHint("Opens this item's details")
+                .accessibilityHint(Text(FeatureStrings.Home.openItemHint))
             }
             .onDelete { offsets in
                 viewModel.deleteItems(at: offsets)
@@ -130,7 +136,7 @@ package struct HomeView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(item.title)
                         .accessibilityValue(item.subtitle)
-                        .accessibilityHint("Opens this item's details")
+                        .accessibilityHint(Text(FeatureStrings.Home.openItemHint))
                     }
                 }
                 .padding(16)
@@ -142,20 +148,20 @@ package struct HomeView: View {
 
     private func errorView(_ message: String) -> some View {
         ContentUnavailableView {
-            Label("Something went wrong", systemImage: "exclamationmark.triangle")
+            Label(FeatureStrings.Home.errorTitle.string, systemImage: "exclamationmark.triangle")
         } description: {
             Text(message)
         } actions: {
-            Button("Retry") { Task { await viewModel.refresh() } }
+            Button(FeatureStrings.Home.retry.string) { Task { await viewModel.refresh() } }
                 .buttonStyle(.borderedProminent)
         }
     }
 
     private var emptyView: some View {
         ContentUnavailableView(
-            "No Items",
+            FeatureStrings.Home.emptyTitle.string,
             systemImage: "tray",
-            description: Text("Pull to refresh or check back later.")
+            description: Text(FeatureStrings.Home.emptyDescription)
         )
     }
 }

@@ -53,7 +53,7 @@ package struct InlineErrorBanner: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(spokenMessage)
                 .accessibilityAddTraits(.isStaticText)
-                .accessibilityAction(named: Text("Dismiss"), onDismiss)
+                .accessibilityAction(named: Text(FeatureStrings.Component.dismiss), onDismiss)
         } else {
             banner
                 .accessibilityElement(children: .combine)
@@ -68,7 +68,7 @@ package struct InlineErrorBanner: View {
     /// everybody else is hidden. Without it the banner reads as a bare
     /// sentence and sounds like any other paragraph on the screen.
     private var spokenMessage: Text {
-        Text("Error: \(message)")
+        Text(FeatureStrings.Component.spokenError(message))
     }
 
     private var banner: some View {

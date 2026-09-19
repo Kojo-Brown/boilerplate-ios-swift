@@ -25,13 +25,15 @@ package enum BiometricAuthError: LocalizedError, Sendable, Equatable {
 
     package var errorDescription: String? {
         switch self {
-        case .notAvailable:       "Biometric authentication is not available on this device."
-        case .notEnrolled:        "No biometrics are enrolled. Please set up Face ID or Touch ID in Settings."
-        case .userCancelled:      "Authentication was cancelled."
-        case .userFallback:       "Biometric authentication was skipped."
-        case .systemCancelled:    "Authentication was cancelled by the system."
-        case .passcodeNotSet:     "A device passcode is required to use biometric authentication."
-        case .lockout:            "Biometrics are locked out. Please enter your passcode to re-enable."
+        case .notAvailable:       CoreStrings.Biometrics.notAvailable.string
+        case .notEnrolled:        CoreStrings.Biometrics.notEnrolled.string
+        case .userCancelled:      CoreStrings.Biometrics.userCancelled.string
+        case .userFallback:       CoreStrings.Biometrics.userFallback.string
+        case .systemCancelled:    CoreStrings.Biometrics.systemCancelled.string
+        case .passcodeNotSet:     CoreStrings.Biometrics.passcodeNotSet.string
+        case .lockout:            CoreStrings.Biometrics.lockout.string
+        // Carried through from `LAError`, which Foundation has already
+        // localised. See the same decision on `APIError.networkUnavailable`.
         case .failed(let reason): reason
         }
     }

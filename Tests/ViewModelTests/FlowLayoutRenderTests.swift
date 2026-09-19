@@ -135,4 +135,41 @@ struct FlowLayoutRenderTests {
         #expect(isClose(frames[1], CGRect(x: 0, y: 50, width: 100, height: 40)))
         #expect(isClose(frames[2], CGRect(x: 0, y: 100, width: 100, height: 40)))
     }
+
+    /// Phase 10 item 7's right-to-left half, in a rendered tree.
+    ///
+    /// `FlowLayoutDirectionTests` owns the mirror arithmetic; this owns the one
+    /// thing it cannot reach — that SwiftUI carries the environment's layout
+    /// direction into `LayoutSubviews` and that the conformance reads it there.
+    /// A `Layout` that never asked would pass every assertion in that file and
+    /// still lay Arabic out left to right, because the question is not in the
+    /// geometry.
+    @Test("A right-to-left reader gets the first chip at the trailing edge")
+    func rightToLeftMirrorsTheFlow() async {
+        let recorder = FlowFrameRecorder()
+        let harness = await RenderHarness.mount(
+            FlowProbeHarness(
+                items: probeItems,
+                containerWidth: 250,
+                spacing: 8,
+                lineSpacing: 10,
+                recorder: recorder,
+                layoutDirection: .rightToLeft
+            )
+        )
+        defer { harness.dismount() }
+
+        await settleUntil(harness) { recorder.framesInFlowSpace(count: probeItems.count) != nil }
+
+        guard let frames = recorder.framesInFlowSpace(count: probeItems.count) else {
+            Issue.record("The flow never reported a frame for all three items")
+            return
+        }
+
+        // The mirror image of the left-to-right case above: 0, 108, 0 becomes
+        // 108, 0, 108, about a flow that is 208 points wide.
+        #expect(isClose(frames[0], CGRect(x: 108, y: 0, width: 100, height: 40)))
+        #expect(isClose(frames[1], CGRect(x: 0, y: 0, width: 100, height: 40)))
+        #expect(isClose(frames[2], CGRect(x: 108, y: 50, width: 100, height: 40)))
+    }
 }

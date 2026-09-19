@@ -148,13 +148,13 @@ package enum PaginationError: LocalizedError, Hashable, Sendable {
     package var errorDescription: String? {
         switch self {
         case .moreItemsPromisedWithoutCursor:
-            "The server reported more items but sent no cursor to reach them."
+            CoreStrings.Pagination.moreItemsPromisedWithoutCursor.string
         case .unusableCursor:
-            "The server sent a page cursor that cannot be used."
+            CoreStrings.Pagination.unusableCursor.string
         case .cursorDidNotAdvance:
-            "The server returned the same page cursor it was given."
+            CoreStrings.Pagination.cursorDidNotAdvance.string
         case let .tooManyEmptyPages(limit):
-            "Stopped after \(limit) empty pages in a row."
+            CoreStrings.Pagination.emptyPageLimit(limit).string
         }
     }
 }

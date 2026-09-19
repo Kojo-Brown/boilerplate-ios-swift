@@ -44,7 +44,7 @@ package struct PaginationFooter<Element: Identifiable & Sendable>: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 8)
                 .listRowSeparator(.hidden)
-                .accessibilityLabel("Loading more items")
+                .accessibilityLabel(Text(FeatureStrings.Pagination.loadingMore))
 
         case .failed(let message):
             VStack(spacing: 8) {
@@ -52,7 +52,7 @@ package struct PaginationFooter<Element: Identifiable & Sendable>: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Try Again") {
+                Button(FeatureStrings.Pagination.tryAgain.string) {
                     Task { await paginator.retry() }
                 }
                 .buttonStyle(.bordered)
@@ -65,7 +65,7 @@ package struct PaginationFooter<Element: Identifiable & Sendable>: View {
             EmptyView()
 
         case .exhausted:
-            Text("No more items")
+            Text(FeatureStrings.Pagination.noMoreItems)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)

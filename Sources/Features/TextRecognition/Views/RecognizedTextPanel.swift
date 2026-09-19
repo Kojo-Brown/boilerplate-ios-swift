@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 // MARK: - Panel
@@ -36,7 +37,11 @@ struct RecognizedTextPanel: View {
             content
                 .padding()
         }
-        .accessibilityRotor(Text("Text blocks"), entries: result.blocks, entryLabel: \.text)
+        .accessibilityRotor(
+            Text(FeatureStrings.TextScanner.rotorName),
+            entries: result.blocks,
+            entryLabel: \.text
+        )
     }
 
     // MARK: - Private
@@ -90,8 +95,19 @@ struct RecognizedTextHeading: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    /// The count and its plural form, from the catalog.
+    ///
+    /// This was `"\(blockCount) block\(blockCount == 1 ? "" : "s") detected"`,
+    /// which is English's plural rule written in Swift — and English is the
+    /// language with the fewest categories to get wrong. Russian needs three
+    /// forms and picks between them on the last *two* digits; Arabic needs six
+    /// and has a form for exactly two. No ternary reaches that, which is why
+    /// the rule belongs in the catalog's `variations.plural` block and not
+    /// here. Note also that a translator never sees this sentence otherwise:
+    /// it is assembled at runtime out of fragments, so there is no string to
+    /// send them.
     private var title: String {
-        "\(blockCount) block\(blockCount == 1 ? "" : "s") detected"
+        FeatureStrings.TextScanner.blocksDetected(blockCount).string
     }
 }
 

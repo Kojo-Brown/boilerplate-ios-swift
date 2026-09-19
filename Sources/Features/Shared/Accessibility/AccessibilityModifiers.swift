@@ -54,8 +54,12 @@ extension View {
     ///
     /// - Parameter activity: what the control is doing, in the present
     ///   participle — "Signing in", not "Sign in". It is read after the label,
-    ///   so "Sign In, Signing in" is the sentence to write it against.
-    package func accessibilityBusy(_ isBusy: Bool, doing activity: String) -> some View {
+    ///   so "Sign In, Signing in" is the sentence to write it against. A
+    ///   `LocalizedStringResource` rather than a `String`, because a `String`
+    ///   here is a sentence VoiceOver says and nothing translates; taking the
+    ///   resource is what makes every call site a catalog lookup rather than a
+    ///   literal the audit has to chase.
+    package func accessibilityBusy(_ isBusy: Bool, doing activity: LocalizedStringResource) -> some View {
         accessibilityValue(isBusy ? Text(activity) : Text(verbatim: ""))
     }
 }

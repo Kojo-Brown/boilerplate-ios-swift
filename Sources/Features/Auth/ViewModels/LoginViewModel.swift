@@ -145,8 +145,8 @@ package enum AuthError: LocalizedError {
 
     package var errorDescription: String? {
         switch self {
-        case .invalidCredentials: "Invalid email or password."
-        case .networkUnavailable: "No network connection."
+        case .invalidCredentials: FeatureStrings.AuthError.invalidCredentials.string
+        case .networkUnavailable: FeatureStrings.AuthError.networkUnavailable.string
         }
     }
 }
