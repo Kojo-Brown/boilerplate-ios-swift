@@ -2,10 +2,13 @@
 
 Phase 10 item 7. Every string this package shows is declared in a String
 Catalog, counted strings pick their form in the catalog rather than in Swift,
-and the one container that lays out by hand now asks which way the reader
-reads.
+and the one container that places content by absolute `x` has been measured
+under a right-to-left reader.
 
-Three things were wrong before, and none of them was visible in the source.
+Two things were wrong before, neither of them visible in the source. A third
+looked wrong, was "fixed", and the fix was the defect — that one is written up
+too, because the reasoning that produced it is the reasoning most likely to
+produce it again.
 
 ---
 
@@ -167,64 +170,59 @@ pick a form.
 
 ---
 
-## 3. A custom `Layout` is not mirrored for you
+## 3. A custom `Layout` *is* mirrored for you — measured, not assumed
 
-`FlowLayout` laid Arabic out left to right, and the source gave no sign of it.
+This section began as a third finding and ended as a retraction, and the
+retraction is the more useful thing to write down.
 
-SwiftUI mirrors the containers it ships: an `HStack` in a right-to-left locale
-runs right to left with nothing asked of the caller. A `Layout` conformance
-looks like one of them in a view body and is not one. `placeSubviews` receives a
-`bounds` whose `x` grows **rightwards under every layout direction there is**,
-so a flow that puts its first item at `bounds.minX` puts it at the left edge in
-every language, items run against the reading order, and `.leading` — a word
-that means *start*, not *left* — quietly meant "left" for this one container
-while meaning "start" for every stack beside it.
+The claim was that `FlowLayout` laid Arabic out left to right. The reasoning
+was that SwiftUI mirrors the containers it ships — an `HStack` runs right to
+left in a right-to-left locale with nothing asked of the caller — while a
+custom `Layout` only *looks* like one of them in a view body, and that
+`LayoutSubviews.layoutDirection` exists precisely because the mirroring is the
+layout's own job. So `FlowLayoutEngine` was given a `WritingDirection` and
+taught to reflect its frames.
 
-`LayoutSubviews.layoutDirection` exists precisely because this is the layout's
-own responsibility. `FlowLayout` reads it; `FlowLayoutEngine` answers it by
-reflecting every frame about the flow's vertical centre line, once, after the
-lines are placed:
+That is wrong. SwiftUI mirrors a custom layout too. From WWDC22's *Compose
+custom layouts with SwiftUI*, on the `bounds` handed to `placeSubviews`:
 
-```swift
-private func mirrorHorizontally(_ result: inout Solution) {
-    let width = result.size.width
-    for index in result.frames.indices {
-        result.frames[index].origin.x = width - result.frames[index].maxX
-    }
-}
-```
+> You can assume this for all your placement calculations, even in right to
+> left language environments, because the framework automatically flips the x
+> position of each view when laying out views in that direction.
 
-Three decisions in that:
+So a layout that mirrors its own frames is flipped a **second** time, and comes
+out reading left-to-right in Arabic — the exact defect the mirror was added to
+prevent. The engine has no direction in it now, and
+`FlowLayoutEngine.layout(_:inWidth:)` carries the citation so the next person
+to reach for a mirror finds the answer before writing one.
 
-* **One reflection at the end, not a branch inside the placement loop.**
-  Right-to-left has to reverse the order of items along a line *and* move each
-  line's content to the opposite edge, and those are the same operation seen
-  twice. Two special cases would be two places to get the spacing wrong, and
-  they would only ever agree by inspection.
-* **Reflected about the flow's own reported size, not the width the lines were
-  broken at.** A flow reports the width it used (208 points, say) rather than
-  the width it was offered (250). Mirroring about the larger number would push
-  every frame 42 points past the right edge of a container that had been told
-  the flow was 208 wide — the same class of defect as reporting a size the
-  content does not fit in.
-* **The layout direction is part of the cache key.** This is the half that is
-  easy to leave out. Layout direction is an environment value: it can change
-  while the subviews and the proposed width both stand still, which is exactly
-  the case a width-keyed cache reports as a hit. The flow would then go on
-  placing frames solved for the other direction — correct arithmetic, cached
-  under the wrong question. `FlowLayoutCache` keys a solution on the engine as
-  well as the width, which covers alignment and line spacing for free.
+### How it was caught
 
-### What else the right-to-left pass found
+`FlowLayoutRenderTests.rightToLeftMirrorsTheFlow()` — a hosted test that mounts
+the flow under `.environment(\.layoutDirection, .rightToLeft)` and reads back
+where three fixed-size chips actually land. Written to confirm the mirror, it
+reported the chips at `0, 108, 0`: the left-to-right positions, from a flow
+that had been flipped twice.
 
-Nothing, and that is worth recording rather than implying. The rest of the
-package already expresses horizontal position in reading-relative terms:
+Two things are worth taking from that. The first is that the rendered test was
+the only instrument that could have said so: the engine's own unit tests all
+passed, because they were asserting the mirror against itself. The second is
+that the observation alone did not settle it — a flow flipped twice and a flow
+never flipped produce identical output, so "my mirror is redundant" and "the
+environment never reached the layout" fit the same three numbers. What settled
+it was Apple's own statement, and the test now pins that behaviour rather than
+this package's guess about it.
+
+### What the right-to-left pass actually found
+
+Nothing to change, and that is worth recording rather than implying. The
+package expresses horizontal position in reading-relative terms throughout —
 `VStack(alignment: .leading)`, `.frame(maxWidth: .infinity, alignment:
 .leading)`, `.padding(.horizontal)`, `.transition(.move(edge: .bottom))`. There
-is no `.padding(.left)`, no `NSTextAlignment`, and the one `.offset(x:)`-style
-transform in the package — the hero card's interactive dismissal — moves
-vertically. The custom layout was the only thing placing content by absolute
-`x`, which is what made it the only thing that was wrong.
+is no `.padding(.left)`, no `NSTextAlignment`, and the one drag transform in
+the package, the hero card's interactive dismissal, moves vertically. The
+custom layout was the only thing placing content by absolute `x`, which is what
+made it worth the measurement — and it turned out to be correct already.
 
 ---
 
@@ -236,12 +234,11 @@ translations checked into a boilerplate are worse than an honest single
 language: they read as reviewed and are not.
 
 So the right-to-left work above is **structural**, and the tests are structural
-with it. They assert that the layout asks which way the reader reads and
-answers correctly — which is exactly what Xcode's own "Right-to-Left
-Pseudolanguage" scheme option tests, since it flips layout direction without
-translating anything. What no test here establishes is how a real Arabic
-sentence renders in these views: whether it fits, whether it wraps where it
-should, whether a translated button outgrows its row.
+with it. They flip the layout direction and read back where things land, which
+is exactly what Xcode's own "Right-to-Left Pseudolanguage" scheme option does —
+it mirrors without translating. What no test here establishes is how a real
+Arabic sentence renders in these views: whether it fits, whether it wraps where
+it should, whether a translated button outgrows its row.
 
 **No runtime check that a screen's text was translated.** The tests assert that
 each *resource* resolves. A view that reaches for the wrong resource, or none,
@@ -279,12 +276,16 @@ package:
    manual`, plural entries with both English forms, and a format specifier in
    the key if and only if the value interpolates one.
 5. **No plural assembled in Swift.**
-6. **No `Layout` conformance that never reads `layoutDirection`.**
-7. **No `LocalizedStringResource` built outside a strings file**, which is the
+6. **No `LocalizedStringResource` built outside a strings file**, which is the
    only place that passes `bundle:`.
 
 Every rule was verified by reintroducing the defect it names and watching the
 script fail on it.
+
+A seventh rule was written and then removed: "no `Layout` conformance that never
+reads `layoutDirection`". It encoded the mistake in section 3, so it would have
+*required* the double mirror. A syntactic right-to-left rule worth having would
+name a hardcoded left or right edge, and this package has none for it to hold.
 
 Preview code is excluded: the `Previews/` folders, and everything from a
 `// MARK: - Preview` heading or the first `#Preview` to the end of a file.
@@ -306,10 +307,12 @@ count — including that exactly one form in `0...20` is singular, which is the
 whole of English's rule and includes zero, which English pluralises and several
 other languages do not.
 
-`FlowLayoutDirectionTests` owns the mirror arithmetic; the right-to-left case in
-`FlowLayoutRenderTests` owns the one thing it cannot reach, that SwiftUI carries
-the environment's layout direction into `LayoutSubviews` and that the
-conformance reads it there.
+`FlowLayoutRenderTests.rightToLeftMirrorsTheFlow()` mounts the flow under
+`.environment(\.layoutDirection, .rightToLeft)` and reads back where three
+fixed-size chips land. It is the test that caught the mistake in section 3, and
+it now pins the framework behaviour that made it a mistake: the engine is
+left-to-right arithmetic, and anybody who adds a mirror to it turns these three
+expectations red.
 
 ---
 

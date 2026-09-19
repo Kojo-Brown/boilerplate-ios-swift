@@ -136,14 +136,26 @@ struct FlowLayoutRenderTests {
         #expect(isClose(frames[2], CGRect(x: 0, y: 100, width: 100, height: 40)))
     }
 
-    /// Phase 10 item 7's right-to-left half, in a rendered tree.
+    /// Phase 10 item 7's right-to-left half, and the test that settled it.
     ///
-    /// `FlowLayoutDirectionTests` owns the mirror arithmetic; this owns the one
-    /// thing it cannot reach — that SwiftUI carries the environment's layout
-    /// direction into `LayoutSubviews` and that the conformance reads it there.
-    /// A `Layout` that never asked would pass every assertion in that file and
-    /// still lay Arabic out left to right, because the question is not in the
-    /// geometry.
+    /// The question a custom `Layout` raises is whether SwiftUI mirrors its
+    /// placement for a right-to-left reader or leaves that to the layout. The
+    /// two answers demand opposite implementations, both look correct in the
+    /// source, and the difference is visible only in a language none of the
+    /// previews are written in — so this measures it rather than assuming.
+    ///
+    /// The answer is that **the framework mirrors**, which WWDC22's *Compose
+    /// custom layouts with SwiftUI* states outright: "the framework
+    /// automatically flips the x position of each view when laying out views
+    /// in that direction". The engine below is therefore left-to-right
+    /// arithmetic with no direction in it at all, and this test is what would
+    /// fail if somebody added a mirror to it — a flow flipped twice reads
+    /// left-to-right in Arabic, which is the defect such a mirror would be
+    /// trying to prevent.
+    ///
+    /// This suite has now caught that in both directions: the mirror went in
+    /// first, on the assumption that the framework did nothing, and these
+    /// three expectations are what said otherwise.
     @Test("A right-to-left reader gets the first chip at the trailing edge")
     func rightToLeftMirrorsTheFlow() async {
         let recorder = FlowFrameRecorder()
@@ -166,8 +178,9 @@ struct FlowLayoutRenderTests {
             return
         }
 
-        // The mirror image of the left-to-right case above: 0, 108, 0 becomes
-        // 108, 0, 108, about a flow that is 208 points wide.
+        // The mirror image of the left-to-right case above — 0, 108, 0 becomes
+        // 108, 0, 108 about a flow 208 points wide — and every one of those
+        // numbers is the framework's doing, not the engine's.
         #expect(isClose(frames[0], CGRect(x: 108, y: 0, width: 100, height: 40)))
         #expect(isClose(frames[1], CGRect(x: 0, y: 0, width: 100, height: 40)))
         #expect(isClose(frames[2], CGRect(x: 108, y: 50, width: 100, height: 40)))

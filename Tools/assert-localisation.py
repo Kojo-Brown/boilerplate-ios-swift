@@ -36,18 +36,20 @@ So the loop is closed here instead, in four directions:
      like `home.title` is not a fallback anybody wants rendered), and a format
      specifier in its key if and only if its value interpolates one.
 
-Plus the two defects this item found in the code it was written against:
+Plus the defect this item found in the code it was written against:
 
   5. **No plural assembled in Swift.** `"\\(n) block\\(n == 1 ? "" : "s")"` is
      English's rule written out, and English has the fewest categories to get
      wrong. It is also a sentence no translator ever sees, because it does not
      exist until runtime.
 
-  6. **No `Layout` that ignores the reading direction.** SwiftUI mirrors its own
-     containers and does *not* mirror a custom `Layout`: `placeSubviews` gets a
-     `bounds` whose x grows rightwards in Arabic exactly as in English. A
-     conformance that never reads `LayoutSubviews.layoutDirection` lays out
-     backwards for a right-to-left reader, and the source looks right.
+There was a sixth rule here, and it is gone because it was wrong: it required
+every custom `Layout` to read `LayoutSubviews.layoutDirection`, on the belief
+that SwiftUI does not mirror a custom layout. It does — see
+`FlowLayoutRenderTests` and `docs/localisation.md` — so the rule demanded the
+very defect it was meant to prevent, a flow mirrored twice. A right-to-left
+check that belongs in a syntactic audit would have to name a hardcoded left or
+right edge, and this package has none to hold it to.
 
 Every rule below was verified by reintroducing the defect it names and watching
 this script fail on it. It runs on Linux, in the lint job, beside the Sendable,
@@ -119,8 +121,6 @@ HAND_ROLLED_PLURAL = re.compile(r"""\?\s*"s?"\s*:\s*"s"|\?\s*"s"\s*:\s*"s?\"""")
 
 # A resource built anywhere other than one of the three accessor functions.
 LOOSE_RESOURCE = re.compile(r"LocalizedStringResource\(\s*[\"\\]")
-
-LAYOUT_CONFORMANCE = re.compile(r"^(?:package |public )?struct (\w+): Layout\b", re.M)
 
 PREVIEW_BOUNDARY = re.compile(r"^(?:// MARK: - Preview|#Preview)")
 
@@ -284,7 +284,6 @@ def check_sources(directory: str, problems: list[str]) -> None:
     for path in swift_files(directory, shipped_only=True):
         relative = os.path.relpath(path, ROOT)
         shipped = shipped_source(path)
-        raw = open(path, encoding="utf-8").read()
 
         for line_number, line in enumerate(shipped.splitlines(), start=1):
             for pattern in USER_FACING:
@@ -321,14 +320,6 @@ def check_sources(directory: str, problems: list[str]) -> None:
                 f"strings file, which is the one place that passes 'bundle:'. Without "
                 f"it the lookup goes to Bundle.main and resolves to the key."
             )
-
-        for name in LAYOUT_CONFORMANCE.findall(raw):
-            if "layoutDirection" not in raw:
-                problems.append(
-                    f"{relative}: '{name}' conforms to Layout and never reads "
-                    f"layoutDirection. SwiftUI does not mirror a custom layout, so "
-                    f"this one lays out left-to-right for every reader."
-                )
 
 
 def main() -> int:
