@@ -93,9 +93,13 @@ struct FeatureLocalisationTests {
         (FeatureStrings.BarcodeError.processingFailed("Vision said no"), "error.barcode.processingFailed %@"),
     ]
 
-    @Test("Every string Features declares resolves out of its own catalog", arguments: Self.everyString)
-    func everyFeatureStringResolves(resource: LocalizedStringResource, key: String) {
-        expectResolves(resource, key: key)
+    /// A loop rather than `@Test(arguments:)` — see
+    /// ``CoreLocalisationTests/everyCoreStringResolves()``.
+    @Test("Every string Features declares resolves out of its own catalog")
+    func everyFeatureStringResolves() {
+        for (resource, key) in Self.everyString {
+            expectResolves(resource, key: key)
+        }
     }
 
     @Test("The feature errors describe themselves from the catalog")

@@ -30,8 +30,8 @@ import Testing
 func expectResolves(_ resource: LocalizedStringResource, key: String) {
     let resolved = String(localized: resource)
 
-    #expect(resolved != key, "resolved to its own key — the catalog was not consulted")
-    #expect(!resolved.isEmpty, "resolved to an empty string")
+    #expect(resolved != key, "\(key) resolved to its own key — the catalog was not consulted")
+    #expect(!resolved.isEmpty, "\(key) resolved to an empty string")
 }
 
 // MARK: - Core
@@ -64,9 +64,22 @@ struct CoreLocalisationTests {
         (CoreStrings.Persistence.staleServerCopy, "error.merge.staleServerCopy"),
     ]
 
-    @Test("Every string Core declares resolves out of Core's own catalog", arguments: Self.everyString)
-    func everyCoreStringResolves(resource: LocalizedStringResource, key: String) {
-        expectResolves(resource, key: key)
+    /// Written as a loop rather than `@Test(arguments:)`, and the reason is
+    /// worth recording because it will come up for anything else this table
+    /// holds. Swift Testing requires a parameterised test's arguments to be
+    /// `Sendable`, and `LocalizedStringResource`'s conformance to `Sendable`
+    /// is annotated `@available(iOS 18, *)` while this package deploys to iOS
+    /// 17 — so the macro expansion warns at every such `@Test`, four times
+    /// each, and this repo fails a build that emits any warning at all
+    /// (Phase 0 item 4). Raising the deployment target to satisfy a test would
+    /// be the tail wagging the dog. What is lost is per-case reporting, not
+    /// coverage: the loop asserts the same keys and each expectation names the
+    /// one it failed on.
+    @Test("Every string Core declares resolves out of Core's own catalog")
+    func everyCoreStringResolves() {
+        for (resource, key) in Self.everyString {
+            expectResolves(resource, key: key)
+        }
     }
 
     /// The error vocabulary is reached through `LocalizedError`, not through
@@ -107,9 +120,14 @@ struct NetworkingLocalisationTests {
     /// compiled into, so `Core`'s catalog is reachable only from `Core` — this
     /// suite is what would fail if these three were ever moved there and
     /// looked up across the boundary.
-    @Test("Every string Networking declares resolves", arguments: Self.everyString)
-    func everyNetworkingStringResolves(resource: LocalizedStringResource, key: String) {
-        expectResolves(resource, key: key)
+    ///
+    /// A loop rather than `@Test(arguments:)` — see
+    /// ``CoreLocalisationTests/everyCoreStringResolves()``.
+    @Test("Every string Networking declares resolves")
+    func everyNetworkingStringResolves() {
+        for (resource, key) in Self.everyString {
+            expectResolves(resource, key: key)
+        }
     }
 
     @Test("The repository's errors describe themselves from the catalog")
