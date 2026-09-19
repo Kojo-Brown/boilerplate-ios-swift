@@ -93,7 +93,7 @@ struct FeatureLocalisationTests {
         (FeatureStrings.BarcodeError.processingFailed("Vision said no"), "error.barcode.processingFailed %@"),
     ]
 
-    @Test("Every string Features declares resolves out of its own catalog", arguments: everyString)
+    @Test("Every string Features declares resolves out of its own catalog", arguments: Self.everyString)
     func everyFeatureStringResolves(resource: LocalizedStringResource, key: String) {
         expectResolves(resource, key: key)
     }

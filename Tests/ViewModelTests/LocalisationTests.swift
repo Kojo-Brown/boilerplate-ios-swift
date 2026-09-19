@@ -64,7 +64,7 @@ struct CoreLocalisationTests {
         (CoreStrings.Persistence.staleServerCopy, "error.merge.staleServerCopy"),
     ]
 
-    @Test("Every string Core declares resolves out of Core's own catalog", arguments: everyString)
+    @Test("Every string Core declares resolves out of Core's own catalog", arguments: Self.everyString)
     func everyCoreStringResolves(resource: LocalizedStringResource, key: String) {
         expectResolves(resource, key: key)
     }
@@ -107,7 +107,7 @@ struct NetworkingLocalisationTests {
     /// compiled into, so `Core`'s catalog is reachable only from `Core` — this
     /// suite is what would fail if these three were ever moved there and
     /// looked up across the boundary.
-    @Test("Every string Networking declares resolves", arguments: everyString)
+    @Test("Every string Networking declares resolves", arguments: Self.everyString)
     func everyNetworkingStringResolves(resource: LocalizedStringResource, key: String) {
         expectResolves(resource, key: key)
     }
