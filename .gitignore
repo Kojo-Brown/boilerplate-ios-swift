@@ -38,3 +38,7 @@ Gemfile.lock
 *.log
 test-output/
 TestResults.xcresult
+
+# Python bytecode from the audit scripts in Tools/ and .github/scripts/.
+__pycache__/
+*.pyc
