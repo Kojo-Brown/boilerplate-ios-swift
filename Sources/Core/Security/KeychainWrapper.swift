@@ -353,7 +353,7 @@ package final class InMemoryKeychain: KeychainStoring, Sendable {
     }
 
     package func set(_ value: String, forKey key: String, policy: KeychainAccessPolicy) throws {
-        try state.withLock { current -> Void in
+        try state.withLock { current in
             if policy.requiresAuthentication, let failure = current.gatedWriteFailure {
                 throw failure
             }
