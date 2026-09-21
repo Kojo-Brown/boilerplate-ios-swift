@@ -11,7 +11,7 @@ struct KeychainWrapperTests {
 
     @Test func storeAndRetrieveString() throws {
         let keychain = InMemoryKeychain()
-        try keychain.set("secret", forKey: "token")
+        try keychain.set("secret", forKey: "token", policy: .afterFirstUnlockThisDeviceOnly)
         let retrieved = try keychain.string(forKey: "token")
         #expect(retrieved == "secret")
     }
@@ -24,15 +24,15 @@ struct KeychainWrapperTests {
 
     @Test func overwritesExistingValue() throws {
         let keychain = InMemoryKeychain()
-        try keychain.set("first", forKey: "key")
-        try keychain.set("second", forKey: "key")
+        try keychain.set("first", forKey: "key", policy: .afterFirstUnlockThisDeviceOnly)
+        try keychain.set("second", forKey: "key", policy: .afterFirstUnlockThisDeviceOnly)
         let result = try keychain.string(forKey: "key")
         #expect(result == "second")
     }
 
     @Test func removeDeletesKey() throws {
         let keychain = InMemoryKeychain()
-        try keychain.set("value", forKey: "key")
+        try keychain.set("value", forKey: "key", policy: .afterFirstUnlockThisDeviceOnly)
         try keychain.remove(forKey: "key")
         let result = try keychain.string(forKey: "key")
         #expect(result == nil)
@@ -45,8 +45,8 @@ struct KeychainWrapperTests {
 
     @Test func removeAllClearsStorage() throws {
         let keychain = InMemoryKeychain()
-        try keychain.set("a", forKey: "k1")
-        try keychain.set("b", forKey: "k2")
+        try keychain.set("a", forKey: "k1", policy: .afterFirstUnlockThisDeviceOnly)
+        try keychain.set("b", forKey: "k2", policy: .afterFirstUnlockThisDeviceOnly)
         try keychain.removeAll()
         #expect(try keychain.string(forKey: "k1") == nil)
         #expect(try keychain.string(forKey: "k2") == nil)
@@ -54,8 +54,8 @@ struct KeychainWrapperTests {
 
     @Test func multipleKeysAreIndependent() throws {
         let keychain = InMemoryKeychain()
-        try keychain.set("alpha", forKey: "access")
-        try keychain.set("beta", forKey: "refresh")
+        try keychain.set("alpha", forKey: "access", policy: .afterFirstUnlockThisDeviceOnly)
+        try keychain.set("beta", forKey: "refresh", policy: .afterFirstUnlockThisDeviceOnly)
         #expect(try keychain.string(forKey: "access") == "alpha")
         #expect(try keychain.string(forKey: "refresh") == "beta")
     }
@@ -75,8 +75,12 @@ struct KeychainWrapperTests {
     @Test func tokenStoreReadsFromKeychainOnInit() async throws {
         let keychain = InMemoryKeychain()
         // Pre-populate Keychain before creating the store (simulates app restart).
-        try keychain.set("persisted", forKey: "com.boilerplate.accessToken")
-        try keychain.set("persisted_rt", forKey: "com.boilerplate.refreshToken")
+        try keychain.set("persisted", forKey: "com.boilerplate.accessToken", policy: .afterFirstUnlockThisDeviceOnly)
+        try keychain.set(
+            "persisted_rt",
+            forKey: "com.boilerplate.refreshToken",
+            policy: .afterFirstUnlockThisDeviceOnly
+        )
 
         let store = TokenStore(keychain: keychain)
         let token = try await store.currentToken()

@@ -151,6 +151,26 @@ jobs:
       - name: Audit the String Catalogs and the right-to-left pass
         run: python3 Tools/assert-localisation.py
 
+      # Phase 11 item 1. CLAUDE.md's "Tokens in Keychain with access-control
+      # flags, never `UserDefaults`" had nothing behind it. Both halves are
+      # invisible to every other gate: a credential written to `UserDefaults`
+      # compiles, runs, previews and passes the suite while sitting in a plist
+      # that a file-level backup carries off the device — and an item's access
+      # control cannot be read back at all, so a write that picked the weakest
+      # protection is indistinguishable at runtime from one that picked the
+      # strongest. The call site is the only place the policy is legible, which
+      # is why the protocol has no write that omits it and why this checks that
+      # it stays that way.
+      #
+      # Each rule was verified by reintroducing the defect it names; the
+      # script's docstring and `docs/security.md` carry the reasoning.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit where credentials are stored
+        run: python3 Tools/assert-token-storage.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

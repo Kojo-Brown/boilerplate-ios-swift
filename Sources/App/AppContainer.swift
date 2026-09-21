@@ -290,7 +290,12 @@ extension AppContainer {
         syncPolicy: SyncPolicy = .offlineFirst
     ) -> AppContainer {
         let keychain = KeychainWrapper()
-        let tokenStore = TokenStore(keychain: keychain)
+        // The one place the app decides how hard its stored credentials are to
+        // reach. The session tokens are ungated because a background refresh
+        // has nobody to ask; the unlock record is the copy that a person has
+        // to prove themselves to read. `BiometricUnlockPolicy` and
+        // `docs/security.md` carry the argument.
+        let tokenStore = TokenStore(keychain: keychain, biometricUnlock: .deviceOwner)
         let apiClient = URLSessionAPIClient(baseURL: baseURL, tokenStore: tokenStore)
 
         // One bus, bound to both halves below. Two `EventBus()` expressions

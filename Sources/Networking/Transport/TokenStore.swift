@@ -70,6 +70,42 @@ package protocol TokenStoring: Sendable {
     ) async throws -> String
 }
 
+// MARK: - Biometric unlock policy
+
+/// Whether the store keeps a copy of the refresh token behind an
+/// authentication gate, and what that gate is.
+///
+/// The session tokens themselves are never gated — see `TokenStore` — so this
+/// is the whole of the app's biometric protection, and it is the composition
+/// root's decision rather than the store's: `AppContainer.live()` turns it on,
+/// `AppContainer.preview` leaves it off.
+package enum BiometricUnlockPolicy: Sendable, Equatable {
+    case disabled
+    case enabled(KeychainAccessPolicy)
+
+    /// What the app ships with: the enrolled biometric set as it stood when
+    /// the record was written, with the device passcode as the way back in.
+    /// `KeychainAccessPolicy.biometryCurrentSetOrPasscode` says why.
+    package static let deviceOwner = BiometricUnlockPolicy.enabled(.biometryCurrentSetOrPasscode)
+
+    /// The policy the record is written under, or `nil` when there is no
+    /// record to write.
+    ///
+    /// `.enabled(.afterFirstUnlockThisDeviceOnly)` reads as disabled rather
+    /// than as an unlock record that unlocks nothing. A second copy of the
+    /// refresh token is only worth its own key while it is harder to reach
+    /// than the first one; an ungated copy is strictly a second thing to
+    /// steal.
+    package var gatedPolicy: KeychainAccessPolicy? {
+        switch self {
+        case .disabled:
+            nil
+        case .enabled(let policy):
+            policy.requiresAuthentication ? policy : nil
+        }
+    }
+}
+
 // MARK: - Token store
 
 /// Actor-isolated, Keychain-backed token store.
@@ -85,18 +121,60 @@ package protocol TokenStoring: Sendable {
 /// that decision.
 package actor TokenStore: TokenStoring {
     private let keychain: any KeychainStoring
+    private let biometricUnlock: BiometricUnlockPolicy
     private var inflightRefresh: Task<String, Error>?
 
-    private enum Keys {
-        static let accessToken = "com.boilerplate.accessToken"
-        static let refreshToken = "com.boilerplate.refreshToken"
+    /// The three account names this store owns, exposed so that a test — and
+    /// `Tools/assert-token-storage.py` — can name the same strings the store
+    /// writes rather than a copy of them that drifts.
+    package enum Keys {
+        package static let accessToken = "com.boilerplate.accessToken"
+        package static let refreshToken = "com.boilerplate.refreshToken"
+
+        /// The gated copy. A separate key rather than a stronger policy on
+        /// `refreshToken`, because the two are read by different callers under
+        /// different conditions and one item cannot be both.
+        package static let biometricRefreshToken = "com.boilerplate.biometricRefreshToken"
     }
 
-    /// No default. The Keychain is a collaborator, and which one is used is a
-    /// decision for the composition root rather than for whoever happens to
-    /// build a store without saying.
-    package init(keychain: any KeychainStoring) {
+    /// What the session tokens are written under, and why it is not a gate.
+    ///
+    /// Both tokens are read by machinery with nobody in front of it: the
+    /// retry after a 401, and the background refresh task that runs while the
+    /// phone is in a pocket. `afterFirstUnlockThisDeviceOnly` is the strongest
+    /// accessibility that survives both — the device is locked, so
+    /// `whenUnlocked` would fail, and any authentication constraint would put
+    /// a prompt on a screen nobody is looking at (or, before
+    /// `KeychainWrapper` started attaching a non-interactive context, hang
+    /// waiting for one). It never leaves the device and never enters a backup.
+    ///
+    /// The biometric gating the app does have is the unlock record below.
+    package static let sessionPolicy = KeychainAccessPolicy.afterFirstUnlockThisDeviceOnly
+
+    /// Why the last attempt to write the unlock record did not happen, or
+    /// `nil` when it did.
+    ///
+    /// Recorded rather than thrown. A device with no passcode cannot hold a
+    /// gated item at all, and failing `setTokens` there would mean a
+    /// successful sign-in that the app then reports as a failure — the
+    /// opposite of the trade the record exists to make. The failure is still
+    /// legible: this is what a caller reads to find out that "unlock with Face
+    /// ID" is not going to be offered, and why.
+    package private(set) var lastBiometricUnlockError: KeychainError?
+
+    /// No default for `keychain`. The Keychain is a collaborator, and which
+    /// one is used is a decision for the composition root rather than for
+    /// whoever happens to build a store without saying.
+    ///
+    /// `biometricUnlock` does default, and the default is the absence of the
+    /// feature. It is a policy value rather than a collaborator, and every
+    /// call site that does not name one wants the store it has always had.
+    package init(
+        keychain: any KeychainStoring,
+        biometricUnlock: BiometricUnlockPolicy = .disabled
+    ) {
         self.keychain = keychain
+        self.biometricUnlock = biometricUnlock
     }
 
     // MARK: - Token access
@@ -112,16 +190,88 @@ package actor TokenStore: TokenStoring {
     // MARK: - Mutations
 
     package func setTokens(_ pair: TokenPair) throws {
-        try keychain.set(pair.accessToken, forKey: Keys.accessToken)
-        try keychain.set(pair.refreshToken, forKey: Keys.refreshToken)
+        try keychain.set(pair.accessToken, forKey: Keys.accessToken, policy: Self.sessionPolicy)
+        try keychain.set(pair.refreshToken, forKey: Keys.refreshToken, policy: Self.sessionPolicy)
+        // Every write, not only the first: a refresh rotates the token, and a
+        // gated record still holding the previous one would authenticate the
+        // user successfully and then fail the exchange.
+        writeBiometricUnlockRecord(pair.refreshToken)
         inflightRefresh = nil
     }
 
     package func clearTokens() {
         try? keychain.remove(forKey: Keys.accessToken)
         try? keychain.remove(forKey: Keys.refreshToken)
+        // Signing out has to take the gated copy with it. It is the one item
+        // that would otherwise survive a sign-out and let the next person
+        // holding the phone reach the account with a glance.
+        try? keychain.remove(forKey: Keys.biometricRefreshToken)
+        lastBiometricUnlockError = nil
         inflightRefresh?.cancel()
         inflightRefresh = nil
+    }
+
+    // MARK: - Biometric unlock
+
+    /// Whether a gated record exists on this device. Does not prompt.
+    ///
+    /// The question a screen asks before offering "unlock with Face ID", and
+    /// the reason `KeychainStoring` has a `contains`: asking by reading would
+    /// mean prompting to find out whether to prompt.
+    package var isBiometricUnlockEnrolled: Bool {
+        (try? keychain.contains(Keys.biometricRefreshToken)) ?? false
+    }
+
+    /// Reads the gated refresh token, prompting for biometry or the passcode.
+    ///
+    /// - Parameter reason: Shown verbatim in the system prompt.
+    /// - Returns: The refresh token, to be exchanged for a fresh pair.
+    /// - Throws: `APIError.unauthorized` when this store keeps no gated record
+    ///   or the device has none; `KeychainError.userCancelled` when the user
+    ///   declines; `KeychainError.authenticationFailed` when they cannot
+    ///   authenticate.
+    ///
+    /// The read happens off this actor. `SecItemCopyMatching` blocks its
+    /// thread for as long as the sheet is up — user time, not machine time —
+    /// and the store has other callers whose requests should not queue behind
+    /// somebody looking at their phone.
+    package func biometricRefreshToken(reason: String) async throws -> String {
+        guard biometricUnlock.gatedPolicy != nil else { throw APIError.unauthorized }
+
+        let keychain = self.keychain
+        let key = Keys.biometricRefreshToken
+        let stored = try await OffMainActor.run {
+            try keychain.string(forKey: key, authenticationReason: reason)
+        }
+        guard let stored else { throw APIError.unauthorized }
+        return stored
+    }
+
+    /// Removes the gated record, leaving the session intact.
+    ///
+    /// What a "stop using Face ID for this app" switch calls. Signing out
+    /// removes it too, but the two are not the same request.
+    package func disableBiometricUnlock() {
+        try? keychain.remove(forKey: Keys.biometricRefreshToken)
+        lastBiometricUnlockError = nil
+    }
+
+    private func writeBiometricUnlockRecord(_ refreshToken: String) {
+        guard let policy = biometricUnlock.gatedPolicy else {
+            // Turning the policy off has to clear what an earlier launch left
+            // behind, or the record outlives the decision that created it.
+            try? keychain.remove(forKey: Keys.biometricRefreshToken)
+            lastBiometricUnlockError = nil
+            return
+        }
+
+        do {
+            try keychain.set(refreshToken, forKey: Keys.biometricRefreshToken, policy: policy)
+            lastBiometricUnlockError = nil
+        } catch {
+            try? keychain.remove(forKey: Keys.biometricRefreshToken)
+            lastBiometricUnlockError = KeychainError.wrapping(error)
+        }
     }
 
     // MARK: - Auth helpers
