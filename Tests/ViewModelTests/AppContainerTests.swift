@@ -328,9 +328,8 @@ struct TokenStoringSeamTests {
 
     /// The transport asks its store for a token before it builds a request, so
     /// an empty store fails an authenticated endpoint without reaching the
-    /// network at all — `URLSession.shared` is the default here and is never
-    /// touched, which is also why this test is fast rather than a real request
-    /// to a placeholder host.
+    /// network at all — the session passed here is never touched, which is also
+    /// why this test is fast rather than a real request to a placeholder host.
     ///
     /// And it must fail rather than try to refresh: a refresh needs a refresh
     /// token, and an empty store has none either. Observing that from the
@@ -341,7 +340,8 @@ struct TokenStoringSeamTests {
         let store = InMemoryTokenStore()
         let client = URLSessionAPIClient(
             baseURL: AppContainer.defaultBaseURL,
-            tokenStore: store
+            tokenStore: store,
+            session: .shared
         )
 
         await #expect(throws: APIError.self) {

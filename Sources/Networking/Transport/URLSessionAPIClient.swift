@@ -30,19 +30,29 @@ package struct URLSessionAPIClient: APIClient {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
-    /// `baseURL` and `tokenStore` carry no defaults: they are the two things
-    /// that decide *which server* this talks to and *whose tokens* it sends,
-    /// and both are the composition root's to answer — see `AppContainer`.
+    /// `baseURL`, `tokenStore` and `session` carry no defaults: they are the
+    /// three things that decide *which server* this talks to, *whose tokens*
+    /// it sends, and *what it will accept as that server*, and all three are
+    /// the composition root's to answer — see `AppContainer`.
     ///
-    /// `session`, `decoder` and `encoder` keep theirs. They are configuration
-    /// rather than collaborators: none of them appears in the audited surface
-    /// of `docs/solid.md`, substituting one changes how a request is encoded
-    /// rather than who answers it, and `.shared`/`.apiDecoder` are the only
-    /// answers this package has ever wanted.
+    /// `session` lost its `.shared` default in Phase 11 item 2, when the app
+    /// started pinning. The default was not wrong before and is not a style
+    /// question now: `URLSession.shared` cannot carry a delegate, so a client
+    /// built without naming a session is a client with no certificate
+    /// pinning — and one that works perfectly, against the right server, on
+    /// every device, right up until the connection it is meant to refuse. A
+    /// default that silently opts out of a security control is a default that
+    /// has to be spelled out at the call site instead.
+    ///
+    /// `decoder` and `encoder` keep theirs. They are configuration rather than
+    /// collaborators: neither appears in the audited surface of
+    /// `docs/solid.md`, substituting one changes how a request is encoded
+    /// rather than who answers it, and `.apiDecoder`/`.apiEncoder` are the
+    /// only answers this package has ever wanted.
     package init(
         baseURL: URL,
         tokenStore: any TokenStoring,
-        session: URLSession = .shared,
+        session: URLSession,
         decoder: JSONDecoder = .apiDecoder,
         encoder: JSONEncoder = .apiEncoder
     ) {

@@ -171,8 +171,12 @@ is treated as disposable everywhere it is read.
   refresh token is already on the device, and this copy is harder to reach than
   the original — but a user-facing switch is the right shape, and it arrives
   with the flow above.
-* The rest of Phase 11 — certificate pinning, App Attest, jailbreak heuristics,
-  Fastlane Match, the privacy manifest, MetricKit — is untouched.
+* Certificate pinning is Phase 11 item 2 and is built — see
+  [certificate-pinning.md](./certificate-pinning.md) for what is pinned, how the
+  delegate decides, and the key-rotation procedure. It ships in report-only mode
+  with placeholder pins, for the reasons that page gives.
+* The rest of Phase 11 — App Attest, jailbreak heuristics, Fastlane Match, the
+  privacy manifest, MetricKit — is untouched.
 
 ## Running the gate
 
