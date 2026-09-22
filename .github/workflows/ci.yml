@@ -171,6 +171,33 @@ jobs:
       - name: Audit where credentials are stored
         run: python3 Tools/assert-token-storage.py
 
+      # Phase 11 item 2. Certificate pinning has a failure mode no other gate
+      # can see, and it is not "the pins are wrong" — it is "the pins are never
+      # consulted". An unpinned `URLSession` resolves, connects, validates
+      # against the system's anchors and returns the right bytes on every
+      # device and in every test; the only thing it does not do is refuse the
+      # one connection pinning was added to refuse, and that connection does
+      # not happen on anybody's desk. `URLSession.shared` makes it worse by
+      # being both the shortest thing to type and the one session that cannot
+      # carry a delegate at all.
+      #
+      # So this checks the structural facts that make pinning unavoidable
+      # rather than merely available: one file builds sessions, nothing reaches
+      # for the shared one, the transport cannot default its way out of being
+      # told which session it is on, and the delegate evaluates the chain
+      # before it accepts a pin — the last of which is the two-line inversion
+      # that turns pinning into a replacement for the system trust store.
+      #
+      # Each rule was verified by reintroducing the defect it names; the
+      # script's docstring and `docs/certificate-pinning.md` carry the
+      # reasoning, including the key-rotation procedure the pins depend on.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit that every session the app uses is pinned
+        run: python3 Tools/assert-pinned-sessions.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

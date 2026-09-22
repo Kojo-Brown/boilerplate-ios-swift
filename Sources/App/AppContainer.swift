@@ -194,6 +194,44 @@ extension AppContainer {
     /// isolation to be safe.
     static let defaultBaseURL = URL(string: "https://api.example.com/v1")!
 
+    /// The keys this app will accept for `defaultBaseURL`'s host.
+    ///
+    /// Placeholders, like the host they pin, and they are placeholders in a way
+    /// the type system knows about: `PublicKeyPin.placeholderPrimary` and
+    /// `placeholderBackup` are the SHA-256 of two English sentences, no real
+    /// key hashes to either, and `CertificatePinningPolicy.problems(at:)`
+    /// refuses to let them be *enforced*. `AppContainerTests` runs that audit
+    /// over this value, so an adopter who flips `enforcement` to `.enforced`
+    /// without first replacing the pins fails the suite rather than shipping an
+    /// app that can reach nothing.
+    ///
+    /// Which is why this ships as `.reportOnly`: it is the rollout position,
+    /// not a weaker version of the feature. The mechanism is complete and
+    /// enforcing is one field away; what is missing is the only thing this
+    /// repository cannot supply, which is the pin of a key belonging to a
+    /// server that exists. `docs/certificate-pinning.md` is the procedure for
+    /// supplying it, and for rotating it afterwards without an app release.
+    ///
+    /// The expiry is a year out from a fixed date rather than from "now" on
+    /// purpose. A pin set whose expiry is computed at launch never expires,
+    /// which defeats the valve `HostPinningPolicy.expiry` exists to be — the
+    /// date has to be baked into the build, so that a build eventually stops
+    /// enforcing pins nobody has re-checked.
+    static let defaultPinningPolicy = CertificatePinningPolicy(
+        hosts: [
+            HostPinningPolicy(
+                host: "api.example.com",
+                pins: PinSet(
+                    primary: .placeholderPrimary,
+                    backup: .placeholderBackup
+                ),
+                // 2027-09-01T00:00:00Z.
+                expiry: Date(timeIntervalSince1970: 1_819_756_800),
+                enforcement: .reportOnly
+            ),
+        ]
+    )
+
     /// The unified-log subsystem the app's telemetry is filed under.
     ///
     /// A placeholder in the same spirit as `defaultBaseURL`, and deliberately
@@ -287,7 +325,8 @@ extension AppContainer {
     static func live(
         baseURL: URL = AppContainer.defaultBaseURL,
         userStore: any UserPersistenceService,
-        syncPolicy: SyncPolicy = .offlineFirst
+        syncPolicy: SyncPolicy = .offlineFirst,
+        pinningPolicy: CertificatePinningPolicy = AppContainer.defaultPinningPolicy
     ) -> AppContainer {
         let keychain = KeychainWrapper()
         // The one place the app decides how hard its stored credentials are to
@@ -296,7 +335,24 @@ extension AppContainer {
         // to prove themselves to read. `BiometricUnlockPolicy` and
         // `docs/security.md` carry the argument.
         let tokenStore = TokenStore(keychain: keychain, biometricUnlock: .deviceOwner)
-        let apiClient = URLSessionAPIClient(baseURL: baseURL, tokenStore: tokenStore)
+        // Phase 11 item 2. One session, pinned, shared by every request the
+        // app makes — including the token refresh, which `URLSessionAPIClient`
+        // sends through this same session and which is the request an attacker
+        // in the middle would most like to answer.
+        //
+        // It is built here rather than defaulted inside the transport because
+        // `URLSession.shared` cannot carry a delegate: a client that resolved
+        // its own session would be a client with pinning switched off, and it
+        // would look exactly like one with pinning switched on.
+        let session = URLSession.pinned(
+            policy: pinningPolicy,
+            reporter: OSLogPinningReporter(subsystem: AppContainer.logSubsystem)
+        )
+        let apiClient = URLSessionAPIClient(
+            baseURL: baseURL,
+            tokenStore: tokenStore,
+            session: session
+        )
 
         // One bus, bound to both halves below. Two `EventBus()` expressions
         // would compile, wire cleanly, and deliver nothing — publishers would

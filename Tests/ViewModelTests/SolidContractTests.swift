@@ -41,7 +41,12 @@ private func makeLiveRepositoryOffTheMainActor() -> any UserRepository {
     LiveUserRepository(
         client: URLSessionAPIClient(
             baseURL: AppContainer.defaultBaseURL,
-            tokenStore: InMemoryTokenStore()
+            tokenStore: InMemoryTokenStore(),
+            // Explicit since Phase 11 item 2: the transport no longer resolves
+            // a session for itself, because the one it used to resolve
+            // (`URLSession.shared`) is the one that cannot be pinned. Nothing
+            // here sends a request; this only has to compile.
+            session: .shared
         )
     )
 }
@@ -84,7 +89,8 @@ struct SolidSurfaceTests {
         let tokenStore: any TokenStoring = TokenStore(keychain: keychain)
         let client: any APIClient = URLSessionAPIClient(
             baseURL: AppContainer.defaultBaseURL,
-            tokenStore: tokenStore
+            tokenStore: tokenStore,
+            session: .shared
         )
         let repository: any UserRepository = LiveUserRepository(client: client)
         let auth: any AuthServiceProtocol = LiveAuthService(client: client, tokenStore: tokenStore)
