@@ -253,6 +253,23 @@ extension AppContainer {
     /// exception on the first submit, so `docs/background-refresh.md` spells
     /// the plist out rather than leaving it to be discovered.
     static let backgroundRefreshIdentifier = "com.example.boilerplate-ios-swift.refresh-profile"
+
+    /// How hard the app insists on attesting its own requests.
+    ///
+    /// `.reportOnly`, and for the same reason `defaultPinningPolicy` ships
+    /// under `.reportOnly` with placeholder pins: the mechanism is complete and
+    /// the only missing ingredient is the one a template cannot supply, which
+    /// here is a server that issues challenges and verifies assertions. Against
+    /// `api.example.com` — a host that does not exist — every attempt fails, so
+    /// `.enforced` would be an app that cannot send a request at all, on a
+    /// device or a simulator alike.
+    ///
+    /// It is a default on the composition root rather than a default inside
+    /// `AppAttestor`, so that switching it on is a visible line in the one file
+    /// that decides what this app runs, and so that a test can build the graph
+    /// either way. `docs/app-attest.md` lists what has to be true on the server
+    /// before it is turned up.
+    static let defaultAttestationEnforcement = AttestationEnforcement.reportOnly
 }
 
 // MARK: - Why a cached answer is a failed background refresh
@@ -326,7 +343,8 @@ extension AppContainer {
         baseURL: URL = AppContainer.defaultBaseURL,
         userStore: any UserPersistenceService,
         syncPolicy: SyncPolicy = .offlineFirst,
-        pinningPolicy: CertificatePinningPolicy = AppContainer.defaultPinningPolicy
+        pinningPolicy: CertificatePinningPolicy = AppContainer.defaultPinningPolicy,
+        attestation: AttestationEnforcement = AppContainer.defaultAttestationEnforcement
     ) -> AppContainer {
         let keychain = KeychainWrapper()
         // The one place the app decides how hard its stored credentials are to
@@ -348,10 +366,31 @@ extension AppContainer {
             policy: pinningPolicy,
             reporter: OSLogPinningReporter(subsystem: AppContainer.logSubsystem)
         )
+        // Phase 11 item 3. Attestation is the mirror of pinning: pinning
+        // decides what this app will accept as the server, and this decides
+        // what the server can accept as this app. It goes through the same
+        // pinned session — the challenge and the key registration included,
+        // because an attacker able to answer `/attest/challenge` could hand
+        // out challenges of their own choosing.
+        //
+        // `.reportOnly`, for the reason the pins are placeholders: nothing
+        // answers `api.example.com`, so every attempt fails, and under
+        // report-only a failure costs one suppressed round trip per cooldown
+        // rather than an app that cannot make a request. Turning it up is the
+        // `attestation:` argument here and a server that verifies assertions;
+        // `docs/app-attest.md` is the order to do that in.
+        let attestor = AppAttestor(
+            service: DeviceCheckAttestService(),
+            server: URLSessionAttestationService(baseURL: baseURL, session: session),
+            keychain: keychain,
+            reporter: OSLogAttestationReporter(subsystem: AppContainer.logSubsystem),
+            enforcement: attestation
+        )
         let apiClient = URLSessionAPIClient(
             baseURL: baseURL,
             tokenStore: tokenStore,
-            session: session
+            session: session,
+            attestor: attestor
         )
 
         // One bus, bound to both halves below. Two `EventBus()` expressions

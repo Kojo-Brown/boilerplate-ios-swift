@@ -341,7 +341,8 @@ struct TokenStoringSeamTests {
         let client = URLSessionAPIClient(
             baseURL: AppContainer.defaultBaseURL,
             tokenStore: store,
-            session: .shared
+            session: .shared,
+            attestor: UnattestedRequests()
         )
 
         await #expect(throws: APIError.self) {

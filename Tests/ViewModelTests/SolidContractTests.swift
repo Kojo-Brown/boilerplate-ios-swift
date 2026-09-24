@@ -46,7 +46,11 @@ private func makeLiveRepositoryOffTheMainActor() -> any UserRepository {
             // a session for itself, because the one it used to resolve
             // (`URLSession.shared`) is the one that cannot be pinned. Nothing
             // here sends a request; this only has to compile.
-            session: .shared
+            session: .shared,
+            // Explicit for the same reason since Phase 11 item 3, and naming
+            // the do-nothing attestor rather than leaving it out is the whole
+            // point of it having no default.
+            attestor: UnattestedRequests()
         )
     )
 }
@@ -90,7 +94,8 @@ struct SolidSurfaceTests {
         let client: any APIClient = URLSessionAPIClient(
             baseURL: AppContainer.defaultBaseURL,
             tokenStore: tokenStore,
-            session: .shared
+            session: .shared,
+            attestor: UnattestedRequests()
         )
         let repository: any UserRepository = LiveUserRepository(client: client)
         let auth: any AuthServiceProtocol = LiveAuthService(client: client, tokenStore: tokenStore)

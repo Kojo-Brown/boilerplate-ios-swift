@@ -198,6 +198,33 @@ jobs:
       - name: Audit that every session the app uses is pinned
         run: python3 Tools/assert-pinned-sessions.py
 
+      # Phase 11 item 3. Attestation fails in a way that is worse than pinning
+      # failing: pinning that is never reached refuses nothing and the app
+      # keeps working, while attestation that is never reached leaves an app
+      # that looks attested — the type is wired, the headers exist, the tests
+      # pass — and hands its server assertions that prove less than the server
+      # believes.
+      #
+      # Three shapes of that, none of which any other gate sees: a second
+      # `session.data(for:)` anywhere in the transport, which is simply an
+      # unattested request; a 401 retry that copies the first delivery's
+      # headers, which re-sends an assertion whose Secure Enclave counter has
+      # already been spent and which a server doing replay detection is right
+      # to refuse; and a canonical client data that quietly stops covering a
+      # field, after which every signature still verifies against a statement
+      # that no longer says anything about the body.
+      #
+      # Each rule was verified by reintroducing the defect it names; the
+      # script's docstring and `docs/app-attest.md` carry the reasoning,
+      # including what a device run has to confirm before enforcement is
+      # turned on.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit that every request goes past the attestor
+        run: python3 Tools/assert-request-attestation.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

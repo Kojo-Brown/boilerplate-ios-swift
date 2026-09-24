@@ -27,6 +27,7 @@ package struct URLSessionAPIClient: APIClient {
     package let baseURL: URL
     private let session: URLSession
     private let tokenStore: any TokenStoring
+    private let attestor: any RequestAttesting
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -49,16 +50,26 @@ package struct URLSessionAPIClient: APIClient {
     /// `docs/solid.md`, substituting one changes how a request is encoded
     /// rather than who answers it, and `.apiDecoder`/`.apiEncoder` are the
     /// only answers this package has ever wanted.
+    ///
+    /// `attestor` carries no default either, and for the same shape of reason
+    /// one step further on. Pinning decides what the app will accept as the
+    /// server; attestation decides what the server will accept as the app, and
+    /// `UnattestedRequests()` — the do-nothing implementation — is exactly what
+    /// a forgotten argument would have resolved to. Written out, it is a line
+    /// in the composition root that says the app is not attesting yet;
+    /// defaulted, it is nothing at all. See `AppAttestor`.
     package init(
         baseURL: URL,
         tokenStore: any TokenStoring,
         session: URLSession,
+        attestor: any RequestAttesting,
         decoder: JSONDecoder = .apiDecoder,
         encoder: JSONEncoder = .apiEncoder
     ) {
         self.baseURL = baseURL
         self.session = session
         self.tokenStore = tokenStore
+        self.attestor = attestor
         self.decoder = decoder
         self.encoder = encoder
     }
@@ -78,17 +89,7 @@ package struct URLSessionAPIClient: APIClient {
 
     private func performRequest(_ endpoint: APIEndpoint) async throws -> Data {
         let request = try await buildRequest(endpoint)
-
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let urlError as URLError {
-            throw APIError.networkUnavailable(urlError)
-        }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        let (data, http) = try await send(attesting: request)
 
         // On 401, refresh tokens and retry once.
         if http.statusCode == 401 && endpoint.requiresAuth {
@@ -96,19 +97,46 @@ package struct URLSessionAPIClient: APIClient {
             var retryRequest = request
             retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
 
-            let (retryData, retryResponse): (Data, URLResponse)
-            do {
-                (retryData, retryResponse) = try await session.data(for: retryRequest)
-            } catch let urlError as URLError {
-                throw APIError.networkUnavailable(urlError)
-            }
-            guard let retryHTTP = retryResponse as? HTTPURLResponse else {
-                throw APIError.invalidResponse
-            }
+            let (retryData, retryHTTP) = try await send(attesting: retryRequest)
             return try validate(retryData, response: retryHTTP)
         }
 
         return try validate(data, response: http)
+    }
+
+    /// Attaches an assertion, if there is one to attach, and sends.
+    ///
+    /// Every delivery goes through here, and that is the point: the 401 retry
+    /// above re-enters it rather than re-sending the request it already built,
+    /// so the second delivery carries a *new* assertion over a *new*
+    /// challenge. Copying the headers across would be the natural-looking
+    /// version and it is the one that breaks — an App Attest assertion
+    /// increments a counter inside the Secure Enclave, a server doing replay
+    /// detection refuses any counter it has already accepted, and the retry
+    /// would therefore be rejected as an attack by the same server that asked
+    /// for the token to be refreshed.
+    ///
+    /// The `Authorization` header is the opposite case and is deliberately
+    /// copied: it is what the retry exists to change. So is
+    /// `Idempotency-Key` — see the note on this type — which has to survive
+    /// unchanged for the server to recognise the two deliveries as one
+    /// request.
+    private func send(attesting request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var outgoing = request
+        if let attestation = try await attestor.attestation(for: request) {
+            attestation.apply(to: &outgoing)
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: outgoing)
+        } catch let urlError as URLError {
+            throw APIError.networkUnavailable(urlError)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        return (data, http)
     }
 
     // MARK: - Request building
@@ -150,13 +178,12 @@ package struct URLSessionAPIClient: APIClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try encoder.encode(TokenRefreshRequest(refreshToken: refreshToken))
 
-            let (data, response): (Data, URLResponse)
-            do {
-                (data, response) = try await session.data(for: request)
-            } catch let urlError as URLError {
-                throw APIError.networkUnavailable(urlError)
-            }
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            // Attested like everything else, and this is the request that most
+            // needs it: it is the one that turns a stolen refresh token into a
+            // fresh access token, and the one an attacker replaying captured
+            // traffic would reach for first.
+            let (data, http) = try await send(attesting: request)
+            guard http.statusCode == 200 else {
                 throw APIError.tokenRefreshFailed
             }
             return try decoder.decode(TokenPair.self, from: data)

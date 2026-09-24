@@ -138,7 +138,8 @@ struct IdempotencyTransportTests {
         URLSessionAPIClient(
             baseURL: stubBaseURL,
             tokenStore: tokenStore,
-            session: StubURLProtocol.session
+            session: StubURLProtocol.session,
+            attestor: UnattestedRequests()
         )
     }
 
