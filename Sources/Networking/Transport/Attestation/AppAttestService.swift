@@ -147,7 +147,11 @@ package final class StubAppAttestService: AppAttestGenerating {
     /// Makes every future call for `keyID` fail the way DeviceCheck does once a
     /// key has been invalidated.
     package func invalidate(_ keyID: String) {
-        state.withLock { $0.invalidKeys.insert(keyID) }
+        // `_ =` because `Set.insert` returns `(inserted:memberAfterInsert:)`,
+        // which makes this a single-expression closure returning a tuple —
+        // and a `withLock` whose result is discarded is a warning, which this
+        // package treats as a build failure.
+        state.withLock { _ = $0.invalidKeys.insert(keyID) }
     }
 
     /// Makes the next `generateKey()` throw.
