@@ -304,7 +304,12 @@ struct AppContainerTests {
                 subsystem: AppContainer.logSubsystem,
                 refresh: {}
             ),
-            makeCameraService: { CameraService() }
+            makeCameraService: { CameraService() },
+            // The double, like every other row here. A helper that ran the real
+            // heuristics would be reading the machine the suite happens to be on,
+            // and `SystemIntegrityProbe` is the one collaborator whose answer
+            // changes with the host rather than with the graph.
+            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe())
         )
     }
 

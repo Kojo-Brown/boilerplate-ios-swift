@@ -225,6 +225,39 @@ jobs:
       - name: Audit that every request goes past the attestor
         run: python3 Tools/assert-request-attestation.py
 
+      # Phase 11 item 4. Jailbreak and tamper heuristics have one failure mode
+      # that matters and it is not "a check is wrong" — it is "a check is no
+      # longer connected to anything". Every other gate in this repo is blind to
+      # it: the code compiles, the tests pass, the app launches, and the suite
+      # has quietly become decoration.
+      #
+      # Five shapes of that, each verified by reintroducing it. A case of
+      # `IntegritySignal` that the evaluator no longer raises, which is a
+      # heuristic present in the documentation, the log format and the server's
+      # triage table and absent from the app. A `Bundle.main` read inside the
+      # evaluator, which is the single most natural edit anybody will make to
+      # that file and the one that makes the whole evaluation untestable, since
+      # the device state worth testing against is one CI cannot have. A third
+      # case of `IntegrityResponse` that refuses to run, reversing the decision
+      # the type exists to record — the check runs inside the process it is
+      # judging, so that mitigation is both defeated by the attacker and paid for
+      # by everybody else. A probe that creates a file outside the container to
+      # test whether it can, leaving evidence of itself on the device and failing
+      # to clean up on exactly the compromised device the check is for. And a
+      # second copy of the artefact list, which is the copy that stops knowing
+      # about the current generation of jailbreak.
+      #
+      # It also fails if `docs/threat-model.md` stops documenting a signal or
+      # loses its limitations section, because the item asked for a *documented*
+      # threat model and a page listing only what the checks catch is the
+      # marketing version.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit the device-integrity heuristics
+        run: python3 Tools/assert-integrity-heuristics.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

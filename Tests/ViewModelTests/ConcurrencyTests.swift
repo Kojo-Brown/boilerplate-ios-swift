@@ -131,20 +131,56 @@ struct HomeViewModelConcurrencyTests {
         #expect(viewModel.items.count == countAfterStop)
     }
 
+    /// The next member of the family the suite's opening comment describes, and
+    /// it failed the same way on the run that added the device-integrity
+    /// heuristics: `HomeViewModel` appends on the main actor, so the two fixed
+    /// sleeps here were measuring how busy that actor was rather than whether the
+    /// stream had stopped.
+    ///
+    /// The defect was the 30 ms settle. An append that was already queued when
+    /// `onDisappear()` ran has to land before the snapshot is taken, and under
+    /// load it lands *after* — which makes `countAfterDisappear` stale and fails a
+    /// stream that did stop. Waiting a little longer only moves the threshold; the
+    /// repair is to stop guessing and wait until the count actually holds still.
+    ///
+    /// **This is strictly stronger than what it replaces, not weaker.** The
+    /// assertion is unchanged — once quiet, it stays quiet over a further 100 ms —
+    /// and a stream that was never cancelled still fails it: the loop below keeps
+    /// re-reading a growing count until its budget runs out, so `settled` ends up
+    /// a value the live stream then exceeds. An early exit cannot manufacture a
+    /// pass either, for the same reason: two equal reads from a stream that is
+    /// still ticking leave a count that grows inside the window below.
     @Test("onDisappear cancels live updates")
     func onDisappearCancelsLiveUpdates() async throws {
         let viewModel = HomeViewModel()
         await viewModel.onAppear()
+        let baseline = viewModel.items.count
 
         viewModel.startLiveUpdates(interval: .milliseconds(20))
-        try await Task.sleep(for: .milliseconds(60))
+
+        // Poll for the first append rather than sleeping 60 ms for it, for the
+        // reason `startLiveUpdatesAppendsItems` already polls: a fixed sleep here
+        // asserts a deadline that belongs to the runner.
+        for _ in 0..<200 {
+            if viewModel.items.count > baseline { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(viewModel.items.count > baseline, "the stream never ticked before onDisappear")
+
         viewModel.onDisappear()
 
-        try await Task.sleep(for: .milliseconds(30))
-        let countAfterDisappear = viewModel.items.count
-        try await Task.sleep(for: .milliseconds(100))
+        // Wait until two consecutive reads agree — the stream has gone quiet —
+        // instead of assuming any particular number of milliseconds is enough.
+        var settled = viewModel.items.count
+        for _ in 0..<50 {
+            try await Task.sleep(for: .milliseconds(20))
+            let current = viewModel.items.count
+            if current == settled { break }
+            settled = current
+        }
 
-        #expect(viewModel.items.count == countAfterDisappear)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(viewModel.items.count == settled)
     }
 
     @Test("startLiveUpdates cancels previous task before starting new one")
