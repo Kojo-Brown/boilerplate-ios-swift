@@ -67,9 +67,8 @@ struct IntegrityPolicyTests {
     /// `blocksLaunch`, the argument in `IntegrityResponse` has been lost.
     @Test("The only mitigation available is withholding the unlock record")
     func theOnlyMitigationIsWithholding() {
-        let mirror = Mirror(reflecting: IntegrityMitigations.unchanged)
-        #expect(mirror.children.count == 1)
-        #expect(mirror.children.first?.label == "withholdsBiometricUnlockRecord")
+        let labels = Mirror(reflecting: IntegrityMitigations.unchanged).children.compactMap(\.label)
+        #expect(labels == ["withholdsBiometricUnlockRecord"])
     }
 }
 
