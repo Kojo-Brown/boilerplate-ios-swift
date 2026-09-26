@@ -164,6 +164,23 @@ struct AppContainer: Sendable {
     /// change here.
     let makeCameraService: @Sendable () -> CameraService
 
+    /// What the jailbreak and tamper heuristics concluded at launch.
+    ///
+    /// A value, not a collaborator, and it is on the container for the same
+    /// reason every other decision here is: it is evaluated once, at the one
+    /// point in the app's life where "once" is well defined, rather than by
+    /// whichever screen happens to want it first. A second evaluation deeper in
+    /// would also be a second answer — the heuristics read a live filesystem —
+    /// and two screens disagreeing about the device they are on is worse than
+    /// either answer.
+    ///
+    /// Nothing reads it yet. `live()` applies the one mitigation the policy
+    /// allows before this is built, so the report is here to be *reported* — by
+    /// a settings screen, or by the attested channel to a server that can do
+    /// what a client cannot. `docs/threat-model.md` says what that is, and why
+    /// it is the half that matters.
+    let integrity: IntegrityReport
+
     /// What the app marks its own intervals with, for Instruments to draw.
     ///
     /// It carries a default — the only collaborator here that does — because
@@ -270,6 +287,104 @@ extension AppContainer {
     /// either way. `docs/app-attest.md` lists what has to be true on the server
     /// before it is turned up.
     static let defaultAttestationEnforcement = AttestationEnforcement.reportOnly
+
+    /// The bundle identifier this build is built to run under.
+    ///
+    /// It is the same string as `logSubsystem` today and is deliberately a
+    /// separate declaration, because the two answer different questions: one is
+    /// the filter somebody types into Console, the other is the value a
+    /// repackaged copy of this app would fail to match. An adopter renaming
+    /// their log subsystem should not silently change what their anti-tamper
+    /// baseline compares against.
+    ///
+    /// A literal, and never `Bundle.main.bundleIdentifier`, which would be a
+    /// comparison of a value against itself — see `IntegrityBaseline`.
+    static let expectedBundleIdentifier = "com.example.boilerplate-ios-swift"
+
+    // How this build was distributed, as declared by the compiler.
+    //
+    // `DistributionChannel` argues at length why this is a compile-time fact and
+    // not a runtime one; the short version is that every runtime test for "am I a
+    // store build?" is a test whoever repackaged the bundle controls the answer
+    // to.
+    //
+    // A release build reports `.appStore` even when it came from TestFlight,
+    // which changes no rule — the two evaluate identically, and
+    // `DistributionChannel.appStore` says why. An adopter with a separate
+    // TestFlight configuration has a `#if` to add here, and gains a report that
+    // distinguishes one tester from the shipped app.
+    #if DEBUG
+    static let buildChannel = DistributionChannel.development
+    #else
+    static let buildChannel = DistributionChannel.appStore
+    #endif
+
+    /// What the integrity heuristics are read against. See `IntegrityBaseline`.
+    static let defaultIntegrityBaseline = IntegrityBaseline(
+        expectedBundleIdentifier: AppContainer.expectedBundleIdentifier,
+        channel: AppContainer.buildChannel
+    )
+
+    /// What the app does about its own integrity report.
+    ///
+    /// `restrictOnStrongSignals`, which is a real position rather than the
+    /// `.reportOnly` that `defaultPinningPolicy` and
+    /// `defaultAttestationEnforcement` both ship under — and the difference is
+    /// deliberate. Those two are report-only because they need a server that
+    /// does not exist yet, so enforcing them here would produce an app that
+    /// cannot send a request. This one needs nothing but the device: the
+    /// mitigation is local, and its worst case is a person typing a password
+    /// instead of using Face ID. `IntegrityPolicy.restrictOnStrongSignals`
+    /// carries the rest of the argument, including why there is no response that
+    /// refuses to run.
+    static let defaultIntegrityPolicy = IntegrityPolicy.restrictOnStrongSignals
+
+    /// Runs the heuristics once and reads them against this build's baseline.
+    ///
+    /// A static with defaults rather than two more arguments on `live()`: the
+    /// probe and the baseline are only ever varied together, and only by a test.
+    /// The report it returns is the value the container stores, so a test that
+    /// wants a particular device state hands `live(integrity:)` a report it built
+    /// here from a `StubIntegrityProbe` instead of reaching for a device nobody
+    /// has.
+    static func assessedIntegrity(
+        probe: any IntegrityProbing = SystemIntegrityProbe(),
+        baseline: IntegrityBaseline = AppContainer.defaultIntegrityBaseline
+    ) -> IntegrityReport {
+        DeviceIntegrityEvaluator(baseline: baseline).evaluate(probe.observe())
+    }
+
+    /// The biometric unlock policy `integrity` allows, reported on the way past.
+    ///
+    /// The whole of what this feature does to the running app is here: on at
+    /// least one strong signal the gated duplicate of the refresh token is not
+    /// written at all. `IntegrityMitigations.withholdsBiometricUnlockRecord`
+    /// argues why that is the mitigation worth having and why it is the only one
+    /// — nobody is locked out, the password path is untouched, and the next
+    /// launch reconsiders.
+    ///
+    /// The report goes to the log whatever it says, including when it says
+    /// nothing, because "the heuristics ran and found nothing" and "the
+    /// heuristics never ran" are the two states a security feature spends its
+    /// life between, and a silent pass cannot tell them apart.
+    ///
+    /// A function rather than six lines in `live()`, for two reasons. `live()`
+    /// reads as a list of what runs, and a branch in the middle of it reads as an
+    /// exception to that list. And a policy resolved *from a value* is the one
+    /// decision in that graph that is not simply naming a type, which is worth
+    /// giving a name of its own.
+    private static func unlockPolicy(
+        for integrity: IntegrityReport,
+        under policy: IntegrityPolicy,
+        reportingTo reporter: any IntegrityReporting
+    ) -> BiometricUnlockPolicy {
+        reporter.report(.evaluated(integrity))
+        guard policy.mitigations(for: integrity).withholdsBiometricUnlockRecord else {
+            return .deviceOwner
+        }
+        reporter.report(.withheldBiometricUnlockRecord(posture: integrity.posture))
+        return .disabled
+    }
 }
 
 // MARK: - Why a cached answer is a failed background refresh
@@ -344,15 +459,25 @@ extension AppContainer {
         userStore: any UserPersistenceService,
         syncPolicy: SyncPolicy = .offlineFirst,
         pinningPolicy: CertificatePinningPolicy = AppContainer.defaultPinningPolicy,
-        attestation: AttestationEnforcement = AppContainer.defaultAttestationEnforcement
+        attestation: AttestationEnforcement = AppContainer.defaultAttestationEnforcement,
+        integrityPolicy: IntegrityPolicy = AppContainer.defaultIntegrityPolicy,
+        integrity: IntegrityReport = AppContainer.assessedIntegrity()
     ) -> AppContainer {
         let keychain = KeychainWrapper()
+        // Phase 11 item 4. The heuristics have already run — `integrity` is a
+        // default argument, so the pass happened before this body did — and
+        // `unlockPolicy` is the one place in the app that acts on the result.
+        let unlock = AppContainer.unlockPolicy(
+            for: integrity,
+            under: integrityPolicy,
+            reportingTo: OSLogIntegrityReporter(subsystem: AppContainer.logSubsystem)
+        )
         // The one place the app decides how hard its stored credentials are to
         // reach. The session tokens are ungated because a background refresh
         // has nobody to ask; the unlock record is the copy that a person has
         // to prove themselves to read. `BiometricUnlockPolicy` and
         // `docs/security.md` carry the argument.
-        let tokenStore = TokenStore(keychain: keychain, biometricUnlock: .deviceOwner)
+        let tokenStore = TokenStore(keychain: keychain, biometricUnlock: unlock)
         // Phase 11 item 2. One session, pinned, shared by every request the
         // app makes — including the token refresh, which `URLSessionAPIClient`
         // sends through this same session and which is the request an attacker
@@ -462,7 +587,8 @@ extension AppContainer {
             textRecognizer: LiveTextRecognitionService(),
             barcodeScanner: LiveBarcodeScannerService(),
             backgroundRefresh: backgroundRefresh,
-            makeCameraService: { CameraService() }
+            makeCameraService: { CameraService() },
+            integrity: integrity
         )
     }
 }
@@ -533,7 +659,12 @@ extension AppContainer {
             textRecognizer: MockTextRecognitionService(),
             barcodeScanner: MockBarcodeScannerService(),
             backgroundRefresh: backgroundRefresh,
-            makeCameraService: { CameraService() }
+            makeCameraService: { CameraService() },
+            // The double, like every other row: a probe that observes nothing.
+            // A preview that ran the real heuristics would read the developer's
+            // own Mac — where `/etc/apt` is quite possibly present — and a
+            // canvas is not the place to discover that.
+            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe())
         )
     }
 }

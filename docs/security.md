@@ -83,7 +83,12 @@ its own account name, written under `biometryCurrentSetOrPasscode`:
 
 ```swift
 // AppContainer.live()
-let tokenStore = TokenStore(keychain: keychain, biometricUnlock: .deviceOwner)
+let unlock = AppContainer.unlockPolicy(
+    for: integrity,
+    under: integrityPolicy,
+    reportingTo: OSLogIntegrityReporter(subsystem: AppContainer.logSubsystem)
+)
+let tokenStore = TokenStore(keychain: keychain, biometricUnlock: unlock)
 ```
 
 `BiometricUnlockPolicy` is the composition root's decision — `live()` turns it
@@ -113,6 +118,26 @@ the store has other callers who should not queue behind somebody looking at
 their phone. It is a hop rather than a fix: the thread it blocks is still one of
 the cooperative pool's. Moving that read to a thread of its own is a change to
 make when something other than one screen is calling it.
+
+### The one thing that switches it off
+
+As of Phase 11 item 4 the policy is no longer unconditionally `.deviceOwner`.
+`AppContainer.unlockPolicy(for:under:reportingTo:)` resolves it from the launch
+integrity report, and on a device showing at least one strong jailbreak or tamper
+signal the record is not written at all.
+
+That is the whole of what those heuristics do to the running app, and it is
+deliberately the only mitigation they are allowed. The reasoning is short: this
+record is a second copy of a live credential kept only because an authentication
+gate stands in front of it, and on a device with a hooking framework resident an
+`LAContext` evaluation is among the first things such a framework is used to lie
+about — so the gate fails first and what is left is an extra credential with
+nothing guarding it. Not writing it is strictly a reduction in what can be
+stolen, and its false positive costs one password entry rather than locking
+anybody out.
+
+`docs/threat-model.md` is the argument in full, including why there is no
+response that refuses to run.
 
 ## Two details in `KeychainWrapper`
 
