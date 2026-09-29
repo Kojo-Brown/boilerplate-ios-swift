@@ -1,0 +1,207 @@
+name: TestFlight Deploy
+
+# Phase 11 item 5. `workflow-templates/testflight-deploy.yml` promoted into
+# `.github/`, with the credential handling rebuilt. The template is not preserved
+# verbatim, for three reasons.
+#
+# **It leaked the certificates-repository token into every request the job made.**
+# Its "Set up git for Match" step ran
+#
+#     git config --global url."https://x-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/".insteadOf "https://github.com/"
+#
+# which writes the token in cleartext into `~/.gitconfig` and then rewrites *all*
+# github.com URLs for the rest of the job — `swift package resolve`, any tag push,
+# any script that clones anything. It also interpolates the secret into a `run:`
+# block, where it reaches the shell as literal text: `set -x`, a trace, or a
+# non-zero exit that echoes the command puts it in the log. Match reads
+# `MATCH_GIT_BASIC_AUTHORIZATION` itself and uses it for its own clone only, so
+# that is what this passes, through `env:` like every other credential.
+#
+# **It could fail twenty minutes in for a missing secret.** The `preflight` job
+# below costs about ten seconds on a Linux runner and names every missing or
+# malformed credential at once.
+#
+# **It ran on every push to `main`.** This repository has no Apple team behind it,
+# so that trigger guarantees a red default branch for as long as the secret store
+# is empty — and on a repository that *does* have one, it publishes a TestFlight
+# build for every merged commit whether or not anybody meant to ship. Tags and
+# manual dispatch are the two triggers where somebody has decided to release.
+#
+# The template's `test` job is deliberately dropped rather than carried over. It
+# ran `bundle exec fastlane test` with `SCHEME: boilerplate-ios-swift`, a scheme
+# that does not exist — this is an SPM package and xcodebuild synthesises the
+# names — so it could never have passed. `ci.yml` already solves scheme discovery,
+# simulator selection and the test-timeout handling, and it gates every commit a
+# tag can point at. A second, simpler copy of that logic here would be a worse
+# copy.
+#
+# **Nothing in the `beta` job has ever executed, and it cannot execute as the
+# repository stands.** There is no app target: `Package.swift` declares a library,
+# there is no `.xcodeproj` or `.xcworkspace`, and `build_app` has nothing to
+# archive. What this file is, today, is the credential wiring — which is the part
+# of the item that is real, and which `Tools/assert-signing-credentials.py` checks
+# on every pull request. See `docs/code-signing.md` for what an app target would
+# have to add.
+
+on:
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: "Release notes for TestFlight"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Preflight — signing credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The same environment the deploy job draws from, so this checks the store
+    # that will actually be read rather than a repository-level namesake.
+    environment: testflight
+
+    steps:
+      # Exactly the names in `REQUIRED_CI_CREDENTIALS` in `fastlane/Fastfile`,
+      # and nothing else. `Tools/assert-signing-credentials.py` fails if the two
+      # lists drift apart in either direction — a credential the lane needs that
+      # nothing checks for, or a check for one the lane no longer reads.
+      - name: Assert every signing credential is present and well formed
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+          ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          required=(
+            ASC_API_KEY_ID
+            ASC_API_KEY_ISSUER_ID
+            ASC_API_KEY_CONTENT
+            MATCH_GIT_URL
+            MATCH_GIT_BASIC_AUTHORIZATION
+            MATCH_PASSWORD
+          )
+
+          # An unset GitHub secret interpolates to the empty string rather than
+          # disappearing, so presence has to be tested on the value.
+          missing=()
+          for name in "${required[@]}"; do
+            value="${!name-}"
+            if [ -z "${value//[[:space:]]/}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            for name in "${missing[@]}"; do
+              echo "::error::$name is not set in the 'testflight' environment's secrets."
+            done
+            echo "See docs/code-signing.md for how each one is produced."
+            exit 1
+          fi
+
+          # Nothing below prints a value, only a verdict about one.
+
+          # The single most common way this pipeline is misconfigured: pasting
+          # the `.p8` in as raw PEM. It survives a GitHub secret, reaches
+          # fastlane as eight lines of text, and fails at the first App Store
+          # Connect call with an error about the key rather than about its
+          # encoding. The Fastfile passes `is_key_content_base64: true`, so the
+          # contract is checkable here in a second.
+          if ! printf '%s' "$ASC_API_KEY_CONTENT" | base64 -d 2>/dev/null \
+               | grep -q -- "-----BEGIN PRIVATE KEY-----"; then
+            echo "::error::ASC_API_KEY_CONTENT must be base64 of the AuthKey_*.p8 file."
+            echo "Produce it with: base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\\n'"
+            exit 1
+          fi
+
+          # Match expects base64 of "user:token". A raw token here fails inside
+          # a git clone, where the diagnostic is an authentication error against
+          # a URL that looks correct.
+          if ! printf '%s' "$MATCH_GIT_BASIC_AUTHORIZATION" | base64 -d 2>/dev/null \
+               | grep -q ":"; then
+            echo "::error::MATCH_GIT_BASIC_AUTHORIZATION must be base64 of 'user:token'."
+            echo "Produce it with: printf '%s' 'user:ghp_…' | base64 | tr -d '\\n'"
+            exit 1
+          fi
+
+          echo "All ${#required[@]} signing credentials are present and well formed."
+
+  beta:
+    name: Build & Upload to TestFlight
+    needs: preflight
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: testflight
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      # Every credential reaches fastlane through `env:` and none through the
+      # shell. `fastlane match` picks `MATCH_GIT_BASIC_AUTHORIZATION` and
+      # `MATCH_PASSWORD` out of the environment itself — they are not named in
+      # `fastlane/Matchfile`, so no lane can echo them and `fastlane env` cannot
+      # print them.
+      #
+      # `setup_ci` in the Fastfile's `before_all` puts the signing identity in a
+      # throwaway keychain that dies with the runner, rather than in the login
+      # keychain.
+      - name: Run Fastlane beta lane
+        run: bundle exec fastlane beta changelog:"$CHANGELOG"
+        env:
+          CHANGELOG: ${{ github.event.inputs.changelog }}
+
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+          ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
+          SLACK_URL: ${{ secrets.SLACK_URL }}
+
+          APP_BUNDLE_ID: ${{ vars.APP_BUNDLE_ID }}
+          SCHEME: ${{ vars.SCHEME }}
+
+      # The IPA only. `fastlane/report.xml` and the build directory are not
+      # uploaded: match leaves decrypted profiles and the keychain password in
+      # the fastlane run's working state, and an artifact is readable by anyone
+      # who can read the run.
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ipa-${{ github.run_number }}
+          path: build/*.ipa
+          if-no-files-found: error
+          retention-days: 30
