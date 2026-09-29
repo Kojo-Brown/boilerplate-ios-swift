@@ -6,17 +6,106 @@ XCODEPROJ     = ENV["XCODEPROJ"]      || "boilerplate-ios-swift.xcodeproj"
 BUNDLE_ID     = ENV["APP_BUNDLE_ID"]  || "com.example.boilerplate-ios-swift"
 OUTPUT_DIR    = "build"
 
+# ─── Credentials ─────────────────────────────────────────────────────────────
+#
+# Phase 11 item 5. Every credential the signing lanes need, and the only list of
+# them. Nothing here has a default, a fallback or a prompt: a name missing from
+# the environment is a failure on CI, not a quieter authentication path.
+#
+# That last part is the whole point of the item. Fastlane has three ways to
+# reach App Store Connect and only one of them belongs in CI:
+#
+#   * An **App Store Connect API key** (`ASC_API_KEY_*`) — a `.p8` issued to the
+#     team, scoped by role, revocable from the portal without touching anybody's
+#     Apple ID, and non-interactive by construction.
+#   * An **Apple ID and password**, which on any account with two-factor
+#     authentication — i.e. every account since 2019 — means a six-digit code
+#     somebody types, so it only works unattended if a long-lived
+#     `FASTLANE_SESSION` cookie is pasted into the secret store. That cookie is a
+#     full-privilege bearer token for a *person's* account, it expires without
+#     warning, and it is exactly what "credentials from the CI secret store only"
+#     is meant to rule out.
+#   * A **session cookie in the runner's home directory**, which is the same
+#     thing with no record of where it came from.
+#
+# Fastlane picks the first of those it can find, so the danger is not that the
+# key is missing — it is that a missing key silently promotes one of the other
+# two. `require_ci_credentials!` is what turns that into a named failure.
+#
+# `MATCH_GIT_BASIC_AUTHORIZATION` is base64 of `user:token` for the certificates
+# repository. Match reads it itself and uses it for its own clone only, which is
+# the reason it is here instead of a `git config --global url.…insteadOf` rewrite
+# in the workflow: that rewrite writes the token in cleartext into `~/.gitconfig`
+# and attaches it to *every* github.com request the job makes afterwards —
+# `swift package resolve`, `push_git_tags`, any script that clones anything.
+#
+# Keep this list in step with `docs/code-signing.md` and with the preflight job
+# in `.github/workflows/testflight-deploy.yml`; `Tools/assert-signing-credentials.py`
+# fails if the three ever disagree.
+REQUIRED_CI_CREDENTIALS = %w[
+  ASC_API_KEY_ID
+  ASC_API_KEY_ISSUER_ID
+  ASC_API_KEY_CONTENT
+  MATCH_GIT_URL
+  MATCH_GIT_BASIC_AUTHORIZATION
+  MATCH_PASSWORD
+].freeze
+
+# The single authentication path. Every lane that talks to App Store Connect or
+# to match goes through here, and it can hand back nothing but an API key.
+#
+# `is_key_content_base64` is set because `ASC_API_KEY_CONTENT` is the `.p8`
+# base64-encoded rather than pasted raw. A PEM is multi-line, and a multi-line
+# secret survives a GitHub `env:` block but not a `.env` file, a Jenkins
+# credential binding or anybody's copy-paste; base64 is one line everywhere.
+# `docs/code-signing.md` gives the `base64 -i AuthKey_XXXXXXXXXX.p8` incantation.
+#
+# Memoised per invocation: `app_store_connect_api_key` writes the key material to
+# a temporary file, so calling it once per lane step would leave several copies
+# of a private key on the runner's disk instead of one.
+def app_store_connect_api_key_from_env
+  require_signing_credentials!
+
+  @asc_api_key ||= app_store_connect_api_key(
+    key_id:                ENV.fetch("ASC_API_KEY_ID"),
+    issuer_id:             ENV.fetch("ASC_API_KEY_ISSUER_ID"),
+    key_content:           ENV.fetch("ASC_API_KEY_CONTENT"),
+    is_key_content_base64: true,
+    in_house:              false
+  )
+end
+
+# Fail on the first step of a signing lane rather than twenty minutes into a
+# build, and name *every* missing credential at once — a preflight that reports
+# them one per run costs a full macOS job per typo.
+#
+# An empty string counts as missing. That is not pedantry: an unset GitHub secret
+# interpolates to the empty string rather than disappearing, so `ENV.key?` is
+# true for every name the workflow lists whether or not the store holds it.
+def require_signing_credentials!
+  missing = REQUIRED_CI_CREDENTIALS.select { |name| ENV[name].to_s.strip.empty? }
+  return if missing.empty?
+
+  UI.user_error!(
+    "Missing signing credentials: #{missing.join(', ')}. " \
+    "They come from the CI secret store and have no local fallback — " \
+    "see docs/code-signing.md."
+  )
+end
+
 platform :ios do
+  # `setup_ci` is what makes match safe to run on a hosted runner: it creates a
+  # throwaway keychain, unlocks it for the length of the job and points
+  # `MATCH_KEYCHAIN_NAME`/`MATCH_KEYCHAIN_PASSWORD` at it. Without it match
+  # imports the private key into the *login* keychain, which on a GitHub-hosted
+  # runner needs an interactive unlock it will never get, and on a self-hosted
+  # one leaves a usable signing identity behind after the job ends.
+  #
+  # It is deliberately here rather than inside `sync_signing`: `before_all` runs
+  # once per invocation, so the keychain exists before anything can reach for a
+  # certificate, and a future lane that calls `match` cannot forget it.
   before_all do
-    # Ensure API key is available when running in CI
-    if ENV["ASC_API_KEY_ID"]
-      app_store_connect_api_key(
-        key_id:        ENV["ASC_API_KEY_ID"],
-        issuer_id:     ENV["ASC_API_KEY_ISSUER_ID"],
-        key_content:   ENV["ASC_API_KEY_CONTENT"],
-        in_house:      false
-      )
-    end
+    setup_ci if is_ci
   end
 
   # ─── Test ──────────────────────────────────────────────────────────────────
@@ -41,8 +130,16 @@ platform :ios do
   lane :sync_signing do |options|
     match(
       type:           options[:type] || "appstore",
+      # Not `options[:readonly]`. A CI job holding both the match passphrase and
+      # an API key with write access can *create* a distribution certificate —
+      # and the team's limit is two, so the run that does it revokes a
+      # certificate every other machine is still signing with. Read-only on CI
+      # is the difference between a job that consumes signing material and one
+      # that can destroy it, and it is not a lane option because the only reason
+      # to pass `false` here is to do that by accident.
       readonly:       is_ci,
-      app_identifier: BUNDLE_ID
+      app_identifier: BUNDLE_ID,
+      api_key:        app_store_connect_api_key_from_env
     )
   end
 
@@ -52,8 +149,13 @@ platform :ios do
   lane :beta do |options|
     ensure_git_status_clean unless options[:skip_clean_check]
 
+    api_key = app_store_connect_api_key_from_env
+
     increment_build_number(
-      build_number: latest_testflight_build_number + 1
+      build_number: latest_testflight_build_number(
+        api_key:        api_key,
+        app_identifier: BUNDLE_ID
+      ) + 1
     )
 
     sync_signing(type: "appstore")
@@ -74,6 +176,7 @@ platform :ios do
     )
 
     upload_to_testflight(
+      api_key:                api_key,
       ipa:                    "#{OUTPUT_DIR}/#{SCHEME}.ipa",
       skip_waiting_for_build_processing: true,
       changelog:              options[:changelog] || changelog_from_git_commits(
@@ -91,6 +194,8 @@ platform :ios do
   desc "Build and submit a release to the App Store"
   lane :release do |options|
     ensure_git_status_clean unless options[:skip_clean_check]
+
+    api_key = app_store_connect_api_key_from_env
 
     bump_type = options[:bump] || "patch"
     increment_version_number(bump_type: bump_type)
@@ -114,6 +219,7 @@ platform :ios do
     )
 
     upload_to_app_store(
+      api_key:              api_key,
       ipa:                  "#{OUTPUT_DIR}/#{SCHEME}.ipa",
       force:                true,
       reject_if_possible:   true,

@@ -1,6 +1,29 @@
+# Match reads its own credentials from the environment and holds none of its own.
+#
+#   MATCH_GIT_URL                  the certificates repository
+#   MATCH_GIT_BASIC_AUTHORIZATION  base64("user:token") for cloning it
+#   MATCH_PASSWORD                 the passphrase the repository is encrypted with
+#
+# The last two are never named in this file. Match reads them directly, which is
+# the point: a value that is never assigned to a variable here cannot be echoed
+# by a lane, printed by `fastlane env`, or given a fallback by somebody reaching
+# for a local default. See `docs/code-signing.md`.
+
 git_url(ENV["MATCH_GIT_URL"])
 storage_mode("git")
 type("appstore")
 app_identifier([ENV["APP_BUNDLE_ID"] || "com.example.boilerplate-ios-swift"])
-username(ENV["APPLE_ID"] || "your-apple-id@example.com")
-readonly(ENV["CI"] ? true : false)
+
+# Read-only wherever this runs unattended. A non-read-only match holding the
+# repository passphrase and an API key with write access will happily *create* a
+# distribution certificate when it cannot find one — and a team may hold two, so
+# the run that creates a third revokes one that every other machine is still
+# signing with. The Fastfile passes `readonly:` explicitly as well; this is the
+# floor for anyone invoking `fastlane match` directly.
+#
+# `FastlaneCore::Helper.ci?` rather than `ENV["CI"]`: a Matchfile is evaluated by
+# the configuration DSL, where the `is_ci` *action* does not exist, and the
+# obvious substitute — `ENV["CI"] ? true : false` — is true for `CI=false`,
+# because that is a non-nil string. `Helper.ci?` is what the `is_ci` action calls
+# and it recognises the other providers' variables too.
+readonly(FastlaneCore::Helper.ci?)

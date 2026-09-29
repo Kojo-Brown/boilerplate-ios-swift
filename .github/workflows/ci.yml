@@ -258,6 +258,45 @@ jobs:
       - name: Audit the device-integrity heuristics
         run: python3 Tools/assert-integrity-heuristics.py
 
+      # Phase 11 item 5. The deploy lanes are the only code in this repository
+      # that nothing executes — `.github/workflows/testflight-deploy.yml` runs on
+      # a tag or a dispatch, and there is no app target for it to archive — so a
+      # Fastfile that does not even parse would sit here indefinitely and fail on
+      # the one run somebody needed. `ruby -c` costs a second.
+      - name: Check the fastlane configuration parses
+        run: |
+          for file in fastlane/Fastfile fastlane/Matchfile fastlane/Appfile; do
+            printf '%s: ' "$file"
+            ruby -c "$file"
+          done
+
+      # Phase 11 item 5. Signing is the one pipeline here whose failure mode is
+      # not a red build. A misconfigured signing job goes *green* — it uploads a
+      # build, the tester gets the notification — while a distribution private
+      # key sits in a keychain that outlived the runner, a personal Apple ID
+      # session cookie does the authenticating, or a repository token has been
+      # written into `~/.gitconfig` and attached to every request the job makes
+      # afterwards. None of that is visible in a diff, in a test run, or in the
+      # deploy log, and no other gate in this repository looks at any of it.
+      #
+      # So this checks the structural facts instead: that the required-credential
+      # list agrees in all three places it is written down, that every
+      # credential-shaped input comes from `secrets.` rather than `vars.` or a
+      # literal, that no secret is interpolated into a `run:` block or written
+      # into git config, that `setup_ci` precedes every `match` and `match` is
+      # read-only on CI, that the App Store Connect API key is the only
+      # authentication path left, and that no signing material is tracked.
+      #
+      # Each rule was verified by reintroducing the defect it names; the script's
+      # docstring and `docs/code-signing.md` carry the reasoning, including the
+      # rotation procedure every one of these credentials eventually needs.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit how code signing reaches its credentials
+        run: python3 Tools/assert-signing-credentials.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

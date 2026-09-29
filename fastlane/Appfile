@@ -1,4 +1,13 @@
 app_identifier(ENV["APP_BUNDLE_ID"] || "com.example.boilerplate-ios-swift")
-apple_id(ENV["APPLE_ID"] || "your-apple-id@example.com")
 team_id(ENV["APPLE_TEAM_ID"] || "XXXXXXXXXX")
 itc_team_id(ENV["APP_STORE_CONNECT_TEAM_ID"] || "XXXXXXXXXX")
+
+# Deliberately no `apple_id`. Authentication is the App Store Connect API key and
+# only that (see `REQUIRED_CI_CREDENTIALS` in the Fastfile); an Apple ID here is
+# not inert, because the actions that accept one fall back to password or session
+# authentication when the key is missing. A placeholder address would make that
+# fallback the *default* path on any machine without the key set, which is the
+# arrangement this item exists to remove. Set `APPLE_ID` only if you are running
+# a lane that genuinely needs an account name, and expect a 2FA prompt when you
+# do — that prompt is the honest cost of not using the key.
+apple_id(ENV["APPLE_ID"]) if ENV["APPLE_ID"]
