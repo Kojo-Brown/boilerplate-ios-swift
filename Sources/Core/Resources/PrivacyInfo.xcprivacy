@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  `Core`'s privacy manifest.
+
+  Phase 11 item 6. `Core` is the one target in this package that touches a
+  required-reason API: `UserDefaults`, from `AppState.colorSchemePreference` and
+  from `UserDefaultsBackgroundRefreshLedger`. Both are app-private reads and
+  writes of values this app wrote itself, which is exactly what `CA92.1`
+  describes.
+
+  All four top-level keys are present and three of them are empty on purpose. An
+  absent key and an empty one read the same way to Apple's tooling and do not
+  read the same way to a person: absent is "nobody has looked at this yet", empty
+  is "somebody looked and the answer was none". `Tools/assert-privacy-manifest.py`
+  requires all four in every manifest here for that reason.
+
+  See `docs/privacy-manifest.md`.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

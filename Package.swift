@@ -115,6 +115,13 @@ let package = Package(
             name: "BoilerplateiOSSwift",
             dependencies: ["Core", "Networking", "Features"],
             path: "Sources/App",
+            // Phase 11 item 6. This target carried no resources until the
+            // privacy manifest arrived. It has no String Catalog — the
+            // composition root renders no text — so `Resources` here holds
+            // exactly one file. See `docs/privacy-manifest.md`.
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

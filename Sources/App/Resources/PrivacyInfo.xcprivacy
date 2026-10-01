@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  `BoilerplateiOSSwift`'s privacy manifest — the composition root.
+
+  Phase 11 item 6. It declares nothing, and it exists anyway.
+
+  This target wires the graph together: it names `UserDefaultsBackgroundRefreshLedger`
+  but never `UserDefaults`, it starts no request of its own, and it holds no
+  credential. A target with nothing to declare still ships the file, so that
+  the next thing added here fails `Tools/assert-privacy-manifest.py` against an
+  existing manifest rather than against a missing one — the audit cannot tell a
+  target nobody has assessed from a target with nothing to say unless every
+  target says something.
+
+  This is **not** the manifest the App Store reads for the app. That one belongs
+  at the root of the app bundle, it has to be the union of every manifest here,
+  and `Tools/app-template/PrivacyInfo.xcprivacy` is the copy to start from. See
+  `docs/privacy-manifest.md` for why the union, and not this file, is what an
+  upload is checked against.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

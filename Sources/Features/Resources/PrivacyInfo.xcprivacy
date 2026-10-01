@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  `Features`' privacy manifest.
+
+  Phase 11 item 6. The sign-in forms are here, and they are the only place in
+  the package where a person's own details are put on the wire:
+  `LiveAuthService.login` posts the email address and the password to
+  `/auth/login`, and `LiveSocialAuthExchangeService.exchange` posts the
+  provider's identity token plus, for Apple, the given and family names it
+  handed back on first authorisation.
+
+  So `EmailAddress` and `Name`, linked to the account, not used for tracking,
+  app functionality. There is no data type for a password in Apple's taxonomy
+  and none is invented here; the account it belongs to is what `EmailAddress`
+  records.
+
+  **The camera is not in this manifest and that is correct.** The barcode
+  scanner and the text recogniser read frames, hand them to Vision on device,
+  and transmit nothing; what they need is `NSCameraUsageDescription` in the
+  app's `Info.plist`, which is a different mechanism from this file and is
+  listed as a gap in `docs/privacy-manifest.md`. Google Sign-In ships its own
+  manifest inside its own bundle and is not restated here.
+
+  No required-reason API: nothing in this target reads `UserDefaults` — no
+  `@AppStorage`, no `@SceneStorage` — a file timestamp, the boot time, free
+  disk space or the active keyboards.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The app bundle's privacy manifest. Copy this file to the root of your app
+  target — beside `Info.plist`, with "Target Membership" ticked — and keep it in
+  step with the package.
+
+  Phase 11 item 6. This is a template rather than a shipped resource because
+  this repository has no app target: `Package.swift` declares a library, there
+  is no `.xcodeproj` or `.xcworkspace`, and the four manifests under `Sources/`
+  land in SwiftPM resource bundles rather than at the root of anything
+  installable.
+
+  **Why the app needs its own copy, and why it is the union.** The four target
+  manifests are what Xcode reads to build the privacy report, and they say which
+  module a declaration came from, which is worth having. They are not what an
+  upload is checked against. A SwiftPM target links statically by default, so
+  `Core`'s `UserDefaults` calls end up as symbols in the *app's* executable —
+  the resource bundle beside it carries the manifest, not the code — and the
+  required-reason check at upload reads the manifest at the root of the binary's
+  own bundle. An app that ships this package with no manifest of its own is the
+  case that produces an `ITMS-91053` notice naming the app binary, weeks after
+  the code was written, with nothing in the build or the test run having said a
+  word about it.
+
+  That reading is the cautious one and it is deliberately the one taken here: if
+  Apple's aggregation did cover statically linked bundles, the cost of this file
+  is a duplicated declaration, which costs nothing. `Tools/assert-privacy-manifest.py`
+  is what keeps it a true union — add a required-reason API to any target and the
+  audit fails until this file covers it too.
+
+  Two things this template cannot fill in for you, both of which are yours:
+
+    * `NSPrivacyTracking` is `false` and `NSPrivacyTrackingDomains` is empty
+      because nothing in this package tracks. Add an analytics or attribution
+      SDK and both change, and the domains list is enforced at runtime — a
+      domain you failed to declare is a connection iOS refuses once the user
+      has denied tracking.
+
+    * Any data type *your* code collects beyond what this package sends. The
+      rows below are the package's, nothing more.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- Features: /auth/login and /auth/social. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Features: the names Apple hands back. Networking: the profile PATCH. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Networking: the X-Attest-Key-Id header. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- Core: AppState's colour scheme, and the background-refresh ledger. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

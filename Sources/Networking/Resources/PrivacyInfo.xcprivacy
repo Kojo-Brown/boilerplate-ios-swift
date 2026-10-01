@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  `Networking`'s privacy manifest.
+
+  Phase 11 item 6. Two things leave the device from this target.
+
+  `UserRepository.updateProfile` `PATCH`es the display name, so `Name` is
+  collected: linked to the account, not used for tracking, app functionality.
+  The `GET` of `/users/me` is not collection — it reads data back rather than
+  transmitting it — and the account deletion carries no body at all.
+
+  `X-Attest-Key-Id` rides every request the attestor could sign, which is the
+  App Attest key identifier out of the Keychain. Declaring that as `DeviceID`
+  is a judgement call and the narrower reading is defensible: the key is
+  per-install, it is destroyed by a reinstall, and it cannot be correlated
+  across apps the way an IDFV can. It is declared anyway, because the cost of
+  over-declaring here is one more row in a privacy report and the cost of
+  under-declaring is a manifest that says the app sends no identifier while it
+  sends one on every request. See `docs/privacy-manifest.md`.
+
+  No required-reason API: nothing in this target reads `UserDefaults`, a file
+  timestamp, the boot time, free disk space or the active keyboards. The token
+  store is Keychain-only, which is not a required-reason category.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>
