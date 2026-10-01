@@ -297,6 +297,34 @@ jobs:
       - name: Audit how code signing reaches its credentials
         run: python3 Tools/assert-signing-credentials.py
 
+      # Phase 11 item 6. A privacy manifest is a document making claims about a
+      # binary, and the only thing that ever checks the two against each other
+      # is an App Store upload — once, late, on somebody else's machine,
+      # against a build somebody is trying to release. Everything before that
+      # is green, in both directions of drift: a `@AppStorage` added to a view
+      # with no declaration behind it comes back as an `ITMS-91053` notice
+      # weeks later, and a declaration left behind after its last call site was
+      # deleted is a false statement in the privacy report that nothing reports
+      # at all, because over-declaring is not an upload error.
+      #
+      # So the central rule is an equality rather than a floor: per target, the
+      # required-reason categories the source reaches equal the categories the
+      # manifest declares. It also keeps `Tools/app-template/PrivacyInfo.xcprivacy`
+      # an exact union of the four, which is the file an adopter copies into an
+      # app bundle — and the one an upload is actually checked against, since a
+      # SwiftPM target links statically and its calls end up as symbols in the
+      # app's own binary.
+      #
+      # Each rule was verified by reintroducing the defect it names; the
+      # script's docstring and `docs/privacy-manifest.md` carry the reasoning,
+      # including the `Info.plist` usage strings this does not cover.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages, no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit the privacy manifests against the APIs they declare
+        run: python3 Tools/assert-privacy-manifest.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15
