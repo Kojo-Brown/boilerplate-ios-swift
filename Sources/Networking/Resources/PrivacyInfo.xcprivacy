@@ -19,6 +19,31 @@
   under-declaring is a manifest that says the app sends no identifier while it
   sends one on every request. See `docs/privacy-manifest.md`.
 
+  Phase 11 item 7 adds the third and fourth rows. `APICrashReportUploader`
+  `POST`s a MetricKit-derived report to `/diagnostics/reports`, which is
+  `CrashData` for the crash diagnostics and `PerformanceData` for the hang, CPU,
+  disk-write and launch ones — two rows rather than one because they are two of
+  Apple's categories and a reader of the privacy report is entitled to know
+  which of them this app sends.
+
+  **Both are declared `Linked`, and that is the judgement call.** A report carries
+  no account identifier and the request is deliberately unauthenticated — a crash
+  before sign-in is the one most worth having. But the transport attaches
+  `X-Attest-Key-Id` to every request it can sign, including this one, so the
+  report arrives beside a per-install identifier that is already declared as
+  `DeviceID` two rows up. Claiming the diagnostics are unlinked while sending them
+  next to an identifier would be a false statement; the cost of the honest answer
+  is one column in a privacy report.
+
+  The purpose is `AppFunctionality` rather than `Analytics`: these reports exist
+  to fix defects in the app, not to measure what anybody does with it. Nothing
+  here aggregates them into behaviour, and `NSPrivacyTracking` stays false
+  because none of it is joined to data from anywhere else.
+
+  What is *not* sent is as much the point: `docs/crash-reporting.md` lists the
+  fields the projection drops — `MXFrame.address`, `virtualMemoryRegionInfo` and
+  `MXMetaData.regionFormat` — and why a manifest cannot state any of it.
+
   No required-reason API: nothing in this target reads `UserDefaults`, a file
   timestamp, the boot time, free disk space or the active keyboards. The token
   store is Keychain-only, which is not a required-reason category.
@@ -46,6 +71,30 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePerformanceData</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

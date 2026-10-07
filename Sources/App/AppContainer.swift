@@ -181,6 +181,21 @@ struct AppContainer: Sendable {
     /// it is the half that matters.
     let integrity: IntegrityReport
 
+    /// The crash and hang reporting pipeline.
+    ///
+    /// Phase 11 item 7. An actor, so it is `Sendable` and can live on this
+    /// struct; the `MXMetricManagerSubscriber` that feeds it is not here, for the
+    /// same reason `SessionObserver` is not — it has to be *retained* for the life
+    /// of the process, and a composition root is a description of the graph rather
+    /// than an owner of lifetimes. `makeCrashReportSubscriber()` builds it and
+    /// `BoilerplateApp` holds it.
+    ///
+    /// Held here as well as handed to the subscriber because the pipeline is the
+    /// half with a reason to be reachable later: a diagnostics screen asking how
+    /// many reports are waiting, or a scene becoming active asking for another
+    /// drain, both talk to this and neither should know MetricKit exists.
+    let crashReporting: CrashReportPipeline
+
     /// What the app marks its own intervals with, for Instruments to draw.
     ///
     /// It carries a default — the only collaborator here that does — because
@@ -567,6 +582,22 @@ extension AppContainer {
             }
         )
 
+        // Phase 11 item 7. MetricKit hands over the previous day's crashes and
+        // hangs exactly once, with no acknowledgement and no second delivery, so
+        // the spool is what the feature is: `CrashReportPipeline.accept` writes
+        // synchronously inside the system callback and the upload happens
+        // afterwards. `docs/crash-reporting.md` carries the argument.
+        //
+        // The uploader goes through `apiClient`, which is the same pinned,
+        // attesting transport as everything else — a reporting endpoint with a
+        // session of its own would be the one request in the app an attacker in
+        // the middle could answer.
+        let crashReporting = CrashReportPipeline(
+            spool: FileCrashReportSpool(directory: FileCrashReportSpool.defaultDirectory()),
+            uploader: APICrashReportUploader(client: apiClient),
+            reporter: OSLogCrashReporter(subsystem: AppContainer.logSubsystem)
+        )
+
         return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
@@ -588,7 +619,8 @@ extension AppContainer {
             barcodeScanner: LiveBarcodeScannerService(),
             backgroundRefresh: backgroundRefresh,
             makeCameraService: { CameraService() },
-            integrity: integrity
+            integrity: integrity,
+            crashReporting: crashReporting
         )
     }
 }
@@ -642,6 +674,15 @@ extension AppContainer {
             refresh: { _ = try await syncStrategy.loadCurrentUser() }
         )
 
+        // A spool in memory and an uploader that accepts everything. A preview
+        // that used the file-backed spool would write crash reports into the
+        // developer's own Application Support directory from a canvas refresh.
+        let crashReporting = CrashReportPipeline(
+            spool: InMemoryCrashReportSpool(),
+            uploader: RecordingCrashReportUploader(),
+            reporter: RecordingCrashReporter()
+        )
+
         return AppContainer(
             apiClient: MockAPIClient(),
             tokenStore: InMemoryTokenStore(),
@@ -664,7 +705,8 @@ extension AppContainer {
             // A preview that ran the real heuristics would read the developer's
             // own Mac — where `/etc/apt` is quite possibly present — and a
             // canvas is not the place to discover that.
-            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe())
+            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe()),
+            crashReporting: crashReporting
         )
     }
 }
@@ -715,6 +757,18 @@ extension AppContainer {
             tokenStore: tokenStore,
             subscriber: eventSubscriber
         )
+    }
+
+    /// The app's one MetricKit subscriber.
+    ///
+    /// A factory rather than a stored property, because what this object needs is
+    /// to be *retained*: `MXMetricManager.add(_:)` does not hold its subscriber,
+    /// so one created and dropped in the same expression registers, deallocates,
+    /// and then looks exactly like a device that never crashed. `BoilerplateApp`
+    /// holds it for the life of the process, which is the same arrangement, and
+    /// the same reason, as `makeSessionObserver(appState:)` above.
+    func makeCrashReportSubscriber() -> MetricKitDiagnosticSubscriber {
+        MetricKitDiagnosticSubscriber(pipeline: crashReporting)
     }
 
     /// `HomeViewModel` still has no *data* collaborator — it fabricates its

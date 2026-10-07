@@ -309,7 +309,15 @@ struct AppContainerTests {
             // heuristics would be reading the machine the suite happens to be on,
             // and `SystemIntegrityProbe` is the one collaborator whose answer
             // changes with the host rather than with the graph.
-            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe())
+            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe()),
+            // In memory, like the rest of this helper. A file-backed spool would
+            // write crash reports into the test runner's container and leave them
+            // there for the next run to drain.
+            crashReporting: CrashReportPipeline(
+                spool: InMemoryCrashReportSpool(),
+                uploader: RecordingCrashReportUploader(),
+                reporter: RecordingCrashReporter()
+            )
         )
     }
 

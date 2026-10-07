@@ -29,6 +29,15 @@ struct BoilerplateApp: App {
 
     private let container: ModelContainer
 
+    /// The app's one MetricKit subscriber.
+    ///
+    /// Stored for the same reason `session` is, and for a sharper one:
+    /// `MXMetricManager.add(_:)` does not retain its subscriber, so a version of
+    /// this line that did not keep the object would register, deallocate, and
+    /// then be indistinguishable at runtime from a build nobody has crashed. See
+    /// `MetricKitDiagnosticSubscriber`.
+    private let crashReports: MetricKitDiagnosticSubscriber
+
     /// The app's one subscriber to its own session events.
     ///
     /// Held for the life of the process rather than attached to a view, because
@@ -67,9 +76,19 @@ struct BoilerplateApp: App {
         let observer = graph.makeSessionObserver(appState: state)
         observer.start()
 
+        // Phase 11 item 7. Subscribed at launch, which is when MetricKit
+        // delivers: it hands over the previous day's diagnostics within seconds
+        // of the process starting and only to a subscriber that is already
+        // registered. `start()` also drains whatever an earlier launch spooled
+        // and could not upload, which is the common case — most launches follow
+        // a day with no crash and a day with no network looks the same.
+        let reports = graph.makeCrashReportSubscriber()
+        reports.start()
+
         container = modelContainer
         dependencies = graph
         session = observer
+        crashReports = reports
         _appState = State(wrappedValue: state)
     }
 
