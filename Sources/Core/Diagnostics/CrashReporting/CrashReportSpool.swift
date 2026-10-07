@@ -21,12 +21,20 @@ package enum CrashReportSpoolError: Error, Equatable {
 /// This is the one design decision the whole feature rests on, so it is stated
 /// in the protocol rather than left in an implementation.
 ///
-/// `MXMetricManagerSubscriber.didReceive(_:)` is called **once** per payload.
-/// There is no acknowledgement, no re-delivery, and no way to ask for a payload
-/// again: MetricKit hands over the previous day's diagnostics, typically within
-/// seconds of a launch, and then forgets them. Whatever has not been made durable
-/// by the time that callback returns is a crash report that no longer exists
-/// anywhere.
+/// `MXMetricManagerSubscriber.didReceive(_:)` is called **once** per payload, with
+/// no acknowledgement and no re-delivery: MetricKit hands over the previous day's
+/// diagnostics, typically within seconds of a launch, and then does not mention
+/// them again.
+///
+/// There is one qualification, and it is stated rather than relied on.
+/// `MXMetricManager.pastDiagnosticPayloads` holds the last seven days of payloads
+/// and can be read on demand, so a payload dropped on the floor is not strictly
+/// gone forever — it is gone in a week. Nothing here reads it, because a spool that
+/// discards a report once the server accepts it would re-spool and re-send
+/// everything in that window at every launch; doing it properly needs a ledger of
+/// digests already handled, which is its own item. See
+/// `docs/crash-reporting.md`. What that leaves is a seven-day best-effort net under
+/// a guarantee this code still has to provide itself.
 ///
 /// An `async` requirement would make the obvious implementation of that callback
 /// `Task { await spool.store(report) }`, which returns before the write happens

@@ -30,48 +30,64 @@ package struct MetricKitProjection: Sendable {
         self.limits = limits
     }
 
-    /// Every diagnostic in `payload`, in a fixed order: crashes, then hangs, then
+    /// Every diagnostic in `payloads`, in a fixed order: crashes, then hangs, then
     /// the three budget diagnostics.
     ///
     /// Fixed rather than MetricKit's own grouping order, because
     /// ``CrashReportPipeline/accept(_:)`` caps the list and drops from the end. A
-    /// cap that dropped whichever section the framework happened to put last
-    /// would silently decide that hangs matter less than disk writes on some OS
-    /// versions and not others; this says which comes first, once, here.
+    /// cap that dropped whichever section the framework happened to put last would
+    /// silently decide that hangs matter less than disk writes on some OS versions
+    /// and not others; this says which comes first, once, here.
+    package func reports(from payloads: [MXDiagnosticPayload]) -> [CrashReport] {
+        payloads.flatMap { reports(from: $0) }
+    }
+
+    /// Every diagnostic in one payload. See the array overload for the order.
     package func reports(from payload: MXDiagnosticPayload) -> [CrashReport] {
         let window = (start: payload.timeStampBegin, end: payload.timeStampEnd)
         var reports: [CrashReport] = []
 
         for crash in payload.crashDiagnostics ?? [] {
-            reports.append(report(crash, subject: .crash(signature(of: crash)), window: window))
+            let subject = DiagnosticSubject.crash(signature(of: crash))
+            reports.append(report(crash, tree: crash.callStackTree, subject: subject, window: window))
         }
         for hang in payload.hangDiagnostics ?? [] {
-            let seconds = hang.hangDuration.converted(to: .seconds).value
-            reports.append(report(hang, subject: .hang(seconds: seconds), window: window))
+            let subject = DiagnosticSubject.hang(seconds: seconds(hang.hangDuration))
+            reports.append(report(hang, tree: hang.callStackTree, subject: subject, window: window))
         }
         for cpu in payload.cpuExceptionDiagnostics ?? [] {
             let subject = DiagnosticSubject.cpuException(
-                cpuSeconds: cpu.totalCPUTime.converted(to: .seconds).value,
-                sampledSeconds: cpu.totalSampledTime.converted(to: .seconds).value
+                cpuSeconds: seconds(cpu.totalCPUTime),
+                sampledSeconds: seconds(cpu.totalSampledTime)
             )
-            reports.append(report(cpu, subject: subject, window: window))
+            reports.append(report(cpu, tree: cpu.callStackTree, subject: subject, window: window))
         }
         for write in payload.diskWriteExceptionDiagnostics ?? [] {
-            let bytes = write.totalWritesCaused.converted(to: .bytes).value
-            let subject = DiagnosticSubject.diskWriteException(bytesWritten: Int(bytes))
-            reports.append(report(write, subject: subject, window: window))
+            let bytes = Int(write.totalWritesCaused.converted(to: .bytes).value)
+            let subject = DiagnosticSubject.diskWriteException(bytesWritten: bytes)
+            reports.append(report(write, tree: write.callStackTree, subject: subject, window: window))
         }
         for launch in payload.appLaunchDiagnostics ?? [] {
-            let seconds = launch.launchDuration.converted(to: .seconds).value
-            reports.append(report(launch, subject: .appLaunch(seconds: seconds), window: window))
+            let subject = DiagnosticSubject.appLaunch(seconds: seconds(launch.launchDuration))
+            reports.append(report(launch, tree: launch.callStackTree, subject: subject, window: window))
         }
         return reports
     }
 
+    private func seconds(_ measurement: Measurement<UnitDuration>) -> Double {
+        measurement.converted(to: .seconds).value
+    }
+
     // MARK: - One diagnostic
 
+    /// - Parameter callStackTree: Passed in rather than read off `diagnostic`,
+    ///   because `MXDiagnostic` **does not declare it**. `callStackTree` is on each
+    ///   of the five concrete subclasses instead, so a function taking the base
+    ///   class cannot reach it — and this parameter is what lets one projection
+    ///   serve all five rather than five copies differing by a line.
     private func report(
         _ diagnostic: MXDiagnostic,
+        tree callStackTree: MXCallStackTree,
         subject: DiagnosticSubject,
         window: (start: Date, end: Date)
     ) -> CrashReport {
@@ -80,7 +96,7 @@ package struct MetricKitProjection: Sendable {
             windowEnd: window.end,
             build: identity(of: diagnostic),
             subject: subject,
-            callStack: tree(from: diagnostic.callStackTree)
+            callStack: tree(from: callStackTree)
         )
     }
 
@@ -139,11 +155,16 @@ package struct MetricKitProjection: Sendable {
 ///
 /// ## Why the callback does the write
 ///
-/// `didReceive(_ payloads: [MXDiagnosticPayload])` is the only delivery there
-/// will ever be for those payloads. So the body projects and spools
-/// synchronously, and only *then* starts a task to upload. Written the other way
-/// round — `Task { await pipeline.accept(...) }` — it would compile, pass a test,
-/// and lose a payload on any launch the system cut short.
+/// `didReceive(_ payloads: [MXDiagnosticPayload])` is the only delivery those
+/// payloads get. So the body projects and spools synchronously, and only *then*
+/// starts a task to upload. Written the other way round —
+/// `Task { await pipeline.accept(...) }` — it would compile, pass a test, and lose
+/// a payload on any launch the system cut short.
+///
+/// `MXMetricManager.pastDiagnosticPayloads` is a seven-day net under that, and
+/// `start()` deliberately does **not** read it — see ``CrashReportSpooling`` and
+/// `docs/crash-reporting.md` for why a backfill needs a de-duplication ledger
+/// first.
 ///
 /// `nonisolated` on both callbacks because MetricKit promises nothing about which
 /// queue it calls on. `MXDiagnosticPayload` is not `Sendable`, which is the
@@ -198,7 +219,7 @@ package final class MetricKitDiagnosticSubscriber: NSObject, MXMetricManagerSubs
     package nonisolated func didReceive(_ payloads: [MXMetricPayload]) {}
 
     package nonisolated func didReceive(_ payloads: [MXDiagnosticPayload]) {
-        let reports = payloads.flatMap { projection.reports(from: $0) }
+        let reports = projection.reports(from: payloads)
         // Synchronous, and before the task below. See the note on the type.
         pipeline.accept(reports)
         let sink = pipeline

@@ -7,15 +7,21 @@ execute.
 ## The one fact the design is built on
 
 `MXMetricManagerSubscriber.didReceive(_ payloads: [MXDiagnosticPayload])` is
-called **once** per payload. There is no acknowledgement, no re-delivery, and no
-API that asks for a payload again. MetricKit hands over the previous day's
-diagnostics — typically within seconds of a launch, at most once in 24 hours — and
-then forgets them.
+called **once** per payload. There is no acknowledgement and no re-delivery:
+MetricKit hands over the previous day's diagnostics — typically within seconds of a
+launch, at most once in 24 hours — and then does not mention them again.
+
+One qualification, stated here because the rest of this page leans on the
+sentence above. `MXMetricManager.pastDiagnosticPayloads` holds the **last seven
+days** of payloads and can be read on demand, so a payload dropped on the floor is
+not strictly gone forever — it is gone in a week. Nothing here reads it; the
+["Limitations"](#limitations) section says why, and what using it would need
+first.
 
 Everything else follows from that:
 
 * Whatever has not been made durable by the time that callback returns is a crash
-  report that no longer exists anywhere.
+  report that nothing will mention again, and that nothing here goes looking for.
 * So the spool write is **synchronous**, inside the callback, before anything
   else. `CrashReportPipeline.accept(_:)` is `nonisolated` and non-`async` for that
   reason and no other.
@@ -376,6 +382,18 @@ missing ingredient is a server.
 launch and not before. There is no timer, no `BGTaskScheduler` leg and no backoff,
 so a device that is launched once a week uploads once a week. Wiring it into
 `BackgroundRefreshCoordinator` would fix that and is its own item.
+
+**`MXMetricManager.pastDiagnosticPayloads` is not read, and the reason is the
+spool's own design.** It holds the last seven days of payloads, so reading it at
+launch would retroactively report crashes from before this feature was installed,
+and would close the gap left by a payload delivered to a process that then died.
+It is deliberately not used, because the spool *discards* a report once the server
+accepts it — so a naive backfill would re-spool and re-send every report in that
+seven-day window at every launch, which is precisely the knowing double-send the
+drain's reentrancy flag exists to avoid. Doing it properly needs a persisted ledger
+of digests already handled, with its own seven-day horizon, and that is its own
+item rather than a line in this one. Until then the window is a fact about iOS that
+this pipeline does not draw on.
 
 **`MXMetricPayload` is discarded.** The daily metrics report — launch
 distributions, hitch ratios, cellular conditions — is accepted and dropped. It is

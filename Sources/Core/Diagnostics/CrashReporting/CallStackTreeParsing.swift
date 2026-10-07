@@ -147,7 +147,7 @@ package struct CallStackTreeParser: Sendable {
             }
         }
         return CallStack(
-            isAttributed: captured.threadAttributed ?? false,
+            isAttributed: captured.threadAttributed,
             frames: frames,
             isTruncated: truncated
         )
@@ -166,8 +166,34 @@ private struct TreeDocument: Decodable {
 }
 
 private struct StackDocument: Decodable {
-    let threadAttributed: Bool?
+
+    /// Whether MetricKit blamed this thread for the crash or the hang.
+    ///
+    /// Non-optional, with an absent key decoded as `false`. "The document did not
+    /// say" and "not blamed" are the same fact to every reader of a report, so an
+    /// optional here would buy a third state nobody can act on and push the
+    /// decision out to the use site — which is also what SwiftLint's
+    /// `discouraged_optional_boolean` is about.
+    let threadAttributed: Bool
+
     let callStackRootFrames: [FrameDocument]?
+
+    private enum CodingKeys: String, CodingKey {
+        case threadAttributed
+        case callStackRootFrames
+    }
+
+    /// Read with `try?` for the reason `FrameDocument` is: a value in an
+    /// unexpected shape costs that field rather than the whole document.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let blamed = try? container.decodeIfPresent(Bool.self, forKey: .threadAttributed)
+        threadAttributed = blamed ?? false
+        callStackRootFrames = try? container.decodeIfPresent(
+            [FrameDocument].self,
+            forKey: .callStackRootFrames
+        )
+    }
 }
 
 /// One frame as MetricKit writes it.
