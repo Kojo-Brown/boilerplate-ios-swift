@@ -41,8 +41,9 @@
   because none of it is joined to data from anywhere else.
 
   What is *not* sent is as much the point: `docs/crash-reporting.md` lists the
-  fields the projection drops — `MXFrame.address`, `virtualMemoryRegionInfo` and
-  `MXMetaData.regionFormat` — and why a manifest cannot state any of it.
+  fields that are dropped — a frame's `address` and `sampleCount`,
+  `virtualMemoryRegionInfo`, and `MXMetaData.regionFormat` — and why a manifest
+  cannot state any of it.
 
   No required-reason API: nothing in this target reads `UserDefaults`, a file
   timestamp, the boot time, free disk space or the active keyboards. The token

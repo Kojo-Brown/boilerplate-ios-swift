@@ -136,11 +136,12 @@ The purpose is `AppFunctionality` and not `Analytics`: these reports exist to fi
 defects, nothing aggregates them into behaviour, and no third party receives
 them.
 
-What is **not** sent matters as much and no manifest can state it.
-`MetricKitProjection` drops `MXFrame.address` (a pointer into an address space
-that no longer exists, useless without the ASLR slide), `virtualMemoryRegionInfo`
-(a memory-map dump) and `MXMetaData.regionFormat` (the user's region, which has
-never fixed a crash). `docs/crash-reporting.md` carries the full list and
+What is **not** sent matters as much and no manifest can state it. The projection
+drops `MXCrashDiagnostic.virtualMemoryRegionInfo` (a memory-map dump) and
+`MXMetaData.regionFormat` (the user's region, which has never fixed a crash), and
+`CallStackTreeParser` has no property for a frame's `address` (a pointer into an
+address space that no longer exists, useless without the ASLR slide) or its
+`sampleCount`. `docs/crash-reporting.md` carries the full list and
 `Tools/assert-crash-reporting.py` fails if any of them comes back.
 
 ### Nothing about on-device diagnostics, which is still an absence

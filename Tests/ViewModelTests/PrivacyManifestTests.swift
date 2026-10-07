@@ -127,16 +127,22 @@ struct PrivacyManifestTests {
 
     // MARK: - Networking
 
-    /// The profile `PATCH` sends the display name, and `X-Attest-Key-Id` sends
-    /// the App Attest key identifier on every request the attestor can sign.
-    /// `docs/privacy-manifest.md` carries the argument for declaring the second
-    /// as a device identifier when the narrower reading is also defensible.
-    @Test("Networking declares the name and the attestation key identifier")
+    /// The profile `PATCH` sends the display name, `X-Attest-Key-Id` sends the App
+    /// Attest key identifier on every request the attestor can sign, and
+    /// `APICrashReportUploader` `POST`s the MetricKit reports — crashes under
+    /// `CrashData`, hangs and the three budget diagnostics under
+    /// `PerformanceData`. `docs/privacy-manifest.md` carries the two judgement
+    /// calls: declaring the key identifier as a device identifier when the
+    /// narrower reading is also defensible, and declaring the diagnostics
+    /// `Linked` because that key identifier rides on the same request.
+    @Test("Networking declares the name, the key identifier and the diagnostics")
     func networkingManifest() throws {
         let manifest = try Self.manifest(in: NetworkingResourceBundle.bundle)
         #expect(Self.collected(of: manifest) == [
             "NSPrivacyCollectedDataTypeName",
             "NSPrivacyCollectedDataTypeDeviceID",
+            "NSPrivacyCollectedDataTypeCrashData",
+            "NSPrivacyCollectedDataTypePerformanceData",
         ])
         #expect(Self.categories(of: manifest).isEmpty)
         for row in manifest.collectedDataTypes {

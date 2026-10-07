@@ -38,6 +38,12 @@ The four defects this exists to catch, each verified by reintroducing it:
     the app an attacker in the middle could answer — and it looks identical in
     review to one that is not.
 
+  * **The call-stack parse moves into the untestable file.** `MXCallStackTree` is
+    opaque — `jsonRepresentation()` is its whole public surface, there is no
+    `MXCallStack` and no `MXFrame` — so the frames have to be parsed. Done in
+    `CallStackTreeParser`, which takes `Data`, the frame walk and all its bounds
+    are covered by tests; done in the projection, none of it is.
+
 It also fails if `docs/crash-reporting.md` stops documenting what cannot be
 tested here, because that page is the only record of it.
 
@@ -58,6 +64,7 @@ import sys
 
 CORE_DIR = os.path.join("Sources", "Core", "Diagnostics", "CrashReporting")
 SUBSCRIBER = os.path.join(CORE_DIR, "MetricKitDiagnosticSubscriber.swift")
+PARSER = os.path.join(CORE_DIR, "CallStackTreeParsing.swift")
 SPOOL = os.path.join(CORE_DIR, "CrashReportSpool.swift")
 PIPELINE = os.path.join(CORE_DIR, "CrashReportPipeline.swift")
 REPORT = os.path.join(CORE_DIR, "CrashReport.swift")
@@ -66,7 +73,7 @@ CONTAINER = os.path.join("Sources", "App", "AppContainer.swift")
 APP = os.path.join("Sources", "App", "BoilerplateApp.swift")
 DOCS = os.path.join("docs", "crash-reporting.md")
 
-REQUIRED = (SUBSCRIBER, SPOOL, PIPELINE, REPORT, UPLOADER, CONTAINER, APP, DOCS)
+REQUIRED = (SUBSCRIBER, PARSER, SPOOL, PIPELINE, REPORT, UPLOADER, CONTAINER, APP, DOCS)
 
 # MARK: - What must not come back
 #
@@ -89,15 +96,22 @@ DROPPED_FIELDS = {
         "MXMetaData.regionFormat is the user's region. No crash has ever been "
         "fixed by knowing it."
     ),
-    r"\bjsonRepresentation\s*\(": (
-        "jsonRepresentation() hands over MetricKit's whole document, dropped "
-        "fields included. The projection exists so that what leaves the device is "
-        "chosen field by field."
-    ),
     r"\bdictionaryRepresentation\s*\(": (
-        "dictionaryRepresentation() is jsonRepresentation() in another costume."
+        "dictionaryRepresentation() hands over MetricKit's whole document for a "
+        "diagnostic, dropped fields included. Every field that leaves this device "
+        "is chosen by name."
+    ),
+    r"\bsampleCount\b": (
+        "sampleCount is 1 for every frame of a crash stack and is not projected."
     ),
 }
+
+# `MXCallStackTree.jsonRepresentation()` is the opposite case: it is the *only*
+# public accessor MetricKit offers for a call stack — there is no `MXCallStack`
+# type and no `MXFrame` type — so reading it is required rather than forbidden.
+# What matters is that exactly one call site reads it and that the bytes are
+# parsed into named fields rather than carried, which rule 10 checks.
+TREE_READ = re.compile(r"captured\.jsonRepresentation\s*\(\s*\)")
 
 # The marker that says a report's durability is synchronous.
 SYNCHRONOUS_ACCEPT = re.compile(r"nonisolated\s+func\s+accept\s*\(")
@@ -298,16 +312,17 @@ def check_projection_holds_no_policy(repo: str, problems: list[str]) -> None:
     test can reach.
     """
     body = code(repo, SUBSCRIBER)
+    parser = code(repo, PARSER)
     for bound in (
         "maxStacksPerReport",
         "maxFramesPerStack",
         "maxFrameDepth",
     ):
-        if f"limits.{bound}" not in body:
+        if f"limits.{bound}" not in parser:
             problems.append(
-                f"{SUBSCRIBER}: does not apply `limits.{bound}`. Nothing MetricKit hands over is "
-                f"bounded by anything this app controls, and a bound written as a literal here is "
-                f"a bound no test can reach."
+                f"{PARSER}: does not apply `limits.{bound}`. Nothing MetricKit hands over is "
+                f"bounded by anything this app controls, and a bound written as a literal is a "
+                f"bound no test can change."
             )
     # The cap on the one free-form string is checked by name rather than by its
     # limit, because the way that cap breaks is a comparison against the wrong
@@ -327,6 +342,60 @@ def check_projection_holds_no_policy(repo: str, problems: list[str]) -> None:
     ):
         if re.search(forbidden, body):
             problems.append(f"{SUBSCRIBER}: names {forbidden}, and {why}.")
+
+
+# MARK: - Rule 10: the tree is parsed into named fields, by the testable type
+
+
+def check_tree_is_parsed(repo: str, problems: list[str]) -> None:
+    """The opaque half of MetricKit stays behind a type a test can drive.
+
+    `MXCallStackTree` exposes only `jsonRepresentation()`, so the frames must be
+    parsed. Where that parsing lives decides whether any of it is covered: in the
+    projection it would sit behind the one seam no test here can reach, and in
+    `CallStackTreeParser` it takes `Data`.
+    """
+    body = code(repo, SUBSCRIBER)
+    parser = code(repo, PARSER)
+
+    reads = TREE_READ.findall(body)
+    if len(reads) != 1:
+        problems.append(
+            f"{SUBSCRIBER}: {len(reads)} reads of the call-stack tree's JSON; expected exactly "
+            f"one, handed straight to CallStackTreeParser."
+        )
+    if "CallStackTreeParser" not in body:
+        problems.append(
+            f"{SUBSCRIBER}: does not delegate to CallStackTreeParser. A frame walk written here "
+            f"is a frame walk no test can reach, because nothing MetricKit hands over can be "
+            f"constructed."
+        )
+    if "JSONDecoder" not in parser:
+        problems.append(
+            f"{PARSER}: decodes nothing. The document has to be read into named fields — a "
+            f"pass-through would carry `address` and whatever key Apple adds next."
+        )
+    # The other half of "named fields": nothing in the model may hold the raw
+    # bytes. A `Data` property on a frame or a tree is how a pass-through gets
+    # reintroduced after the parse is written — the document rides along beside the
+    # fields that were chosen, and every dropped field is back on the wire.
+    tree_model = os.path.join(CORE_DIR, "CallStackTree.swift")
+    for number, line in enumerate(code(repo, tree_model).split("\n"), 1):
+        if re.search(r"^\s*(package |private |)(let|var)\s+\w+\s*:\s*Data\b", line):
+            problems.append(
+                f"{tree_model}:{number}: a stored property of type Data. The call-stack model "
+                f"carries chosen fields, never MetricKit's document — carrying it would put "
+                f"every deliberately dropped field back on the wire."
+            )
+    for forbidden in ("address", "sampleCount"):
+        if re.search(rf"\b{forbidden}\b", parser):
+            problems.append(
+                f"{PARSER}: names `{forbidden}`. It is in MetricKit's document and is "
+                f"deliberately not decoded; a property that exists is one somebody later "
+                f"forwards."
+            )
+    if re.search(r"\bimport MetricKit\b", parser):
+        problems.append(f"{PARSER}: imports MetricKit. It takes Data so that a test can call it.")
 
 
 # MARK: - Rule 6: the upload goes through the app's transport
@@ -460,6 +529,7 @@ def main() -> int:
     check_uploader_uses_the_app_transport(repo, problems)
     check_subscriber_is_retained(repo, problems)
     check_callback_writes_before_it_defers(repo, problems)
+    check_tree_is_parsed(repo, problems)
     check_docs(repo, problems)
 
     if problems:
@@ -471,6 +541,7 @@ def main() -> int:
 
     print("Crash reporting audit passed.")
     print("  synchronous spool, one MetricKit file, dropped fields still dropped,")
+    print("  call stacks parsed by the testable type,")
     print("  upload pinned and keyed by digest, subscriber retained")
     return 0
 

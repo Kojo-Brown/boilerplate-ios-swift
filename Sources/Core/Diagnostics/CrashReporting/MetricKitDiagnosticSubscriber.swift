@@ -5,11 +5,17 @@ import MetricKit
 
 /// Turns MetricKit's objects into ``CrashReport`` values.
 ///
-/// Everything in this type is field copying and bounded tree walking. That is on
-/// purpose and it is the whole reason the rest of this feature is testable: no
-/// MetricKit class has a public initialiser, and the framework delivers payloads
-/// only on a real device, once a day, for the day before — so any decision taken
-/// on this side of the seam is a decision no test in this repository can reach.
+/// Everything in this type is field copying. That is on purpose and it is the
+/// whole reason the rest of this feature is testable: no MetricKit class has a
+/// public initialiser, and the framework delivers payloads only on a real device,
+/// once a day, for the day before — so any decision taken on this side of the seam
+/// is a decision no test in this repository can reach.
+///
+/// The call stacks are the exception, and only because `MXCallStackTree` is
+/// opaque: its entire public surface is `jsonRepresentation() -> Data`, so the
+/// frames have to be parsed rather than read. That hands the one piece of real
+/// logic here — the frame walk, its bounds, the thread reordering — to
+/// ``CallStackTreeParser``, which takes `Data` and is therefore covered by tests.
 ///
 /// What remains untestable here is listed in `docs/crash-reporting.md` and is
 /// checked structurally instead, by `Tools/assert-crash-reporting.py`: that this
@@ -103,68 +109,12 @@ package struct MetricKitProjection: Sendable {
 
     // MARK: - The stacks
 
+    /// Delegated, because `MXCallStackTree` is opaque: no `callStacks` property,
+    /// no `MXCallStack`, no `MXFrame` — `jsonRepresentation()` is the whole public
+    /// surface. ``CallStackTreeParser`` takes `Data`, which is what makes the frame
+    /// walk and every bound on it testable; see that type.
     private func tree(from captured: MXCallStackTree) -> CallStackTree {
-        let all = captured.callStacks
-        let kept = all.prefix(limits.maxStacksPerReport).map { stack in
-            self.stack(from: stack)
-        }
-        // Attributed threads first, keeping the original order within each group.
-        // `enumerated` is what makes it stable: `sorted(by:)` is not a stable sort
-        // in Swift, so comparing on the flag alone would reorder the unattributed
-        // threads from one run to the next — and the digest covers them.
-        let ordered = kept.enumerated().sorted { lhs, rhs in
-            if lhs.element.isAttributed != rhs.element.isAttributed {
-                return lhs.element.isAttributed
-            }
-            return lhs.offset < rhs.offset
-        }
-        return CallStackTree(
-            stacks: ordered.map(\.element),
-            isTruncated: all.count > kept.count
-        )
-    }
-
-    private func stack(from captured: MXCallStack) -> CallStack {
-        var frames: [StackFrame] = []
-        var truncated = false
-        // An explicit stack of (frame, depth) rather than recursion. The input is
-        // a tree the system built from a call stack that may have crashed
-        // *because* it recursed without end, so a recursive walk would be the
-        // same unbounded recursion inside the reporting path. The depth limit
-        // bounds it twice over.
-        var pending: [(frame: MXFrame, depth: Int)] = captured.callStackRootFrames
-            .reversed()
-            .map { root in (frame: root, depth: 0) }
-
-        while let next = pending.popLast() {
-            guard frames.count < limits.maxFramesPerStack else {
-                truncated = true
-                break
-            }
-            frames.append(
-                StackFrame(
-                    binaryUUID: next.frame.binaryUUID,
-                    offset: Int(next.frame.offsetIntoBinaryTextSegment),
-                    binaryName: next.frame.binaryName,
-                    depth: next.depth
-                )
-            )
-            guard next.depth + 1 < limits.maxFrameDepth else {
-                truncated = truncated || !(next.frame.subFrames ?? []).isEmpty
-                continue
-            }
-            // Pushed reversed so the first sub-frame is popped first, which is
-            // what makes `frames` a depth-first pre-order walk and therefore
-            // readable top to bottom.
-            for sub in (next.frame.subFrames ?? []).reversed() {
-                pending.append((frame: sub, depth: next.depth + 1))
-            }
-        }
-        return CallStack(
-            isAttributed: captured.threadAttributed,
-            frames: frames,
-            isTruncated: truncated
-        )
+        CallStackTreeParser(limits: limits).parse(captured.jsonRepresentation())
     }
 }
 

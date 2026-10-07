@@ -51,6 +51,16 @@ package struct StackFrame: Sendable, Equatable, Codable {
     /// the finding in a recursion crash.
     package let depth: Int
 
+    /// Stands in for a frame whose `binaryUUID` MetricKit omitted or wrote
+    /// malformed.
+    ///
+    /// An all-zero UUID rather than a `nil` field. A frame with no binary is still
+    /// a frame — dropping it would silently renumber the depths of everything
+    /// below it — and an optional here would put an `if let` at every reader,
+    /// including the digest, which has to stay total. It is also recognisable: a
+    /// symbolicator looking for this UUID finds nothing, which is the truth.
+    package static let unknownBinaryUUID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
     package init(binaryUUID: UUID, offset: Int, binaryName: String?, depth: Int) {
         self.binaryUUID = binaryUUID
         self.offset = offset

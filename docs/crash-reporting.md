@@ -38,6 +38,10 @@ MetricKit
    │  MXDiagnosticPayload (not Sendable, not constructible)
    ▼
 MetricKitProjection ──────────► [CrashReport]        Core, untestable
+   │       │
+   │       └── MXCallStackTree.jsonRepresentation()
+   │                  ▼
+   │           CallStackTreeParser ──► CallStackTree  Core, testable
    │
    ▼
 CrashReportPipeline.accept  ──► CrashReportSpooling  Core, synchronous
@@ -70,6 +74,26 @@ anybody would call development.
 Projecting at the edge moves the bounds, the durability, the de-duplication, the
 retry classification and the redaction onto `CrashReport`, which a test can build
 by hand. What is left on the far side is one file of field copying.
+
+### The call stacks are the exception, and it is a gift
+
+`MXCallStackTree` is **opaque**: `jsonRepresentation() -> Data` is its entire
+public surface. There is no `callStacks` property, no `MXCallStack` type and no
+`MXFrame` type — Apple never exposed the frames as objects. So the frames have to
+be *parsed*.
+
+Which means the only piece of real logic in the projection — the frame walk, its
+three bounds, the thread reordering, the truncation flags — sits in
+`CallStackTreeParser`, which takes `Data` and is therefore fully covered by
+`CallStackTreeParserTests`. Had MetricKit exposed the objects, every line of it
+would have been on the untestable side of the seam.
+
+The parse reads named keys rather than passing the document through, so a key
+Apple adds later is ignored by construction instead of being forwarded to a
+server nobody told about it. A document this build cannot read yields an empty
+tree: the kind, the signature, the build and the window are all still correct and
+still worth having, and MetricKit will not offer the payload again, so there is no
+"fail and retry" to choose instead.
 
 ## What is sent
 
@@ -104,10 +128,11 @@ true one.
 
 | Field | Why not |
 | --- | --- |
-| `MXFrame.address` | A load address in a process that no longer exists. Without the ASLR slide it symbolicates nothing, and the slide is what ASLR randomises per launch. What it does carry is a pointer out of somebody's address space. |
+| `address` | A load address in a process that no longer exists. Without the ASLR slide it symbolicates nothing, and the slide is what ASLR randomises per launch. What it does carry is a pointer out of somebody's address space. The key is in MetricKit's document; `FrameDocument` has no property for it, because a property that exists is one somebody later forwards. |
+| `sampleCount` | 1 for every frame of a crash stack. The *shape* of the tree is kept — `subFrames` is what records that a hang spent its time in one branch — but the counts are not. |
 | `MXCrashDiagnostic.virtualMemoryRegionInfo` | A textual dump of the process's memory map, and the largest field in a crash diagnostic. Useful for one class of bug — a wild pointer whose target region you want named — and paid for on every report. Add it to `CrashSignature` when you are chasing that bug. |
 | `MXMetaData.regionFormat` | The user's region. It narrows who they are and no crash has ever been fixed by knowing it. |
-| `MXCallStackTree.jsonRepresentation()` | Hands over MetricKit's whole document, dropped fields included. The projection exists so that what leaves the device is chosen field by field. |
+| `MXDiagnostic.dictionaryRepresentation()` | Hands over MetricKit's whole document for a diagnostic, dropped fields included. Every field that leaves this device is chosen by name. (`MXCallStackTree.jsonRepresentation()` is the opposite case and is *required* — see above — because it is the only accessor there is.) |
 | `MXMetricPayload` | The daily *metrics* report — launch histograms, cellular conditions, animation hitches. A different feature with a different privacy answer. `didReceive(_:[MXMetricPayload])` is implemented and empty, and an adopter who wants it has one method to fill in and two manifest rows to add. |
 
 The audit fails if any of them comes back, because each is a one-line addition in
@@ -139,7 +164,10 @@ missing or absent.
 The frame walk is an explicit stack rather than recursion. The input is a tree the
 system built from a call stack that may have crashed *because* it recursed without
 end; a recursive walk over it would be the same unbounded recursion inside the
-reporting path.
+reporting path. Foundation's JSON decoder has already bounded how deep the
+*document* could be — it refuses one nested past its own limit, which is one of
+the ways `parse` returns an empty tree — but the walk over what it produced is this
+code's own, and `maxFrameDepth` is what bounds that.
 
 ## The digest
 
@@ -291,7 +319,7 @@ Nothing here verifies anything; this is the client half.
 
 ## What the gates check
 
-`Tools/assert-crash-reporting.py`, in the lint job beside the other audits. Nine
+`Tools/assert-crash-reporting.py`, in the lint job beside the other audits. Ten
 rules, each verified by reintroducing the defect it names:
 
 1. `accept` is neither `async` nor missing, and the drain keeps its reentrancy
@@ -299,19 +327,25 @@ rules, each verified by reintroducing the defect it names:
 2. The spool protocol's requirements stay synchronous, including `store`'s exact
    signature — that signature *is* the contract.
 3. The dropped fields stay dropped, in the projection and in the model.
-4. `import MetricKit` appears in exactly one file.
-5. The projection holds no policy: it consults `CrashReportLimits` and names no
-   `URLSession`, no `FileManager` and no `APIEndpoint`.
+4. `import MetricKit` appears in exactly one file — and not in the parser, which
+   takes `Data` so that a test can call it.
+5. The projection holds no policy: the bounds live in `CallStackTreeParser`, the
+   termination-reason cap in `CrashReportLimits.truncating`, and the projection
+   names no `URLSession`, no `FileManager` and no `APIEndpoint`.
 6. The uploader takes an `any APIClient`, names no `URLSession`, posts with
    `requiresAuth: false`, and keys the request with the report's digest.
 7. The composition root builds the pipeline and vends the subscriber, and
    `BoilerplateApp` holds the subscriber in a stored property —
    `MXMetricManager.add(_:)` does not retain it.
 8. The callback spools before it starts a task.
-9. This page keeps its limitations section.
+9. The call-stack tree is read exactly once and handed straight to
+   `CallStackTreeParser`, which decodes named fields and has no `address` or
+   `sampleCount` — and nothing in the call-stack model holds a `Data`, which is how
+   a pass-through gets reintroduced after the parse is written.
+10. This page keeps its limitations section.
 
-`CrashReportTests`, `CrashReportSpoolTests` and `CrashReportPipelineTests` cover
-the half a script cannot see: the digest's layout, the spool's durability and
+`CrashReportTests`, `CallStackTreeParserTests`, `CrashReportSpoolTests` and
+`CrashReportPipelineTests` cover the half a script cannot see: the digest's layout, the spool's durability and
 eviction, the three outcomes, the drain's order, and the double-send the
 reentrancy flag prevents.
 
@@ -319,12 +353,18 @@ reentrancy flag prevents.
 
 **`MetricKitProjection` has never executed anywhere, and cannot here.** Every
 MetricKit class it reads has no public initialiser and the framework delivers only
-on a device, once a day, for the day before. So the field mapping, the unit
-conversions, the thread reordering and the frame walk are exercised by nothing:
-they are held in place by rules 3, 4 and 5 of the audit, which are syntactic. The
-first real payload is the first execution. Verify it with Xcode's **Debug ▸
-Simulate MetricKit Payloads** against a development build, which is the only loop
-available.
+on a device, once a day, for the day before. So the field mapping and the unit
+conversions are exercised by nothing: they are held in place by rules 3, 4, 5 and 9
+of the audit, which are syntactic. The first real payload is the first execution.
+Verify it with Xcode's **Debug ▸ Simulate MetricKit Payloads** against a
+development build, which is the only loop available.
+
+What *is* covered is everything downstream of `jsonRepresentation()`, because
+`MXCallStackTree` being opaque forced the frames through a parser that takes
+`Data`. The JSON shape the fixtures use is Apple's documented one; if a future OS
+renames a key, the parse degrades to frames with a zero offset or to an empty
+tree rather than to a lost report, and nothing here would notice until somebody
+read a report.
 
 **Nothing receives the reports.** `api.example.com` does not exist and
 attestation ships `.reportOnly`, so in this repository every upload defers and

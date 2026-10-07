@@ -388,6 +388,33 @@ extension AppContainer {
     /// exception to that list. And a policy resolved *from a value* is the one
     /// decision in that graph that is not simply naming a type, which is worth
     /// giving a name of its own.
+    /// The crash and hang reporting pipeline the app runs on.
+    ///
+    /// A function rather than five lines in `live()`, for the reason
+    /// `unlockPolicy(for:under:reportingTo:)` is one: `live()` reads as a list of
+    /// what runs, and SwiftLint's ceiling on that list is a standing reminder that
+    /// a reader can only hold so much of it at once.
+    ///
+    /// Three decisions are in here. The spool is file-backed and in Application
+    /// Support, not Caches, because the system evicts Caches under exactly the
+    /// pressure that produced the crashes being reported. The uploader takes the
+    /// app's own `apiClient`, so the report goes over the same pinned, attesting,
+    /// idempotent transport as every other request — a diagnostics endpoint with a
+    /// session of its own would be the one request in this app an attacker in the
+    /// middle could answer. And the reporter is the unified log, because the two
+    /// states this feature spends its life between are "nothing crashed" and "the
+    /// pipeline is not running", and nothing else can tell them apart.
+    ///
+    /// `docs/crash-reporting.md` carries the rest, including why
+    /// `CrashReportPipeline.accept` is synchronous.
+    private static func liveCrashReporting(client: any APIClient) -> CrashReportPipeline {
+        CrashReportPipeline(
+            spool: FileCrashReportSpool(directory: FileCrashReportSpool.defaultDirectory()),
+            uploader: APICrashReportUploader(client: client),
+            reporter: OSLogCrashReporter(subsystem: AppContainer.logSubsystem)
+        )
+    }
+
     private static func unlockPolicy(
         for integrity: IntegrityReport,
         under policy: IntegrityPolicy,
@@ -582,21 +609,9 @@ extension AppContainer {
             }
         )
 
-        // Phase 11 item 7. MetricKit hands over the previous day's crashes and
-        // hangs exactly once, with no acknowledgement and no second delivery, so
-        // the spool is what the feature is: `CrashReportPipeline.accept` writes
-        // synchronously inside the system callback and the upload happens
-        // afterwards. `docs/crash-reporting.md` carries the argument.
-        //
-        // The uploader goes through `apiClient`, which is the same pinned,
-        // attesting transport as everything else — a reporting endpoint with a
-        // session of its own would be the one request in the app an attacker in
-        // the middle could answer.
-        let crashReporting = CrashReportPipeline(
-            spool: FileCrashReportSpool(directory: FileCrashReportSpool.defaultDirectory()),
-            uploader: APICrashReportUploader(client: apiClient),
-            reporter: OSLogCrashReporter(subsystem: AppContainer.logSubsystem)
-        )
+        // Phase 11 item 7. See `liveCrashReporting(client:)` for why the spool is
+        // what the feature is, and why the upload shares this client.
+        let crashReporting = AppContainer.liveCrashReporting(client: apiClient)
 
         return AppContainer(
             apiClient: apiClient,
