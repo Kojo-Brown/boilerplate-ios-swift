@@ -116,18 +116,43 @@ directions — a domain listed with tracking off describes nothing, and tracking
 declared with no domain is the one that fails in production, as a request iOS
 silently refuses once the user has denied tracking.
 
-### Nothing about diagnostics, which is the interesting absence
+### `NSPrivacyCollectedDataTypeCrashData` and `NSPrivacyCollectedDataTypePerformanceData`, in `Networking`
 
-`RepositoryTelemetry`, `DiagnosticJournal` and `FileDiagnosticSink` all exist
-and none of them is declared, because none of them transmits: the journal is a
-file in the container and the telemetry goes to `os_log`. Apple's definition of
-collection is transmission off the device, so an on-device log is not it.
+Phase 11 item 7. `APICrashReportUploader` `POST`s a MetricKit-derived report to
+`/diagnostics/reports`: `CrashData` for the crash diagnostics, `PerformanceData`
+for the hang, CPU, disk-write and launch ones. Two rows rather than one, because
+they are two of Apple's categories and a reader of the privacy report is entitled
+to know which this app sends.
 
-**This changes with the next item.** MetricKit crash and hang reporting ships
-payloads to a server, which is `NSPrivacyCollectedDataTypeCrashData` and
-`NSPrivacyCollectedDataTypePerformanceData` the moment an upload exists. The
-audit will not catch that one from the declaration side — see the limitations
-below — but it will catch the new target's first request body.
+Both are declared **`Linked`**, and that is the judgement call here. A report
+carries no account identifier and the request is deliberately unauthenticated —
+a crash before sign-in is the one most worth having, and requiring a token would
+make exactly those launches unreportable. But the transport attaches
+`X-Attest-Key-Id` to every request it can sign, this one included, so the report
+arrives beside the per-install identifier declared one section up. Claiming the
+diagnostics are unlinked while sending them next to an identifier would be false.
+
+The purpose is `AppFunctionality` and not `Analytics`: these reports exist to fix
+defects, nothing aggregates them into behaviour, and no third party receives
+them.
+
+What is **not** sent matters as much and no manifest can state it. The projection
+drops `MXCrashDiagnostic.virtualMemoryRegionInfo` (a memory-map dump) and
+`MXMetaData.regionFormat` (the user's region, which has never fixed a crash), and
+`CallStackTreeParser` has no property for a frame's `address` (a pointer into an
+address space that no longer exists, useless without the ASLR slide) or its
+`sampleCount`. `docs/crash-reporting.md` carries the full list and
+`Tools/assert-crash-reporting.py` fails if any of them comes back.
+
+### Nothing about on-device diagnostics, which is still an absence
+
+`RepositoryTelemetry`, `DiagnosticJournal` and `FileDiagnosticSink` all exist and
+none of them is declared, because none of them transmits: the journal is a file
+in the container and the telemetry goes to `os_log`. Apple's definition of
+collection is transmission off the device, so an on-device log is not it. The
+crash spool is the same — it is a directory in Application Support, and it
+becomes collection only at the upload, which is why the declaration lives in
+`Networking` and `Core`'s manifest still says it collects nothing.
 
 ## What the gates check
 

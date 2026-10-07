@@ -325,6 +325,35 @@ jobs:
       - name: Audit the privacy manifests against the APIs they declare
         run: python3 Tools/assert-privacy-manifest.py
 
+      # Phase 11 item 7. MetricKit is the one feature in this repository whose
+      # defects no other gate can see, for a structural reason: nothing it hands
+      # over can be constructed. `MXDiagnosticPayload`, `MXCrashDiagnostic`,
+      # `MXCallStackTree` and `MXMetaData` all have no public initialiser, and the
+      # framework delivers payloads on a device, once a day, for the day before —
+      # so the suite can exercise everything from `CrashReport` outward and nothing
+      # at all on the far side of the projection.
+      #
+      # And every defect there fails the same way: no crash reports, which is
+      # indistinguishable from an app nobody has crashed. `didReceive` is the only
+      # delivery those payloads will ever have, so rewriting the spool write as
+      # `Task { await ... }` compiles, passes the suite, and loses a payload on any
+      # launch the system cuts short. A dropped field — `MXFrame.address`,
+      # `virtualMemoryRegionInfo`, `regionFormat` — comes back in one line and
+      # makes a privacy manifest untrue. A second `import MetricKit` grows the
+      # untestable surface. An uploader with a `URLSession` of its own is the one
+      # request in the app an attacker in the middle could answer.
+      #
+      # Nine rules, each verified by reintroducing the defect it names — 25
+      # mutations, 25 failures. The script's docstring and
+      # `docs/crash-reporting.md` carry the reasoning, including the limitations
+      # that only the first real payload can close.
+      #
+      # It sits with the other audits because it is syntactic: no toolchain, no
+      # resolved packages and no simulator, and it is one of the few gates the
+      # scheduled agent can run on Linux before pushing.
+      - name: Audit the crash and hang reporting pipeline
+        run: python3 Tools/assert-crash-reporting.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

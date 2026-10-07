@@ -181,6 +181,21 @@ struct AppContainer: Sendable {
     /// it is the half that matters.
     let integrity: IntegrityReport
 
+    /// The crash and hang reporting pipeline.
+    ///
+    /// Phase 11 item 7. An actor, so it is `Sendable` and can live on this
+    /// struct; the `MXMetricManagerSubscriber` that feeds it is not here, for the
+    /// same reason `SessionObserver` is not — it has to be *retained* for the life
+    /// of the process, and a composition root is a description of the graph rather
+    /// than an owner of lifetimes. `makeCrashReportSubscriber()` builds it and
+    /// `BoilerplateApp` holds it.
+    ///
+    /// Held here as well as handed to the subscriber because the pipeline is the
+    /// half with a reason to be reachable later: a diagnostics screen asking how
+    /// many reports are waiting, or a scene becoming active asking for another
+    /// drain, both talk to this and neither should know MetricKit exists.
+    let crashReporting: CrashReportPipeline
+
     /// What the app marks its own intervals with, for Instruments to draw.
     ///
     /// It carries a default — the only collaborator here that does — because
@@ -373,6 +388,33 @@ extension AppContainer {
     /// exception to that list. And a policy resolved *from a value* is the one
     /// decision in that graph that is not simply naming a type, which is worth
     /// giving a name of its own.
+    /// The crash and hang reporting pipeline the app runs on.
+    ///
+    /// A function rather than five lines in `live()`, for the reason
+    /// `unlockPolicy(for:under:reportingTo:)` is one: `live()` reads as a list of
+    /// what runs, and SwiftLint's ceiling on that list is a standing reminder that
+    /// a reader can only hold so much of it at once.
+    ///
+    /// Three decisions are in here. The spool is file-backed and in Application
+    /// Support, not Caches, because the system evicts Caches under exactly the
+    /// pressure that produced the crashes being reported. The uploader takes the
+    /// app's own `apiClient`, so the report goes over the same pinned, attesting,
+    /// idempotent transport as every other request — a diagnostics endpoint with a
+    /// session of its own would be the one request in this app an attacker in the
+    /// middle could answer. And the reporter is the unified log, because the two
+    /// states this feature spends its life between are "nothing crashed" and "the
+    /// pipeline is not running", and nothing else can tell them apart.
+    ///
+    /// `docs/crash-reporting.md` carries the rest, including why
+    /// `CrashReportPipeline.accept` is synchronous.
+    private static func liveCrashReporting(client: any APIClient) -> CrashReportPipeline {
+        CrashReportPipeline(
+            spool: FileCrashReportSpool(directory: FileCrashReportSpool.defaultDirectory()),
+            uploader: APICrashReportUploader(client: client),
+            reporter: OSLogCrashReporter(subsystem: AppContainer.logSubsystem)
+        )
+    }
+
     private static func unlockPolicy(
         for integrity: IntegrityReport,
         under policy: IntegrityPolicy,
@@ -567,6 +609,10 @@ extension AppContainer {
             }
         )
 
+        // Phase 11 item 7. See `liveCrashReporting(client:)` for why the spool is
+        // what the feature is, and why the upload shares this client.
+        let crashReporting = AppContainer.liveCrashReporting(client: apiClient)
+
         return AppContainer(
             apiClient: apiClient,
             tokenStore: tokenStore,
@@ -588,7 +634,8 @@ extension AppContainer {
             barcodeScanner: LiveBarcodeScannerService(),
             backgroundRefresh: backgroundRefresh,
             makeCameraService: { CameraService() },
-            integrity: integrity
+            integrity: integrity,
+            crashReporting: crashReporting
         )
     }
 }
@@ -642,6 +689,15 @@ extension AppContainer {
             refresh: { _ = try await syncStrategy.loadCurrentUser() }
         )
 
+        // A spool in memory and an uploader that accepts everything. A preview
+        // that used the file-backed spool would write crash reports into the
+        // developer's own Application Support directory from a canvas refresh.
+        let crashReporting = CrashReportPipeline(
+            spool: InMemoryCrashReportSpool(),
+            uploader: RecordingCrashReportUploader(),
+            reporter: RecordingCrashReporter()
+        )
+
         return AppContainer(
             apiClient: MockAPIClient(),
             tokenStore: InMemoryTokenStore(),
@@ -664,7 +720,8 @@ extension AppContainer {
             // A preview that ran the real heuristics would read the developer's
             // own Mac — where `/etc/apt` is quite possibly present — and a
             // canvas is not the place to discover that.
-            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe())
+            integrity: AppContainer.assessedIntegrity(probe: StubIntegrityProbe()),
+            crashReporting: crashReporting
         )
     }
 }
@@ -715,6 +772,18 @@ extension AppContainer {
             tokenStore: tokenStore,
             subscriber: eventSubscriber
         )
+    }
+
+    /// The app's one MetricKit subscriber.
+    ///
+    /// A factory rather than a stored property, because what this object needs is
+    /// to be *retained*: `MXMetricManager.add(_:)` does not hold its subscriber,
+    /// so one created and dropped in the same expression registers, deallocates,
+    /// and then looks exactly like a device that never crashed. `BoilerplateApp`
+    /// holds it for the life of the process, which is the same arrangement, and
+    /// the same reason, as `makeSessionObserver(appState:)` above.
+    func makeCrashReportSubscriber() -> MetricKitDiagnosticSubscriber {
+        MetricKitDiagnosticSubscriber(pipeline: crashReporting)
     }
 
     /// `HomeViewModel` still has no *data* collaborator — it fabricates its
