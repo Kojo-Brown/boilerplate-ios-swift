@@ -165,21 +165,21 @@ struct CallStackTreeParserTests {
     /// unbounded recursion and the walk over them must not be another one.
     @Test("The depth limit stops the walk and reports it")
     func depthLimitTruncates() {
-        let limits = CrashReportLimits(maxFrameDepth: 4, maxFramesPerStack: 1_000)
+        let limits = CrashReportLimits(maxFramesPerStack: 1_000, maxFrameDepth: 4)
         let tree = CallStackTreeParser(limits: limits).parse(
             treeJSON(stackJSON(attributed: true, roots: chainJSON(depth: 40)))
         )
 
-        let stack = tree.stacks.first
-        #expect(stack?.frames.map(\.depth) == [0, 1, 2, 3])
-        #expect(stack?.isTruncated == true)
+        let frames = tree.stacks.first?.frames ?? []
+        #expect(frames.map(\.depth) == [0, 1, 2, 3])
+        #expect(tree.stacks.first?.isTruncated == true)
     }
 
     /// A stack that ends exactly at the depth limit has lost nothing, so saying it
     /// was truncated would be wrong — and `isTruncated` is in the digest.
     @Test("A stack that fits the depth limit exactly is not truncated")
     func depthLimitDoesNotFalselyTruncate() {
-        let limits = CrashReportLimits(maxFrameDepth: 4, maxFramesPerStack: 1_000)
+        let limits = CrashReportLimits(maxFramesPerStack: 1_000, maxFrameDepth: 4)
         let tree = CallStackTreeParser(limits: limits).parse(
             treeJSON(stackJSON(attributed: true, roots: chainJSON(depth: 4)))
         )
