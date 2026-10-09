@@ -4,8 +4,31 @@ import Testing
 @testable import Features
 @testable import Networking
 
+/// All methods inherit the main-actor context from the suite annotation, so an
+/// `@Observable @MainActor` view model can be mutated directly and read back
+/// without an `await`; the `async` cases await only the action under test.
+///
+/// This suite absorbed `LoginViewModelXCTests`, the XCTest mirror of it. Six of
+/// its fifteen cases were assertions this file did not make — the initial
+/// state, two more malformed-email shapes, the eight-character password
+/// boundary, a subdomain address, and `clearError()` with nothing to clear —
+/// and nine were the same assertions in the other dialect. The six are below.
+/// See `docs/testing.md`.
 @MainActor
 struct LoginViewModelTests {
+
+    // MARK: - Initial state
+
+    @Test func newViewModelIsEmptyAndUnauthenticated() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
+
+        #expect(sut.email.isEmpty)
+        #expect(sut.password.isEmpty)
+        #expect(!sut.isLoading)
+        #expect(sut.errorMessage == nil)
+        #expect(!sut.isAuthenticated)
+    }
+
     // MARK: - Form validation
 
     @Test func emptyEmailAndPasswordIsInvalid() {
@@ -30,6 +53,36 @@ struct LoginViewModelTests {
     @Test func validCredentialsPassValidation() {
         let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@example.com"
+        sut.password = "password123"
+        #expect(sut.isFormValid)
+    }
+
+    @Test func emailWithoutAnAtSignIsInvalid() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
+        sut.email = "userexample.com"
+        sut.password = "password123"
+        #expect(!sut.isFormValid)
+    }
+
+    @Test func whitespaceOnlyEmailIsInvalid() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
+        sut.email = "   "
+        sut.password = "password123"
+        #expect(!sut.isFormValid)
+    }
+
+    /// Eight is the shortest accepted password, so it is the one length worth
+    /// asserting: `>=` written as `>` passes every other case in this suite.
+    @Test func passwordOfExactlyEightCharactersIsValid() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
+        sut.email = "user@example.com"
+        sut.password = "12345678"
+        #expect(sut.isFormValid)
+    }
+
+    @Test func emailWithASubdomainIsValid() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
+        sut.email = "user@mail.example.com"
         sut.password = "password123"
         #expect(sut.isFormValid)
     }
@@ -62,7 +115,7 @@ struct LoginViewModelTests {
         #expect(sut.errorMessage != nil)
     }
 
-    @Test func loadingIsFalsAfterLoginCompletes() async {
+    @Test func loadingIsFalseAfterLoginCompletes() async {
         let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
         sut.email = "user@example.com"
         sut.password = "password123"
@@ -90,6 +143,14 @@ struct LoginViewModelTests {
         sut.email = "user@example.com"
         sut.password = "password123"
         await sut.login()
+
+        sut.clearError()
+
+        #expect(sut.errorMessage == nil)
+    }
+
+    @Test func clearErrorIsANoOpWhenThereIsNoError() {
+        let sut = LoginViewModel(authService: MockAuthService(), events: EventBus())
 
         sut.clearError()
 
