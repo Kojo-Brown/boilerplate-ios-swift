@@ -4,8 +4,27 @@ import Testing
 @testable import Features
 @testable import Networking
 
+/// This suite absorbed `BiometricAuthViewModelXCTests`, the XCTest mirror of
+/// it. Seven of its twenty-four cases asserted something this file did not —
+/// the initial state, `.none` as a biometric type, `isLoading` after the
+/// unavailable path, `.systemCancelled`, `clearError()` with nothing to clear,
+/// and the two halves of `reset()` that the one existing reset case does not
+/// reach — and seventeen were the same assertions in the other dialect. The
+/// seven are below. See `docs/testing.md`.
 @MainActor
 struct BiometricAuthViewModelTests {
+
+    // MARK: - Initial state
+
+    @Test func newViewModelIsIdleAndUnauthenticated() {
+        let mock = MockBiometricAuthService()
+        let sut = BiometricAuthViewModel(service: mock)
+
+        #expect(!sut.isAuthenticated)
+        #expect(!sut.isLoading)
+        #expect(sut.errorMessage == nil)
+    }
+
     // MARK: - Service availability
 
     @Test func biometricTypeReflectsService() {
@@ -34,6 +53,16 @@ struct BiometricAuthViewModelTests {
         mock.stubbedIsAvailable = false
         let sut = BiometricAuthViewModel(service: mock)
         #expect(!sut.isAvailable)
+    }
+
+    /// A device with no enrolled biometry reports `.none` rather than an
+    /// absent value, and the screen renders a different control for it, so
+    /// the third case is as load-bearing as the two kinds of sensor.
+    @Test func noBiometryTypeReflectsService() {
+        let mock = MockBiometricAuthService()
+        mock.stubbedBiometricType = BiometricType.none
+        let sut = BiometricAuthViewModel(service: mock)
+        #expect(sut.biometricType == BiometricType.none)
     }
 
     // MARK: - Successful authentication
@@ -76,6 +105,14 @@ struct BiometricAuthViewModelTests {
         #expect(mock.authenticateCallCount == 0)
         #expect(sut.errorMessage != nil)
         #expect(!sut.isAuthenticated)
+    }
+
+    @Test func loadingIsFalseAfterUnavailableBiometrics() async {
+        let mock = MockBiometricAuthService()
+        mock.stubbedIsAvailable = false
+        let sut = BiometricAuthViewModel(service: mock)
+        await sut.authenticate()
+        #expect(!sut.isLoading)
     }
 
     // MARK: - Error cases
@@ -122,6 +159,14 @@ struct BiometricAuthViewModelTests {
         #expect(!sut.isLoading)
     }
 
+    @Test func systemCancelledSetsErrorMessage() async {
+        let mock = MockBiometricAuthService()
+        mock.stubbedError = .systemCancelled
+        let sut = BiometricAuthViewModel(service: mock)
+        await sut.authenticate()
+        #expect(sut.errorMessage != nil)
+    }
+
     // MARK: - State management
 
     @Test func clearErrorNilsErrorMessage() async {
@@ -141,6 +186,44 @@ struct BiometricAuthViewModelTests {
         sut.reset()
         #expect(!sut.isAuthenticated)
         #expect(sut.errorMessage == nil)
+    }
+
+    @Test func clearErrorIsANoOpWhenThereIsNoError() {
+        let mock = MockBiometricAuthService()
+        let sut = BiometricAuthViewModel(service: mock)
+
+        sut.clearError()
+
+        #expect(sut.errorMessage == nil)
+    }
+
+    /// `reset()` after a *failure* is the path the retry button takes, and it
+    /// is not the one `resetClearsAuthenticatedAndError` exercises: there the
+    /// error was already nil before `reset()` was called, so a `reset()` that
+    /// forgot to clear it would still have passed.
+    @Test func resetClearsTheErrorFromAFailedAttempt() async {
+        let mock = MockBiometricAuthService()
+        mock.stubbedError = .lockout
+        let sut = BiometricAuthViewModel(service: mock)
+        await sut.authenticate()
+        #expect(sut.errorMessage != nil)
+
+        sut.reset()
+
+        #expect(sut.errorMessage == nil)
+    }
+
+    /// The sensor the device has is not session state, so `reset()` must leave
+    /// it alone — a reset that cleared it would leave the screen offering a
+    /// generic passcode prompt where Touch ID was available.
+    @Test func resetLeavesTheBiometricTypeAlone() {
+        let mock = MockBiometricAuthService()
+        mock.stubbedBiometricType = .touchID
+        let sut = BiometricAuthViewModel(service: mock)
+
+        sut.reset()
+
+        #expect(sut.biometricType == .touchID)
     }
 
     @Test func authenticateCallCountIsTracked() async {

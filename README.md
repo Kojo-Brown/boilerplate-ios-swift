@@ -15,7 +15,7 @@ Modern iOS app starter with clean architecture and ML features.
 | Network | URLSession (async/await) |
 | Auth | Sign in with Apple + Google |
 | ML | Vision (text recognition + barcode scanning) |
-| Testing | XCTest + Swift Testing |
+| Testing | Swift Testing (XCTest still linked, see docs/testing.md) |
 
 ## Quick Start
 
@@ -123,6 +123,9 @@ build its own previews from doubles it ships itself.
   and a right-to-left "fix" to a custom `Layout` that was itself the defect
 - [docs/concurrency.md](./docs/concurrency.md) — the structured-concurrency
   utilities in `Sources/Core/Concurrency`
+- [docs/testing.md](./docs/testing.md) — why the suite is Swift Testing, the
+  three ways a test here can silently stop being able to fail, and when XCTest
+  is still the right answer
 
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

@@ -7,6 +7,17 @@ import Testing
 
 // MARK: - BarcodeScannerViewModel Tests
 
+/// `CameraService` and `MockBarcodeScannerService` are injected so these run
+/// without AVFoundation hardware access: what is asserted here is the
+/// state-machine transitions observable without live camera frames, and the
+/// value types the Vision results are projected into. The full camera +
+/// Vision pipeline belongs to an integration test.
+///
+/// This suite absorbed `BarcodeScannerViewModelXCTests`, the XCTest mirror of
+/// it. Of its twenty-three cases, two asserted something this file did not —
+/// that `stop()` is idempotent, and that the error description is not merely
+/// non-nil but non-empty — and the rest were the same assertions in the other
+/// dialect, several of them split one-per-raw-value. See `docs/testing.md`.
 @MainActor
 struct BarcodeScannerViewModelTests {
     // MARK: - Initial state
@@ -24,6 +35,15 @@ struct BarcodeScannerViewModelTests {
 
     @Test func stopSetsIsScanningToFalse() {
         let sut = makeViewModel()
+        sut.stop()
+        #expect(!sut.isScanning)
+    }
+
+    /// `stop()` arrives from `onDisappear` as well as from the button, so it
+    /// can land twice with no `start()` between.
+    @Test func stopIsIdempotent() {
+        let sut = makeViewModel()
+        sut.stop()
         sut.stop()
         #expect(!sut.isScanning)
     }
@@ -100,6 +120,19 @@ struct BarcodeScannerViewModelTests {
     @Test func barcodeScanErrorHasLocalizedDescription() {
         let error = BarcodeScanError.processingFailed("network timeout")
         #expect(error.errorDescription?.contains("network timeout") == true)
+    }
+
+    /// `errorDescription?.isEmpty == false` was how the XCTest mirror put
+    /// this, and it is a check that cannot fail: a nil description makes the
+    /// comparison false too, so the assertion reads as satisfied exactly when
+    /// there is no message to show the user. `#require` is the difference —
+    /// it fails the test on nil and hands the non-optional value on.
+    @Test func barcodeScanErrorDescriptionIsNotEmpty() throws {
+        let error = BarcodeScanError.processingFailed("any reason")
+
+        let description = try #require(error.errorDescription)
+
+        #expect(!description.isEmpty)
     }
 
     // MARK: - Helpers

@@ -354,6 +354,29 @@ jobs:
       - name: Audit the crash and hang reporting pipeline
         run: python3 Tools/assert-crash-reporting.py
 
+      # Phase 12 item 1. The suite is Swift Testing now, and the two frameworks
+      # are built to share one target — which is what makes the migration
+      # dangerous rather than safe. Every wrong combination compiles, links,
+      # runs, and reports success: an `XCTAssert` inside a `@Test` reports to
+      # the current XCTestCase and there is not one, a `#expect` inside an
+      # `XCTestCase` reports to no current Swift Testing test, and a
+      # `func testFoo()` left behind in a migrated suite is discovered by
+      # neither framework, so it compiles and is never called again. That last
+      # one is how a migration deletes coverage while every file still looks
+      # full of tests.
+      #
+      # It cannot be a Swift test, because the failure it catches is tests not
+      # running. Each of its five rules was checked against the defect it names
+      # before this step was added. XCTest is not banned — it is still the only
+      # way to write a `measure` baseline or drive XCUIApplication, which Phase
+      # 12 item 4 will need — but an XCTest suite has to be recorded with its
+      # reason, and the allowlist is checked in both directions.
+      #
+      # Syntactic, like the audits above it: no toolchain, no resolved packages,
+      # no simulator, and runnable on the scheduled agent's Linux box.
+      - name: Audit which test framework each suite can actually fail in
+        run: python3 Tools/assert-test-framework.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

@@ -235,8 +235,13 @@ was hit rather than a precaution:
 * **`settle()` suspends; it does not pump.** `RunLoop.run(until:)` and a
   `while !done { await Task.yield() }` loop both wait while *holding* the main
   actor, and this suite runs in parallel with every other one in the bundle.
-  `SocialLoginViewModelXCTests` is `@MainActor` and has twice been hung into its
-  two-minute execution allowance by exactly that (SPEC.md, Phase 9 item 6). An
+  `SocialLoginViewModelXCTests` was `@MainActor` and was twice hung into
+  XCTest's two-minute execution allowance by exactly that (SPEC.md, Phase 9
+  item 6). That suite is gone — Phase 12 item 1 folded it into the Swift
+  Testing suite for the same type, which has no implicit wall-clock allowance
+  to blow (see [docs/testing.md](./testing.md)) — but the hazard it was the
+  symptom of is not: holding the main actor still stalls every other
+  `@MainActor` suite in the bundle. An
   `await` hands the main actor back, which is both what lets SwiftUI's
   transaction run and what keeps the rest of the bundle moving. `dismount()`
   exists for the same reason in the other direction: a visible `UIWindow` is

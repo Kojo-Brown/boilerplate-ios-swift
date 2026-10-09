@@ -120,6 +120,14 @@ struct HomeViewModelConcurrencyTests {
         viewModel.startLiveUpdates(interval: .milliseconds(20))
         try await Task.sleep(for: .milliseconds(100))
 
+        // Twice, deliberately. This absorbs the XCTest mirror's
+        // `testStartAndStopLiveUpdatesDoesNotLeakTask`, whose only expectation
+        // was that a second stop does not trap — an expectation that survives
+        // the deletion of the call it was guarding. Here it rides the
+        // assertions below, which hold the stream to having actually gone
+        // quiet, and it costs no extra poller in a bundle that runs these in
+        // parallel with everything else.
+        viewModel.stopLiveUpdates()
         viewModel.stopLiveUpdates()
 
         // Allow any in-flight yield to settle
@@ -167,6 +175,11 @@ struct HomeViewModelConcurrencyTests {
         }
         #expect(viewModel.items.count > baseline, "the stream never ticked before onDisappear")
 
+        // Twice, for the reason `stopLiveUpdatesHaltsGrowth` now stops twice:
+        // a view torn down while already off screen gets a second
+        // `onDisappear`, and the mirror's own case for it asserted only that
+        // this does not trap.
+        viewModel.onDisappear()
         viewModel.onDisappear()
 
         // Wait until two consecutive reads agree — the stream has gone quiet —
