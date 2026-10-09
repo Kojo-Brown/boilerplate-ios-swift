@@ -13,7 +13,10 @@ import Testing
 /// mirror held thirteen cases this file did not — the initial-state reads, the
 /// non-matching and case-insensitive search paths, which row `deleteItems`
 /// actually removes, and the live-update lifecycle — and seven that were the
-/// same assertions written twice. The unique ones are below; the duplicates are not,
+/// same assertions written twice. Eleven of the thirteen are below; the two
+/// that needed a running poller went to `HomeViewModelConcurrencyTests`
+/// instead, for the reason recorded on
+/// `stoppingLiveUpdatesThatNeverStartedIsHarmless`. The unique ones are below; the duplicates are not,
 /// because two spellings of one assertion are one test and one maintenance
 /// cost. See `docs/testing.md`.
 @MainActor
@@ -166,43 +169,25 @@ struct HomeViewModelTests {
 
     // MARK: - Live updates lifecycle
 
-    /// Stopping a stream that was never started, and stopping one twice, are
-    /// both things a disappearing view does — `onDisappear` can arrive without
-    /// a matching `startLiveUpdates`, and twice if the view is torn down while
-    /// already off screen. Neither may trap, and neither may leave a row
-    /// behind: the assertions are there because a test whose only expectation
-    /// is "it did not crash" passes just as happily when the call it was
-    /// guarding has been deleted.
+    /// `onDisappear` can arrive with no matching `startLiveUpdates` at all —
+    /// a view that was never scrolled to is still torn down — so the first
+    /// `stopLiveUpdates()` has to find a nil task and do nothing with it.
+    ///
+    /// This is the only live-update case in this suite, because it is the only
+    /// one that starts no stream. Its two siblings in the XCTest mirror
+    /// (`testStartAndStopLiveUpdatesDoesNotLeakTask`,
+    /// `testOnDisappearCancelsLiveUpdates`) asserted that a *second* stop is a
+    /// no-op, and they are folded into `HomeViewModelConcurrencyTests` instead
+    /// — the suite that owns every test which starts a real poller, carries the
+    /// `.timeLimit(.minutes(1))` backstop, and waits by polling rather than by
+    /// a deadline that belongs to the runner. Those two cases asserted nothing
+    /// but "it did not crash", which passes just as happily once the call they
+    /// were guarding is deleted; folded in, they ride assertions that the
+    /// stream really ticked first and really went quiet after.
     @Test func stoppingLiveUpdatesThatNeverStartedIsHarmless() {
         let sut = HomeViewModel()
 
         sut.stopLiveUpdates()
-        sut.stopLiveUpdates()
-
-        #expect(sut.items.isEmpty)
-        #expect(sut.itemsVersion == 0)
-    }
-
-    @Test func stoppingLiveUpdatesTwiceIsHarmless() {
-        let sut = HomeViewModel()
-        sut.startLiveUpdates(interval: .seconds(60))
-
-        sut.stopLiveUpdates()
-        sut.stopLiveUpdates()
-
-        // The polling task is a child of this `@MainActor` context and the
-        // body never suspends between the three calls, so it cannot have run:
-        // what is asserted is that cancellation happened before any batch
-        // could land, not that the stream is merely slow.
-        #expect(sut.items.isEmpty)
-        #expect(sut.itemsVersion == 0)
-    }
-
-    @Test func onDisappearCancelsLiveUpdatesAndIsRepeatable() {
-        let sut = HomeViewModel()
-        sut.startLiveUpdates(interval: .seconds(60))
-
-        sut.onDisappear()
         sut.onDisappear()
 
         #expect(sut.items.isEmpty)

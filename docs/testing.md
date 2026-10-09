@@ -1,6 +1,6 @@
 # Testing: Swift Testing, XCTest, and which one a suite can fail in
 
-The suite is Swift Testing. 1,032 `@Test` cases across 73 files, and no
+The suite is Swift Testing. 1,030 `@Test` cases across 73 files, and no
 `XCTestCase` left in the bundle.
 
 That last sentence is the part worth being careful about, because the two
@@ -22,7 +22,9 @@ other dialect: `XCTAssertEqual(sut.items.count, firstCount)` beside
 expectation, twice. Of the 127 methods, 87 were a second spelling of an
 assertion the Swift Testing suite already made; 40 asserted something it did
 not, and those 40 are now in it — per suite: Home 13, Biometric 7, Social 7,
-Login 6, TextRecognition 5, Barcode 2.
+Login 6, TextRecognition 5, Barcode 2. Two of Home's thirteen landed in
+`HomeViewModelConcurrencyTests` rather than `HomeViewModelTests`; see the
+placement rule at the end of this page.
 
 Two of the 40 were strengthened on the way across, because they could not
 fail as written:
@@ -128,3 +130,14 @@ against XCTest.
   Swift Testing runs suites in parallel by default. See
   [docs/view-identity.md](./view-identity.md) for what that cost before it was
   understood.
+* **A test that starts something that outlives it goes in the suite built for
+  that, not beside the synchronous tests for the same type.** A live
+  `PollingStream`, a window, a subscription: all of them keep running after the
+  case that made them returns, and Swift Testing runs the rest of the bundle
+  alongside. `HomeViewModelConcurrencyTests` and `SessionObserverTests` are
+  where those live, and both carry `.timeLimit(.minutes(1))` and wait by
+  polling until the state they assert on holds still — never by sleeping a
+  fixed number of milliseconds, which asserts a deadline belonging to the
+  runner rather than anything about the code. Phase 12 item 1 got this wrong
+  on its first push: it ported three `HomeViewModel` live-update cases into the
+  plain suite, where neither the backstop nor the idiom applies.
