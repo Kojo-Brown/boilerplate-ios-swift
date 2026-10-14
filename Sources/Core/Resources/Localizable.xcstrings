@@ -276,6 +276,18 @@
           }
         }
       }
+    },
+    "error.profileName.empty": {
+      "comment": "Shown when a profile save is refused because the name field was blank.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -197,4 +197,13 @@ package enum CoreStrings {
             coreString("error.merge.staleServerCopy", "The server answered a save with an older revision.")
         }
     }
+
+    // MARK: Profile name
+
+    package enum ProfileName {
+
+        package static var empty: LocalizedStringResource {
+            coreString("error.profileName.empty", "The name field was blank when a save was attempted.")
+        }
+    }
 }

@@ -81,6 +81,9 @@ struct SendableConformanceTests {
             auditSendable(BiometricType.self),
             auditSendable(BiometricAuthError.self),
             auditSendable(KeychainError.self),
+            // Thrown from a use-case and caught in an effect handler, so it
+            // crosses an isolation boundary on the one path it has.
+            auditSendable(ProfileNameError.self),
             auditSendable(KeychainWrapper.self),
             auditSendable(FieldUpdate<String>.self),
             // Conditional and *unchecked*: the conformance rests on the
@@ -90,7 +93,7 @@ struct SendableConformanceTests {
             // widened to every payload.
             auditSendable(CopyOnWriteBox<[Int]>.self),
         ]
-        expectAudit(audited, count: 36)
+        expectAudit(audited, count: 37)
     }
 
     /// Types that are `Sendable` only by inference — nothing in their

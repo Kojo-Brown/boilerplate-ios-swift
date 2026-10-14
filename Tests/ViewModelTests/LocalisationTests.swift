@@ -62,6 +62,7 @@ struct CoreLocalisationTests {
         (CoreStrings.Pagination.emptyPageLimit(4), "error.pagination.emptyPageLimit %lld"),
         (CoreStrings.Persistence.userNotFound, "error.persistence.userNotFound"),
         (CoreStrings.Persistence.staleServerCopy, "error.merge.staleServerCopy"),
+        (CoreStrings.ProfileName.empty, "error.profileName.empty"),
     ]
 
     /// Written as a loop rather than `@Test(arguments:)`, and the reason is

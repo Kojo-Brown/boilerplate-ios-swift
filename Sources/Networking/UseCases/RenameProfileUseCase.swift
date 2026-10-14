@@ -40,8 +40,14 @@ package struct RenameProfileUseCase: Sendable {
     /// a trailing space is what a thumb and iOS autocorrection produce, not an
     /// instruction, and the server has no way to tell the difference once it is
     /// stored.
+    ///
+    /// - Throws: ``ProfileNameError`` when `requested` is no name at all, in
+    ///   which case no request is made. A blank name is not something the
+    ///   server refuses on this app's behalf — it stores it, and the profile
+    ///   row renders a blank the reader cannot see in order to replace.
     package func rename(to requested: String) async throws -> User {
         let name = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw ProfileNameError.empty }
 
         return try await strategy.updateProfile(name: name)
     }
