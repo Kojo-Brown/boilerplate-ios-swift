@@ -276,6 +276,30 @@
           }
         }
       }
+    },
+    "error.profileName.empty": {
+      "comment": "Shown when a profile save is refused because the name field was blank.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name."
+          }
+        }
+      }
+    },
+    "error.profileName.tooLong %lld": {
+      "comment": "Shown when a profile save is refused for length. %lld is the limit in characters.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A name can be at most %lld characters."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

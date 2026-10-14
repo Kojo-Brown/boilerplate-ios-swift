@@ -126,6 +126,9 @@ build its own previews from doubles it ships itself.
 - [docs/testing.md](./docs/testing.md) — why the suite is Swift Testing, the
   three ways a test here can silently stop being able to fail, and when XCTest
   is still the right answer
+- [docs/tdd-kata.md](./docs/tdd-kata.md) — one use-case built test-first in
+  four cycles, a commit per step: what each test was for, what the refactor
+  decided, and which of the kata's claims a Linux agent cannot stand behind
 
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

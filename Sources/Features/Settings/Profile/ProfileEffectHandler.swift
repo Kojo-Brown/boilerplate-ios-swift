@@ -22,6 +22,13 @@ import Networking
 /// that got past the window leaves the window closed behind it rather than
 /// costing the next read a second request.
 ///
+/// The write does not go to the strategy directly. It goes through
+/// ``RenameProfileUseCase``, which is where a name is checked, because this
+/// type is reachable without the button that was supposed to have checked it:
+/// `perform(.saveName(_:))` is a method, and `ProfileFeature.State.canSave`
+/// governs a `disabled` modifier. The read has no equivalent rule and so has no
+/// equivalent indirection.
+///
 /// A `struct`, and `Sendable` because `EffectHandling` is: `perform` runs off
 /// the main actor, which is what keeps the store's `await` a real hop rather
 /// than a formality.
@@ -34,6 +41,11 @@ package struct ProfileEffectHandler: EffectHandling {
     private let strategyFactory: any SyncStrategyFactory
     private let events: any EventPublishing
 
+    /// Built from the same strategy rather than injected beside it: there is
+    /// one write path here, and a second constructor parameter would let a
+    /// caller point the read and the write at different servers.
+    private let renameProfile: RenameProfileUseCase
+
     package init(
         strategy: any SyncStrategy,
         strategyFactory: any SyncStrategyFactory,
@@ -42,6 +54,7 @@ package struct ProfileEffectHandler: EffectHandling {
         self.strategy = strategy
         self.strategyFactory = strategyFactory
         self.events = events
+        renameProfile = RenameProfileUseCase(strategy: strategy)
     }
 
     package func perform(_ effect: Effect) async -> Action? {
@@ -80,9 +93,15 @@ package struct ProfileEffectHandler: EffectHandling {
         }
     }
 
+    /// `ProfileNameError` lands in the same `catch` as a transport failure and
+    /// the same `SyncErrorMessage` box, which is right rather than merely
+    /// convenient: the screen renders one `saveErrorMessage`, and "Enter a
+    /// name." is as much an answer to "why did my save not happen" as "The
+    /// request never reached the server." is. Both are `LocalizedError`, so
+    /// both arrive as a sentence.
     private func save(_ name: String) async -> Action {
         do {
-            let updated = try await strategy.updateProfile(name: name)
+            let updated = try await renameProfile.rename(to: name)
             return .profileSaved(.success(updated))
         } catch {
             return .profileSaved(.failure(SyncErrorMessage(error)))
