@@ -141,3 +141,9 @@ against XCTest.
   runner rather than anything about the code. Phase 12 item 1 got this wrong
   on its first push: it ported three `HomeViewModel` live-update cases into the
   plain suite, where neither the backstop nor the idiom applies.
+
+## The worked example
+
+[docs/tdd-kata.md](./tdd-kata.md) walks one use-case built test-first under
+these conventions — four cycles, a commit per step, and an honest account of
+what a Linux agent can and cannot verify about a red it never ran.

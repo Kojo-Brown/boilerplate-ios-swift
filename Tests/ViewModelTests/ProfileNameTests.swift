@@ -4,6 +4,10 @@ import Testing
 
 /// The rules, asserted where they now live.
 ///
+/// The type is the refactor step of `docs/tdd-kata.md`: the three `guard`s it
+/// holds were discovered inside `RenameProfileUseCase`, one cycle at a time,
+/// and moved here once the fourth made the shape obvious.
+///
 /// `RenameProfileUseCaseTests` asserts the boundary — refused, and nothing left
 /// for the server — and is deliberately indifferent to which rule was broken.
 /// This suite is the other half: which rule, and what the refusal says.

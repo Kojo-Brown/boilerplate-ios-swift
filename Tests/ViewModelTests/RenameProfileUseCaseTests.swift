@@ -3,6 +3,10 @@ import Testing
 @testable import Core
 @testable import Networking
 
+// Phase 12 item 2. This suite was written four cases at a time, each one
+// before the behaviour it describes; `docs/tdd-kata.md` is the walk-through,
+// including why cycle 4's second case was green the moment it was written.
+
 // MARK: - Fixture
 
 /// A strategy standing in for the server, with a profile already on it.
