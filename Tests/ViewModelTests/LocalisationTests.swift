@@ -63,6 +63,7 @@ struct CoreLocalisationTests {
         (CoreStrings.Persistence.userNotFound, "error.persistence.userNotFound"),
         (CoreStrings.Persistence.staleServerCopy, "error.merge.staleServerCopy"),
         (CoreStrings.ProfileName.empty, "error.profileName.empty"),
+        (CoreStrings.ProfileName.tooLong(50), "error.profileName.tooLong %lld"),
     ]
 
     /// Written as a loop rather than `@Test(arguments:)`, and the reason is

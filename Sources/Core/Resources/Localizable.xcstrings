@@ -288,6 +288,18 @@
           }
         }
       }
+    },
+    "error.profileName.tooLong %lld": {
+      "comment": "Shown when a profile save is refused for length. %lld is the limit in characters.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A name can be at most %lld characters."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

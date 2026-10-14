@@ -205,5 +205,10 @@ package enum CoreStrings {
         package static var empty: LocalizedStringResource {
             coreString("error.profileName.empty", "The name field was blank when a save was attempted.")
         }
+
+        /// - Parameter limit: the longest name the app will send, in characters.
+        package static func tooLong(_ limit: Int) -> LocalizedStringResource {
+            coreString("error.profileName.tooLong \(limit)", "%lld is the longest name allowed.")
+        }
     }
 }

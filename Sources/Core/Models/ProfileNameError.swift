@@ -23,9 +23,17 @@ package enum ProfileNameError: LocalizedError, Equatable {
     /// then renders as a blank the reader cannot see in order to replace.
     case empty
 
+    /// Longer than `limit` characters, counted the way a reader counts them.
+    ///
+    /// The limit travels with the error because the message states it, and a
+    /// sentence that names a number the thrower did not supply is a sentence
+    /// that goes stale the first time the number moves.
+    case tooLong(limit: Int)
+
     package var errorDescription: String? {
         switch self {
         case .empty: CoreStrings.ProfileName.empty.string
+        case .tooLong(let limit): CoreStrings.ProfileName.tooLong(limit).string
         }
     }
 }

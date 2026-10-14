@@ -27,6 +27,14 @@ import Foundation
 /// transport, below the screen.
 package struct RenameProfileUseCase: Sendable {
 
+    /// The longest name this app will send, in characters.
+    ///
+    /// The app owns the ceiling rather than deferring to the server's, which is
+    /// not a limit this client knows and whose rejection arrives as a status
+    /// code with no field name in it — so a screen that waited for it could
+    /// report nothing more useful than "the save failed".
+    package static let maximumNameLength = 50
+
     private let strategy: any SyncStrategy
 
     package init(strategy: any SyncStrategy) {
@@ -41,13 +49,20 @@ package struct RenameProfileUseCase: Sendable {
     /// instruction, and the server has no way to tell the difference once it is
     /// stored.
     ///
-    /// - Throws: ``ProfileNameError`` when `requested` is no name at all, in
-    ///   which case no request is made. A blank name is not something the
-    ///   server refuses on this app's behalf — it stores it, and the profile
-    ///   row renders a blank the reader cannot see in order to replace.
+    /// - Throws: ``ProfileNameError`` when `requested` is no name at all or
+    ///   does not fit, in which case no request is made. Neither is something
+    ///   the server refuses on this app's behalf: it stores a blank name, and
+    ///   its own ceiling — whatever it is — is reported as a status code with
+    ///   no field name in it.
     package func rename(to requested: String) async throws -> User {
         let name = requested.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ProfileNameError.empty }
+        // `count` on a `String` counts grapheme clusters: what a reader calls a
+        // character and what the text cursor moves over. `utf16.count` would
+        // refuse a 20-character name of family emoji as if it were 220.
+        guard name.count <= Self.maximumNameLength else {
+            throw ProfileNameError.tooLong(limit: Self.maximumNameLength)
+        }
 
         return try await strategy.updateProfile(name: name)
     }
