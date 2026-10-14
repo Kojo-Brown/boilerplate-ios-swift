@@ -84,6 +84,7 @@ struct SendableConformanceTests {
             // Thrown from a use-case and caught in an effect handler, so it
             // crosses an isolation boundary on the one path it has.
             auditSendable(ProfileNameError.self),
+            auditSendable(ProfileName.self),
             auditSendable(KeychainWrapper.self),
             auditSendable(FieldUpdate<String>.self),
             // Conditional and *unchecked*: the conformance rests on the
@@ -93,7 +94,7 @@ struct SendableConformanceTests {
             // widened to every payload.
             auditSendable(CopyOnWriteBox<[Int]>.self),
         ]
-        expectAudit(audited, count: 37)
+        expectAudit(audited, count: 38)
     }
 
     /// Types that are `Sendable` only by inference — nothing in their
@@ -223,8 +224,11 @@ struct SendableConformanceTests {
             auditSendable((any RepositoryTelemetry).self),
             auditSendable(OSLogRepositoryTelemetry.self),
             auditSendable(RecordingRepositoryTelemetry.self),
+            // A use-case over the strategy layer, holding `any SyncStrategy`:
+            // the same argument as the decorators above, one layer up.
+            auditSendable(RenameProfileUseCase.self),
         ]
-        expectAudit(audited, count: 41)
+        expectAudit(audited, count: 42)
     }
 
     /// The doubles this item converted off `@unchecked Sendable` are now

@@ -7,15 +7,18 @@ import Foundation
 ///
 /// The write it performs is one line — `strategy.updateProfile(name:)` — and a
 /// screen can call that line itself, which is what `ProfileEffectHandler` did.
-/// What a screen cannot do is be the place a rule about profile names lives:
-/// `ProfileFeature.State.canSave` decides whether the Save button is enabled,
-/// and a button's enablement is not an enforcement point. The effect that
-/// performs the write is reachable without it, a second caller would restate
-/// the rule or forget it, and neither the reducer nor the view is somewhere a
-/// non-UI caller — a deep link, a migration, an onboarding step — would look.
+/// What a screen cannot do is be the place a rule about profile names is
+/// *applied*: `ProfileFeature.State.canSave` decides whether the Save button is
+/// enabled, and a button's enablement is not an enforcement point. The effect
+/// that performs the write is reachable without it, a second caller would
+/// restate the rule or forget it, and neither the reducer nor the view is
+/// somewhere a non-UI caller — a deep link, a migration, an onboarding step —
+/// would look.
 ///
-/// So this is where "what may be sent as a name" is decided, once, between the
-/// screen and the strategy.
+/// So this is where a name is checked on its way to the server, once. What a
+/// valid name *is* belongs to ``ProfileName``, which is a `Core` value type
+/// because the same rules decide whether the Save button is enabled; this type
+/// is the one that refuses to let an unchecked string past it.
 ///
 /// ## Why it lives in `Networking`
 ///
@@ -27,14 +30,6 @@ import Foundation
 /// transport, below the screen.
 package struct RenameProfileUseCase: Sendable {
 
-    /// The longest name this app will send, in characters.
-    ///
-    /// The app owns the ceiling rather than deferring to the server's, which is
-    /// not a limit this client knows and whose rejection arrives as a status
-    /// code with no field name in it — so a screen that waited for it could
-    /// report nothing more useful than "the save failed".
-    package static let maximumNameLength = 50
-
     private let strategy: any SyncStrategy
 
     package init(strategy: any SyncStrategy) {
@@ -44,10 +39,11 @@ package struct RenameProfileUseCase: Sendable {
     /// Sends `requested` as the profile's new name and returns the profile the
     /// server answered with.
     ///
-    /// `requested` is what somebody typed, so it is trimmed before it is sent:
-    /// a trailing space is what a thumb and iOS autocorrection produce, not an
-    /// instruction, and the server has no way to tell the difference once it is
-    /// stored.
+    /// `requested` is what somebody typed, so it is checked rather than
+    /// trusted, and what reaches the server is ``ProfileName/value`` — the
+    /// trimmed form — rather than the keystrokes. A trailing space is what a
+    /// thumb and iOS autocorrection produce, not an instruction, and the server
+    /// has no way to tell the difference once it is stored.
     ///
     /// - Throws: ``ProfileNameError`` when `requested` is no name at all or
     ///   does not fit, in which case no request is made. Neither is something
@@ -55,15 +51,8 @@ package struct RenameProfileUseCase: Sendable {
     ///   its own ceiling — whatever it is — is reported as a status code with
     ///   no field name in it.
     package func rename(to requested: String) async throws -> User {
-        let name = requested.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw ProfileNameError.empty }
-        // `count` on a `String` counts grapheme clusters: what a reader calls a
-        // character and what the text cursor moves over. `utf16.count` would
-        // refuse a 20-character name of family emoji as if it were 220.
-        guard name.count <= Self.maximumNameLength else {
-            throw ProfileNameError.tooLong(limit: Self.maximumNameLength)
-        }
+        let name = try ProfileName(validating: requested)
 
-        return try await strategy.updateProfile(name: name)
+        return try await strategy.updateProfile(name: name.value)
     }
 }
