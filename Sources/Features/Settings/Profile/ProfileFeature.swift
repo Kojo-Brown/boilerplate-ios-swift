@@ -242,12 +242,22 @@ extension ProfileFeature.State {
         draftName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Saving is offered only for a change that is actually a change. A button
-    /// that fires a request to rename "Ada" to "Ada" is a request the server
-    /// answers and the reader learns nothing from.
+    /// Saving is offered only for a name the write would accept, and only when
+    /// it is a change. A button that fires a request to rename "Ada" to "Ada"
+    /// is a request the server answers and the reader learns nothing from.
+    ///
+    /// The first half is ``ProfileName``'s to answer rather than this
+    /// property's, and it used to be spelled here as
+    /// `!candidate.isEmpty && candidate != user.name` — the blank rule and not
+    /// the ceiling, so Save was offered for a name `RenameProfileUseCase`
+    /// refuses. Both now ask the same type, which is the only way a button and
+    /// a write can be guaranteed to agree.
+    ///
+    /// The second half stays here, because it is the one rule that compares two
+    /// values: it needs the loaded profile, which a name does not have.
     package var canSave: Bool {
         guard let user, !isSaving else { return false }
-        let candidate = trimmedDraftName
-        return !candidate.isEmpty && candidate != user.name
+        guard let candidate = try? ProfileName(validating: draftName) else { return false }
+        return candidate.value != user.name
     }
 }

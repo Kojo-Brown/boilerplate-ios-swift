@@ -221,6 +221,44 @@ struct ProfileFeatureTests {
         #expect(strategy.updateCount == 0)
     }
 
+    /// The ceiling reaches the button because both ask `ProfileName` now.
+    /// `canSave` used to be `!candidate.isEmpty && candidate != user.name`,
+    /// which is the blank rule and not the ceiling, so Save was offered for a
+    /// name the write refuses.
+    @Test("Save is not offered for a name past the ceiling")
+    func overlongNamesCannotBeSaved() async {
+        let strategy = MockSyncStrategy()
+        strategy.stubbedUser = User(email: "save@example.invalid", name: "Before")
+        let store = makeStore(strategy: strategy)
+        await store.send(.appeared)
+
+        await store.send(.draftNameEdited(String(repeating: "a", count: 51)))
+
+        #expect(!store.state.canSave)
+        await store.send(.saveTapped)
+        #expect(strategy.updateCount == 0)
+    }
+
+    /// And the rule holds without the button, which is the reason the use-case
+    /// exists: `canSave` governs a `disabled` modifier, while this method is
+    /// reachable by anything holding the handler.
+    @Test("A name past the ceiling is refused by the effect, not only the button")
+    func overlongNamesAreRefusedAtTheWrite() async {
+        let strategy = MockSyncStrategy()
+        strategy.stubbedUser = User(email: "save@example.invalid", name: "Before")
+        let handler = ProfileEffectHandler(
+            strategy: strategy,
+            strategyFactory: MockSyncStrategyFactory(stubbedStrategy: strategy),
+            events: EventBus()
+        )
+
+        let action = await handler.perform(.saveName(String(repeating: "a", count: 51)))
+
+        let refusal = SyncErrorMessage(ProfileNameError.tooLong(limit: 50))
+        #expect(action == .profileSaved(.failure(refusal)))
+        #expect(strategy.updateCount == 0)
+    }
+
     @Test("Nothing is sent before a user has loaded")
     func nothingIsSentBeforeAUserHasLoaded() async {
         let strategy = MockSyncStrategy()
