@@ -97,4 +97,58 @@ struct RenameProfileUseCaseTests {
 
         #expect(strategy.updateCount == 0)
     }
+
+    // MARK: - How long a name may be
+
+    /// Asserted on both sides of the boundary, because a limit is the one kind
+    /// of rule where the off-by-one is the whole defect: a ceiling checked with
+    /// `<` instead of `<=` refuses a name that satisfies the rule the error
+    /// message states, and no test that only tries 51 characters can tell.
+    ///
+    /// The number is written out rather than read off the type under test. A
+    /// test that says `maximumLength` asserts that the code agrees with itself,
+    /// and goes on passing when the constant moves — which is the change a
+    /// reader of this suite most needs to see fail.
+    @Test("A name at the ceiling is accepted and one character past it is not")
+    func theCeilingIsEnforcedAtItsBoundary() async throws {
+        let strategy = strategyHolding(name: "Ada")
+        let rename = RenameProfileUseCase(strategy: strategy)
+        let atTheCeiling = String(repeating: "a", count: 50)
+
+        let saved = try await rename.rename(to: atTheCeiling)
+        #expect(saved.name == atTheCeiling)
+
+        await #expect(throws: (any Error).self) {
+            try await rename.rename(to: atTheCeiling + "b")
+        }
+
+        #expect(strategy.requestedNames == [atTheCeiling])
+    }
+
+    /// This one is green the moment it is written, and it is in the red step
+    /// anyway: its job is to fail on the *wrong* green rather than on the
+    /// missing one. "At most 50 characters" has three plausible spellings in
+    /// Swift and only one of them is the rule a reader would recognise.
+    ///
+    /// Twenty of these count as 20 characters, 140 Unicode scalars and 220
+    /// UTF-16 code units, because each is four emoji joined by three
+    /// zero-width joiners. `String.count` counts grapheme clusters — what a
+    /// reader calls a character, and what the text cursor moves over — so a
+    /// ceiling checked against `utf16.count` or `unicodeScalars.count` would
+    /// refuse a name four to eleven times shorter than the one the error
+    /// message promises, and every name it refused would be somebody's.
+    @Test("The ceiling counts characters as a reader counts them")
+    func theCeilingCountsCharactersNotCodeUnits() async throws {
+        let strategy = strategyHolding(name: "Ada")
+        let rename = RenameProfileUseCase(strategy: strategy)
+        let families = String(repeating: "👩‍👩‍👧‍👦", count: 20)
+
+        #expect(families.count == 20)
+        #expect(families.unicodeScalars.count == 140)
+        #expect(families.utf16.count == 220)
+
+        let saved = try await rename.rename(to: families)
+
+        #expect(saved.name == families)
+    }
 }
