@@ -64,4 +64,37 @@ struct RenameProfileUseCaseTests {
         #expect(saved.name == "Ada Lovelace")
         #expect(strategy.requestedNames == ["Ada Lovelace"])
     }
+
+    // MARK: - A name that is not a name
+
+    /// The screen already refuses to enable Save for a blank field, and that is
+    /// not the same as this. `canSave` guards a control; this guards the write,
+    /// which `ProfileEffectHandler.perform(.saveName(_:))` reaches without
+    /// asking any control whether it was enabled.
+    ///
+    /// What makes the second assertion the load-bearing one: a blank name sent
+    /// to the server is accepted by it. The profile row then renders empty, the
+    /// reader has no way back to a name they can see, and nothing failed.
+    ///
+    /// The error's own identity is asserted where the rule lives rather than
+    /// here — see `ProfileNameTests` after cycle 4's refactor. What this suite
+    /// is for is the boundary: refused, and nothing left for the server.
+    @Test(
+        "A name that is blank once trimmed is refused with no request made",
+        arguments: [
+            "",
+            " ",
+            "   \n\t ",
+        ]
+    )
+    func blankNamesAreRefusedWithNoRequestMade(typed: String) async {
+        let strategy = strategyHolding(name: "Ada")
+        let rename = RenameProfileUseCase(strategy: strategy)
+
+        await #expect(throws: (any Error).self) {
+            try await rename.rename(to: typed)
+        }
+
+        #expect(strategy.updateCount == 0)
+    }
 }
