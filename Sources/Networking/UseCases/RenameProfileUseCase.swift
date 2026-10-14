@@ -1,4 +1,5 @@
 import Core
+import Foundation
 
 /// Renames the signed-in user's profile.
 ///
@@ -34,7 +35,14 @@ package struct RenameProfileUseCase: Sendable {
 
     /// Sends `requested` as the profile's new name and returns the profile the
     /// server answered with.
+    ///
+    /// `requested` is what somebody typed, so it is trimmed before it is sent:
+    /// a trailing space is what a thumb and iOS autocorrection produce, not an
+    /// instruction, and the server has no way to tell the difference once it is
+    /// stored.
     package func rename(to requested: String) async throws -> User {
-        try await strategy.updateProfile(name: requested)
+        let name = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return try await strategy.updateProfile(name: name)
     }
 }
