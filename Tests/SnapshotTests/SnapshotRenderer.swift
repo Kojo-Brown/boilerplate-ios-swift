@@ -1,3 +1,4 @@
+import CoreGraphics
 import SwiftUI
 import UIKit
 
@@ -157,8 +158,16 @@ enum SnapshotRenderer {
         renderer.isOpaque = true
         renderer.proposedSize = ProposedViewSize(width: width, height: nil)
 
+        // `performAsCurrent` hands back nothing — its closure is `() -> Void`,
+        // not the generic form — so the render's result comes out through a
+        // local. The closure is non-escaping and called synchronously, which is
+        // what lets it touch this main-actor renderer at all.
         let traits = UITraitCollection(userInterfaceStyle: appearance.scheme.userInterfaceStyle)
-        guard let image = traits.performAsCurrent({ renderer.cgImage }) else {
+        var rendered: CGImage?
+        traits.performAsCurrent {
+            rendered = renderer.cgImage
+        }
+        guard let image = rendered else {
             throw Failure.rendererProducedNoImage
         }
         guard let bitmap = SnapshotBitmap(image) else {
