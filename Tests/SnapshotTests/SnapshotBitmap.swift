@@ -92,10 +92,19 @@ extension SnapshotBitmap {
     /// Draws `image` into a context of this type's one layout and keeps the
     /// bytes.
     ///
-    /// The flip is not decoration. Core Graphics draws an image into a
-    /// bottom-left origin, so without it row 0 of ``pixels`` is the bottom row
-    /// of the picture and every coordinate this file reports — a region, a diff
-    /// — is upside down with respect to the image somebody is looking at.
+    /// No flip, and the first version of this had one. A `CGContext`'s
+    /// *coordinate system* has its origin at the lower left, which is the fact
+    /// that makes a flip look necessary; its *buffer* starts at the top-left
+    /// pixel, which is the fact that matters here. Translating and scaling by
+    /// -1 before drawing therefore does not correct an inversion, it
+    /// introduces one: row 0 of ``pixels`` becomes the bottom row of the
+    /// picture, and every coordinate reported out of this file — a region, a
+    /// diff image — is upside down with respect to what somebody is looking at.
+    ///
+    /// It would also have been invisible in every golden, because recording and
+    /// comparing both went through here and were wrong the same way.
+    /// `cgImageRoundTripKeepsOrientation` is what caught it, which is the whole
+    /// reason that test builds its fixture by hand rather than recording one.
     init?(_ image: CGImage) {
         let extent = SnapshotExtent(width: image.width, height: image.height)
         guard extent.width > 0, extent.height > 0,
@@ -117,8 +126,6 @@ extension SnapshotBitmap {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
 
-        context.translateBy(x: 0, y: CGFloat(extent.height))
-        context.scaleBy(x: 1, y: -1)
         context.draw(
             image,
             in: CGRect(x: 0, y: 0, width: CGFloat(extent.width), height: CGFloat(extent.height))

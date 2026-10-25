@@ -162,11 +162,20 @@ answer first is always *why* the pixels moved.
 **On a Mac**, in a checkout:
 
 ```sh
-SNAPSHOT_RECORD=1 xcodebuild test \
+xcodebuild test \
   -scheme boilerplate-ios-swift-Package \
   -destination 'platform=iOS Simulator,name=iPhone 16' \
-  -only-testing:SnapshotTests
+  -only-testing:SnapshotTests \
+  TEST_RUNNER_SNAPSHOT_RECORD=1
 ```
+
+`TEST_RUNNER_SNAPSHOT_RECORD=1`, and not `SNAPSHOT_RECORD=1` in front of the
+command. The test bundle is launched by the runner *inside* the simulator and
+inherits nothing from the `xcodebuild` process on your Mac, so an exported
+variable reaches nothing: the suite reports all seventeen cases as never
+recorded and writes none of them. xcodebuild forwards a build setting whose
+name starts with `TEST_RUNNER_` into the test process's environment with the
+prefix removed, which is how `SnapshotStore.isRecording` gets to see it.
 
 The goldens are written straight into the source tree — `#filePath`, not the
 test bundle — so `git diff` is the review. Recording is not a free action: the

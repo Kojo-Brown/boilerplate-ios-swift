@@ -117,10 +117,17 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee record-build.log
 
+      # `TEST_RUNNER_SNAPSHOT_RECORD`, not `env:`. A test bundle on a simulator
+      # is launched by the runner inside the simulator and inherits nothing from
+      # the `xcodebuild` process on the host, so the first version of this —
+      # `env: SNAPSHOT_RECORD: '1'` — recorded nothing: all seventeen cases
+      # reported "never recorded" and the lane failed with the goldens it was
+      # supposed to be writing still absent. xcodebuild forwards a build setting
+      # whose name starts with `TEST_RUNNER_` into the test process's
+      # environment with that prefix removed, which is the one way to reach
+      # `ProcessInfo` from here.
       - name: Record the goldens
         timeout-minutes: 20
-        env:
-          SNAPSHOT_RECORD: '1'
         run: |
           set -o pipefail
           xcodebuild test-without-building \
@@ -130,6 +137,7 @@ jobs:
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 120 \
             CODE_SIGNING_ALLOWED=NO \
+            TEST_RUNNER_SNAPSHOT_RECORD=1 \
             2>&1 | tee record-test.log
 
       # Pull the handful of lines that say what broke to the end of the log,
