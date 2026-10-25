@@ -124,10 +124,13 @@ numbers whenever a comparison is not exact even when it passes, so that moving
 one of them is a decision taken against evidence from a real run. **Changes to
 these two values belong in this paragraph**, with the run that justified them:
 
-* Set to 4 / 0.001 when the gate was introduced, on no evidence either way —
-  nothing had been recorded yet, so there was no drift to measure. What the
-  first verify run against the committed goldens reported is in the pull
-  request that introduced this page, and the next person to move either number
+* Set to 4 / 0.001 when the gate was introduced. The evidence for keeping both
+  small: the goldens were recorded twice, on two different `macos-15` runner
+  VMs, and every light-scheme image came back **byte-identical**. The six that
+  changed between those recordings were the dark ones, and they changed because
+  a defect in the renderer was fixed between them. So this renderer, on one
+  runtime, is bit-exact run to run — the tolerance exists for the day the
+  runtime moves, not for ordinary noise. The next person to move either number
   should add their run here rather than replacing this line.
 
 A failure reports the mismatched pixel count, the largest channel delta, and
