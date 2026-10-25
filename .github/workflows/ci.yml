@@ -377,6 +377,27 @@ jobs:
       - name: Audit which test framework each suite can actually fail in
         run: python3 Tools/assert-test-framework.py
 
+      # Phase 12 item 3. The snapshot gate's committed state, which is the part
+      # of it a green run cannot see.
+      #
+      # A snapshot suite has one failure mode that reports success forever:
+      # record mode. A run that records writes the pixels it just rendered over
+      # the pixels it was supposed to be checking, and then passes — so the
+      # switch being left on anywhere, in this workflow or in a second place in
+      # the Swift, turns every case off at once and looks exactly like a pass.
+      # The other three are quieter: a golden left behind by a renamed subject
+      # is an image nothing compares against, a subject with no golden is a
+      # case that only fails when somebody notices, and a gate nothing runs is
+      # the one this repository has already shipped once (see the note at the
+      # top of this file about the template's SwiftLint step).
+      #
+      # Syntactic, like the audits above it, and it runs on the scheduled
+      # agent's Linux box — which matters more here than anywhere else, because
+      # the agent has no Swift toolchain, no simulator, and therefore no way to
+      # run the gate itself at all.
+      - name: Audit the snapshot gate's committed state
+        run: python3 Tools/assert-snapshot-gate.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15
@@ -428,100 +449,19 @@ jobs:
           echo "Using scheme: $scheme"
           echo "SCHEME=$scheme" >> "$GITHUB_ENV"
 
-      # Pin to a concrete simulator UDID. A `name=iPhone 16` destination silently
-      # resolves to whatever the image happens to ship, and fails opaquely when
-      # that model is dropped from a runner image.
+      # Extracted to `.github/actions/select-simulator` in Phase 12 item 3,
+      # unchanged: the SDK cap, the bounded query, the CoreSimulator restart and
+      # the reasoning behind each of them moved with it, because the snapshot
+      # gate and the record lane need the same selection and three copies of it
+      # is two places for the next fix to be missed. This job states no
+      # preferred runtime: it wants the newest one the selected SDK can drive,
+      # which is what it has always taken.
       #
-      # The runner also carries simulator runtimes newer than the selected Xcode
-      # can drive — it has iOS 26.x while Xcode 16.4 builds against the iOS 18.5
-      # SDK. Taking the newest runtime unconditionally pairs an 18.5 SDK with a
-      # 26.2 device, which xcodebuild accepts for building and then fails on when
-      # it tries to run the tests. So candidates are capped at the SDK's major
-      # version, and the newest runtime at or below it wins.
-      #
-      # The backstop and the retry are defensive, not a fix for a diagnosed
-      # hang. What prompted them: on this branch's first run the step was still
-      # going several minutes into work that took 43s on the last green run of
-      # identical code, and that run was superseded before it finished, so
-      # whether it would have completed is unknown. Unbounded is the problem
-      # either way — the build and test steps each carry a step timeout
-      # precisely so a stall fails as a named step while the job survives to
-      # summarise and upload the logs, and this step was missed when those went
-      # in. Left as it was, a wedged CoreSimulator holds the runner for the
-      # job's full hour and then reports "cancelled", which names no command
-      # and, because a cancelled job skips its remaining steps, uploads none of
-      # the logs that would have.
-      #
-      # The retry restarts the service rather than re-asking a daemon that
-      # already failed to answer, and covers only the device-list query:
-      # nothing here can turn a failing build or a failing test into a pass.
+      # The step timeout stays here rather than in the action, because
+      # `timeout-minutes` cannot be set on a step inside a composite action.
       - name: Choose an iOS Simulator
         timeout-minutes: 10
-        run: |
-          sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
-          echo "iphonesimulator SDK major version: $sdk_major"
-
-          # macOS ships no coreutils `timeout`. perl is always present, its
-          # alarm survives the exec, and SIGALRM's default action kills the
-          # child — same effect, no dependency.
-          bounded() { perl -e 'alarm shift; exec @ARGV' "$@"; }
-
-          devices=''
-          for attempt in 1 2 3; do
-            if devices=$(bounded 120 xcrun simctl list devices available --json); then
-              break
-            fi
-            devices=''
-            echo "::warning::simctl returned no device list (attempt $attempt); restarting CoreSimulator"
-            sudo pkill -9 -f CoreSimulatorService 2>/dev/null || true
-            bounded 60 xcrun simctl shutdown all || true
-            sleep 15
-          done
-          if [ -z "$devices" ]; then
-            echo "::error::simctl never returned a device list; CoreSimulator is wedged on this runner."
-            exit 1
-          fi
-
-          # Render the listing from the JSON already in hand rather than calling
-          # simctl a second time, so the log costs no extra chance to hang.
-          printf '%s' "$devices" | jq -r '
-            .devices
-            | to_entries[]
-            | select(.key | test("SimRuntime\\.iOS-"))
-            | .key as $runtime
-            | .value[]
-            | select(.isAvailable)
-            | "\($runtime)  \(.name)  \(.udid)"
-          ' || true
-
-          udid=$(printf '%s' "$devices" | jq -r --argjson sdk "$sdk_major" '
-            [ .devices
-              | to_entries[]
-              | select(.key | test("SimRuntime\\.iOS-"))
-              | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
-              | .value[]
-              | select(.isAvailable and (.name | startswith("iPhone")))
-              | { version: [($v.major | tonumber), ($v.minor | tonumber)],
-                  name: .name,
-                  udid: .udid }
-            ]
-            | map(select(.version[0] <= $sdk)) as $all
-            | if ($all | length) == 0 then empty else
-                ($all | map(.version) | max) as $newest
-                | ($all | map(select(.version == $newest))) as $latest
-                | ( ($latest | map(select(.name == "iPhone 16")) | first)
-                    // ($latest | first) ).udid
-              end
-          ')
-          if [ -z "$udid" ]; then
-            echo "::error::No iPhone simulator available on this runner image."
-            exit 1
-          fi
-          name=$(printf '%s' "$devices" | jq -r --arg u "$udid" '
-            [ .devices[]?[]? | select(.udid == $u) | .name ] | first // "unknown"
-          ')
-          echo "Using simulator $name ($udid)"
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+        uses: ./.github/actions/select-simulator
 
       - name: Build for the iOS Simulator
         timeout-minutes: 25
@@ -563,6 +503,14 @@ jobs:
       # see (a wedged simulator, a stuck xcodebuild). It is deliberately shorter
       # than the job's, so the step fails while the job lives on to run the
       # summary and upload the logs.
+      #
+      # `-skip-testing:SnapshotTests` because the snapshot gate below is the
+      # same tests on a different simulator. This job takes the newest runtime
+      # the SDK can drive; a golden image is a picture one renderer took on one
+      # OS version, so the gate asks for the runtime its goldens were recorded
+      # on. Running them here as well would mean a runtime bump on the runner
+      # image reporting as a failure of the whole suite, in the job whose
+      # coverage number every other item is measured against.
       - name: Run the test suite
         timeout-minutes: 25
         run: |
@@ -570,6 +518,7 @@ jobs:
           xcodebuild test-without-building \
             -scheme "$SCHEME" \
             -destination "id=$SIMULATOR_UDID" \
+            -skip-testing:SnapshotTests \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
             -test-timeouts-enabled YES \
@@ -660,4 +609,124 @@ jobs:
             test.log
             coverage.json
             TestResults.xcresult
+          retention-days: 14
+
+  # Phase 12 item 3: the diff gate.
+  #
+  # Its own job, and the reason is the simulator. Everything else in this
+  # workflow wants the newest runtime the selected SDK can drive, because the
+  # newest is the one worth knowing the code works on. A recorded snapshot is
+  # the opposite: it is a picture one renderer took on one OS version, and the
+  # comparison is only as meaningful as the agreement between the two
+  # environments. So this job reads the provenance the goldens carry and asks
+  # for that runtime, and the shared action warns rather than fails when the
+  # image no longer has it — the verdict is the pixels, and a build failed over
+  # a version string nobody would have seen a difference from is a gate
+  # measuring the wrong thing.
+  #
+  # It is a separate *check* for a second reason: when this one is red and
+  # "Build and test" is green, the failure is in the pixels, and the diff image
+  # in this job's artifact is the whole of what a reviewer needs to look at.
+  snapshot:
+    name: Snapshot diff gate
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      # A hard failure, not a default. A gate with no provenance cannot say
+      # whether a difference it reports is the code or the runtime, and
+      # `Tools/assert-snapshot-gate.py` has already failed the lint job by the
+      # time this runs — this is the second half of the same rule, where the
+      # file is read rather than parsed.
+      - name: Read the runtime the goldens were recorded on
+        id: goldens
+        run: |
+          manifest=Tests/SnapshotTests/__Snapshots__/environment.json
+          if [ ! -f "$manifest" ]; then
+            echo "::error::$manifest is missing: the recorded snapshots carry no provenance."
+            exit 1
+          fi
+          version=$(jq -r '.iosVersion // ""' "$manifest")
+          if [ -z "$version" ]; then
+            echo "::error::$manifest names no iosVersion."
+            exit 1
+          fi
+          echo "The goldens were recorded on iOS $version"
+          echo "runtime=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Swift Package dependencies
+        run: swift package resolve
+
+      - name: Discover the scheme
+        run: |
+          scheme=$(xcodebuild -list -json | jq -r '
+            [ (.workspace.schemes // .project.schemes // [])[] ] as $schemes
+            | ( ($schemes | map(select(endswith("-Package"))) | first)
+                // ($schemes | first)
+                // empty )
+          ')
+          if [ -z "$scheme" ]; then
+            echo "::error::xcodebuild reported no schemes for this package."
+            exit 1
+          fi
+          echo "SCHEME=$scheme" >> "$GITHUB_ENV"
+
+      - name: Choose an iOS Simulator
+        timeout-minutes: 10
+        uses: ./.github/actions/select-simulator
+        with:
+          preferred-runtime: ${{ steps.goldens.outputs.runtime }}
+
+      - name: Build for the iOS Simulator
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee snapshot-build.log
+
+      # No `SNAPSHOT_RECORD` here, and the audit in the lint job is what keeps
+      # it that way: a gate in record mode overwrites what it was meant to
+      # compare against and then passes.
+      - name: Run the snapshot diff gate
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -only-testing:SnapshotTests \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee snapshot-test.log
+
+      # The three images per failing case — recorded, rendered, and the overlay
+      # marking every pixel between them. A pixel difference described in a log
+      # line is a number; the overlay is the answer.
+      - name: Upload the failing snapshots
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: snapshot-failures-${{ github.run_number }}
+          path: |
+            SnapshotFailures
+            snapshot-build.log
+            snapshot-test.log
+          if-no-files-found: warn
           retention-days: 14

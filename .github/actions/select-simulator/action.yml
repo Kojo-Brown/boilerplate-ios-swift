@@ -1,0 +1,178 @@
+name: Select an iOS Simulator
+description: >
+  Picks one concrete iOS Simulator UDID for this runner image and exports it as
+  SIMULATOR_UDID, with an optional preference for the runtime a set of recorded
+  snapshots was taken on.
+
+# Phase 12 item 3 extracted this from `ci.yml`, where it had grown a history of
+# its own — an SDK cap, a listing that costs no extra simctl call, a bounded
+# query, and a CoreSimulator restart — and where it now has three callers: the
+# main test job, the snapshot diff gate, and the record lane. Three copies of
+# sixty lines of jq is three places for the next fix to be applied in two of.
+#
+# `timeout-minutes` cannot be set on a step inside a composite action, which is
+# why every caller carries it: the reason it exists is in `ci.yml`'s history,
+# and it is a wedged CoreSimulator holding the runner for the job's full hour
+# and then reporting "cancelled", which names no command and uploads no logs.
+
+# What the selection is doing, and why each part of it is there:
+#
+# Pin to a concrete simulator UDID. A `name=iPhone 16` destination silently
+# resolves to whatever the image happens to ship, and fails opaquely when
+# that model is dropped from a runner image.
+#
+# The runner also carries simulator runtimes newer than the selected Xcode
+# can drive — it has iOS 26.x while Xcode 16.4 builds against the iOS 18.5
+# SDK. Taking the newest runtime unconditionally pairs an 18.5 SDK with a
+# 26.2 device, which xcodebuild accepts for building and then fails on when
+# it tries to run the tests. So candidates are capped at the SDK's major
+# version, and the newest runtime at or below it wins.
+#
+# The backstop and the retry are defensive, not a fix for a diagnosed
+# hang. What prompted them: on this branch's first run the step was still
+# going several minutes into work that took 43s on the last green run of
+# identical code, and that run was superseded before it finished, so
+# whether it would have completed is unknown. Unbounded is the problem
+# either way — the build and test steps each carry a step timeout
+# precisely so a stall fails as a named step while the job survives to
+# summarise and upload the logs, and this step was missed when those went
+# in. Left as it was, a wedged CoreSimulator holds the runner for the
+# job's full hour and then reports "cancelled", which names no command
+# and, because a cancelled job skips its remaining steps, uploads none of
+# the logs that would have.
+#
+# The retry restarts the service rather than re-asking a daemon that
+# already failed to answer, and covers only the device-list query:
+# nothing here can turn a failing build or a failing test into a pass.
+
+inputs:
+  preferred-runtime:
+    description: >
+      An iOS version such as "18.5" to prefer, when this image has a simulator
+      on it. Empty means "newest runtime the selected SDK can drive", which is
+      what every caller but the snapshot gate wants.
+    required: false
+    default: ""
+
+outputs:
+  udid:
+    description: The chosen simulator's UDID. Also exported as SIMULATOR_UDID.
+    value: ${{ steps.pick.outputs.udid }}
+  runtime:
+    description: The iOS version the chosen simulator runs, such as "18.5".
+    value: ${{ steps.pick.outputs.runtime }}
+
+runs:
+  using: composite
+  steps:
+    - id: pick
+      shell: bash
+      env:
+        PREFERRED_RUNTIME: ${{ inputs.preferred-runtime }}
+      run: |
+        sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
+        echo "iphonesimulator SDK major version: $sdk_major"
+
+        # macOS ships no coreutils `timeout`. perl is always present, its
+        # alarm survives the exec, and SIGALRM's default action kills the
+        # child — same effect, no dependency.
+        bounded() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+
+        devices=''
+        for attempt in 1 2 3; do
+          if devices=$(bounded 120 xcrun simctl list devices available --json); then
+            break
+          fi
+          devices=''
+          echo "::warning::simctl returned no device list (attempt $attempt); restarting CoreSimulator"
+          sudo pkill -9 -f CoreSimulatorService 2>/dev/null || true
+          bounded 60 xcrun simctl shutdown all || true
+          sleep 15
+        done
+        if [ -z "$devices" ]; then
+          echo "::error::simctl never returned a device list; CoreSimulator is wedged on this runner."
+          exit 1
+        fi
+
+        # Render the listing from the JSON already in hand rather than calling
+        # simctl a second time, so the log costs no extra chance to hang.
+        printf '%s' "$devices" | jq -r '
+          .devices
+          | to_entries[]
+          | select(.key | test("SimRuntime\\.iOS-"))
+          | .key as $runtime
+          | .value[]
+          | select(.isAvailable)
+          | "\($runtime)  \(.name)  \(.udid)"
+        ' || true
+
+        # Phase 12 item 3. A golden image is a picture one renderer took on one
+        # OS version, so the snapshot gate asks for the runtime its goldens were
+        # recorded on and the rest of CI does not care. Asked for and not
+        # required: the gate's verdict is the pixels, and failing a build over a
+        # version string nobody would have seen a difference from is a gate
+        # measuring the wrong thing. When the runtime is not here, the warning
+        # below is what turns an otherwise baffling pixel diff into a sentence.
+        #
+        # The value arrives through `env:` rather than a `${{ }}` interpolation
+        # into this script, because it is read out of a file in the checkout —
+        # on a fork's pull request, a string somebody else wrote.
+        udid=''
+        if [ -n "$PREFERRED_RUNTIME" ]; then
+          wanted="iOS-$(printf '%s' "$PREFERRED_RUNTIME" | tr '.' '-')"
+          udid=$(printf '%s' "$devices" | jq -r --arg want "$wanted" '
+            [ .devices
+              | to_entries[]
+              | select(.key | endswith($want))
+              | .value[]
+              | select(.isAvailable and (.name | startswith("iPhone")))
+            ] as $all
+            | if ($all | length) == 0 then empty else
+                ( ($all | map(select(.name == "iPhone 16")) | first)
+                  // ($all | first) ).udid
+              end
+          ')
+          if [ -n "$udid" ]; then
+            echo "Pinned to the runtime the goldens were recorded on: iOS $PREFERRED_RUNTIME"
+          else
+            echo "::warning::This image has no iPhone simulator on iOS $PREFERRED_RUNTIME, which is what the recorded snapshots were taken on. Falling back to the newest runtime present: a pixel difference reported now may be the runtime rather than the code. Re-record the goldens if the diff image shows only antialiasing."
+          fi
+        fi
+
+        if [ -z "$udid" ]; then
+          udid=$(printf '%s' "$devices" | jq -r --argjson sdk "$sdk_major" '
+            [ .devices
+              | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
+              | .value[]
+              | select(.isAvailable and (.name | startswith("iPhone")))
+              | { version: [($v.major | tonumber), ($v.minor | tonumber)],
+                  name: .name,
+                  udid: .udid }
+            ]
+            | map(select(.version[0] <= $sdk)) as $all
+            | if ($all | length) == 0 then empty else
+                ($all | map(.version) | max) as $newest
+                | ($all | map(select(.version == $newest))) as $latest
+                | ( ($latest | map(select(.name == "iPhone 16")) | first)
+                    // ($latest | first) ).udid
+              end
+          ')
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator available on this runner image."
+            exit 1
+          fi
+        fi
+
+        name=$(printf '%s' "$devices" | jq -r --arg u "$udid" '
+          [ .devices[]?[]? | select(.udid == $u) | .name ] | first // "unknown"
+        ')
+        runtime=$(printf '%s' "$devices" | jq -r --arg u "$udid" '
+          [ .devices | to_entries[] | select(.value | any(.udid == $u)) | .key ]
+          | first // ""
+        ' | sed -E 's/.*SimRuntime\.iOS-//; s/-/./g')
+        echo "Using simulator $name ($udid) on iOS $runtime"
+        echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+        echo "udid=$udid" >> "$GITHUB_OUTPUT"
+        echo "runtime=$runtime" >> "$GITHUB_OUTPUT"
