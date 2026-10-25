@@ -80,11 +80,6 @@ struct SnapshotBitmap: Equatable, Sendable {
 
     /// `extent.pixelCount * channelsPerPixel` bytes.
     let pixels: [UInt8]
-
-    init(extent: SnapshotExtent, pixels: [UInt8]) {
-        self.extent = extent
-        self.pixels = pixels
-    }
 }
 
 extension SnapshotBitmap {

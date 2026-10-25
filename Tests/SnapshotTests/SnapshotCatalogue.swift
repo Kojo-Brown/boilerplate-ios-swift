@@ -163,7 +163,6 @@ enum SnapshotCatalogue {
         HomeItemCard(item: longSampleItem)
     }
 
-
     // MARK: - Fixtures
 
     /// Uneven on purpose: a flow of equal-width chips is a grid, and would
