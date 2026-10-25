@@ -10,7 +10,9 @@ state* — and a snapshot gate has an unusually quiet way of switching itself of
     rendered over the pixels it was supposed to be checking, and then passes.
     Every case. Forever. Nothing about the run looks different: the job is
     green, the test names scroll past, and the only evidence is a diff in a
-    directory of binary files that reviewers skim.
+    directory of binary files that reviewers skim. The switch is a file, which
+    is what lets this script answer "is it on *right now*" rather than only
+    "who is allowed to turn it on".
   * **An orphaned golden.** Rename or delete a subject and its PNG stays
     behind, comparing against nothing. The gate still passes, with one fewer
     thing held still than the directory suggests.
@@ -69,8 +71,12 @@ ALLOWED_NON_IMAGES = {"README.md", ENVIRONMENT}
 # worse than no diff image is a stale one committed beside the goldens.
 FAILURE_DIRECTORY = "SnapshotFailures"
 
-# The environment variable, and the fact that exactly one place may read it.
-RECORD_VARIABLE = "SNAPSHOT_RECORD"
+# The record switch: a file at the repository root whose presence turns the
+# suite from checking the goldens into overwriting them. A file rather than an
+# environment variable because nothing else reaches a test bundle inside a
+# simulator (see `SnapshotStore.isRecording`), and the happy consequence is that
+# this script can check the switch's state rather than only who sets it.
+RECORD_SWITCH = ".snapshot-record"
 
 # `SnapshotAppearance.fileNameSuffix` leaves the standard type size out of a
 # file name, so `<subject>.<scheme>` means the standard size and
@@ -275,30 +281,46 @@ def check_names(root: str, names: list[str], problems: list[str]) -> None:
 
 
 def check_record_switch(root: str, problems: list[str]) -> None:
-    """Rule 6: one place decides record mode, and CI is not it."""
+    """Rule 6: record mode is off, one place decides it, and CI is not it.
+
+    The first of these is the only rule here that is about *now* rather than
+    about the committed state, and it is the most useful one: a working copy
+    with the switch left on records over its goldens on every run and passes.
+    """
+    if os.path.exists(os.path.join(root, RECORD_SWITCH)):
+        problems.append(
+            f"{RECORD_SWITCH} exists, so the suite is in record mode: it will "
+            f"overwrite every golden it was meant to compare against, and pass. "
+            f"Delete it. It is gitignored, so this is a leftover from a local "
+            f"recording rather than something committed."
+        )
+
     readers = []
     for base, directories, files in os.walk(os.path.join(root, TESTS)):
         directories[:] = [name for name in directories if name != "__Snapshots__"]
         for name in sorted(files):
-            if name.endswith(".swift") and f'"{RECORD_VARIABLE}"' in read(os.path.join(base, name)):
+            if name.endswith(".swift") and f'"{RECORD_SWITCH}"' in read(os.path.join(base, name)):
                 readers.append(os.path.relpath(os.path.join(base, name), root))
     if readers != [STORE]:
         problems.append(
-            f"{RECORD_VARIABLE} is read in {readers or 'no file'}; it must be "
-            f"read in exactly one place, {STORE}. A second switch is how a run "
+            f"{RECORD_SWITCH} is named in {readers or 'no file'}; it must be "
+            f"named in exactly one place, {STORE}. A second switch is how a run "
             f"ends up recording in the job that was supposed to be verifying, "
             f"and a gate that records always passes."
         )
 
-    if RECORD_VARIABLE in without_comments(read(os.path.join(root, CI))):
+    if RECORD_SWITCH in without_comments(read(os.path.join(root, CI))):
         problems.append(
-            f"{CI}: names {RECORD_VARIABLE}. The diff gate must never run in "
+            f"{CI}: names {RECORD_SWITCH}. The diff gate must never run in "
             f"record mode: it would overwrite the images it is comparing "
             f"against and then report success."
         )
-    if RECORD_VARIABLE not in without_comments(read(os.path.join(root, RECORD))):
+    # The exact spelling, not the name anywhere in the file: the lane also
+    # deletes the switch afterwards and explains it in a comment, so "names it"
+    # is satisfied by a lane that no longer turns it on.
+    if f"touch {RECORD_SWITCH}" not in without_comments(read(os.path.join(root, RECORD))):
         problems.append(
-            f"{RECORD}: does not set {RECORD_VARIABLE}, so the record lane "
+            f"{RECORD}: has no `touch {RECORD_SWITCH}` step, so the record lane "
             f"records nothing and the gate can only ever be bootstrapped by "
             f"hand on a Mac."
         )
@@ -341,8 +363,14 @@ def check_record_lane_safety(root: str, problems: list[str]) -> None:
 
 
 def check_gitignore(root: str, problems: list[str]) -> None:
-    """Rule 9: a failing local run cannot commit its own artifacts."""
+    """Rule 9: neither the switch nor a failure artifact can be committed."""
     ignored = read(os.path.join(root, GITIGNORE)).splitlines()
+    if not any(line.strip() == RECORD_SWITCH for line in ignored):
+        problems.append(
+            f"{GITIGNORE}: does not ignore {RECORD_SWITCH}. Committing the "
+            f"record switch would put every later run into record mode, which "
+            f"is the one failure of a snapshot gate that reports success."
+        )
     if not any(line.strip().rstrip("/") == FAILURE_DIRECTORY for line in ignored):
         problems.append(
             f"{GITIGNORE}: does not ignore {FAILURE_DIRECTORY}/. A failing run "
@@ -396,8 +424,8 @@ def main(argv: list[str]) -> int:
 
     print(
         f"Snapshot gate audit passed: {len(names)} recorded golden(s), "
-        f"inventory and directory agree, record mode is off everywhere but the "
-        f"record lane, and CI runs the gate."
+        f"inventory and directory agree, record mode is off, and CI runs the "
+        f"gate."
     )
     return 0
 

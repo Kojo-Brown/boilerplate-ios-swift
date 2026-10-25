@@ -33,6 +33,12 @@ Gemfile.lock
 *.cer
 *.mobileprovision
 
+# The snapshot gate's record switch: its presence turns the suite from checking
+# the recorded goldens into overwriting them, so it is a file to create for one
+# run and delete — never to commit. `Tools/assert-snapshot-gate.py` fails while
+# it exists in a checkout, which is the backstop for forgetting.
+.snapshot-record
+
 # Snapshot diff-gate failures: the recorded image, the rendered one and the
 # overlay between them, written by a failing run for somebody to look at. CI
 # uploads them as an artifact; a committed `actual.png` beside the goldens is

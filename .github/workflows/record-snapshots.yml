@@ -106,14 +106,6 @@ jobs:
         timeout-minutes: 10
         uses: ./.github/actions/select-simulator
 
-      # `TEST_RUNNER_SNAPSHOT_RECORD` belongs on *this* step as well as on the
-      # test step, and that is the whole of what went wrong on the run before
-      # this one. A test bundle on a simulator inherits nothing from the
-      # `xcodebuild` process on the host; what it does inherit is the
-      # `EnvironmentVariables` dictionary of the `.xctestrun` file, and that
-      # file is written here, by `build-for-testing`. A build setting handed to
-      # `test-without-building` arrives after the only moment it could have
-      # been recorded.
       - name: Build for the iOS Simulator
         timeout-minutes: 25
         run: |
@@ -123,34 +115,16 @@ jobs:
             -destination "id=$SIMULATOR_UDID" \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
-            TEST_RUNNER_SNAPSHOT_RECORD=1 \
             2>&1 | tee record-build.log
 
-      # Whether the switch reached the test bundle is otherwise only visible in
-      # the shape of the failure — seventeen cases reporting "never recorded"
-      # looks the same as a renderer that produced nothing. The xctestrun says
-      # so directly, before anything runs.
-      - name: Show the environment the tests will run with
-        run: |
-          run_file=$(find ~/Library/Developer/Xcode/DerivedData -name '*.xctestrun' \
-            -newermt '-30 minutes' 2>/dev/null | head -1)
-          if [ -z "$run_file" ]; then
-            echo "::warning::No .xctestrun found; cannot confirm the record switch."
-            exit 0
-          fi
-          echo "$run_file"
-          plutil -p "$run_file" | grep -iE 'EnvironmentVariables|SNAPSHOT' || \
-            echo "::warning::SNAPSHOT_RECORD is not in the xctestrun environment."
+      # The switch is a file in the checkout, which is the only channel that
+      # reaches a test bundle running inside a simulator — see
+      # `SnapshotStore.isRecording` for the two mechanisms that do not. It is
+      # removed again below whatever happens, so that nothing downstream of
+      # here can see a run still asking to record.
+      - name: Turn on record mode
+        run: touch .snapshot-record
 
-      # `TEST_RUNNER_SNAPSHOT_RECORD`, not `env:`. A test bundle on a simulator
-      # is launched by the runner inside the simulator and inherits nothing from
-      # the `xcodebuild` process on the host, so the first version of this —
-      # `env: SNAPSHOT_RECORD: '1'` — recorded nothing: all seventeen cases
-      # reported "never recorded" and the lane failed with the goldens it was
-      # supposed to be writing still absent. xcodebuild forwards a build setting
-      # whose name starts with `TEST_RUNNER_` into the test process's
-      # environment with that prefix removed, which is the one way to reach
-      # `ProcessInfo` from here.
       - name: Record the goldens
         timeout-minutes: 20
         run: |
@@ -162,8 +136,11 @@ jobs:
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 120 \
             CODE_SIGNING_ALLOWED=NO \
-            TEST_RUNNER_SNAPSHOT_RECORD=1 \
             2>&1 | tee record-test.log
+
+      - name: Turn off record mode
+        if: always()
+        run: rm -f .snapshot-record
 
       # Pull the handful of lines that say what broke to the end of the log,
       # where anybody reading a red run looks first.

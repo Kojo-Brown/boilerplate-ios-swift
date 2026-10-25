@@ -77,15 +77,40 @@ enum SnapshotStore {
         return repositoryRoot.appending(path: "SnapshotFailures")
     }
 
+    /// The file whose presence turns recording on.
+    static let recordRequestFileName = ".snapshot-record"
+
     /// Whether this run writes the goldens instead of checking them.
     ///
-    /// The only place in the suite that reads the variable, which is what
-    /// `Tools/assert-snapshot-gate.py` holds it to: a second switch somewhere
-    /// else is how a gate ends up recording in the job that is supposed to be
-    /// verifying, and a gate that records always passes.
+    /// A file at the repository root, and not an environment variable, which is
+    /// what this was for three runs that recorded nothing. A test bundle on a
+    /// simulator is launched by the test runner *inside* the simulator and
+    /// inherits nothing from the `xcodebuild` process on the host, so an
+    /// exported variable reaches it never. `TEST_RUNNER_SNAPSHOT_RECORD=1` as a
+    /// build setting — the documented way to put a variable in the test
+    /// runner's environment — does not reach it either: on the scheme SwiftPM
+    /// generates, the `.xctestrun` comes out with an empty
+    /// `EnvironmentVariables` dictionary, which the record lane printed before
+    /// this was changed. What the test process certainly can see is the source
+    /// tree, because it is already reading and writing goldens there through
+    /// `#filePath`.
+    ///
+    /// The switch being a file is the better property of the two, not merely
+    /// the one that works. An environment variable is invisible after the fact;
+    /// a file is state `Tools/assert-snapshot-gate.py` can look at, and it fails
+    /// when this one exists in a checkout at all. So record mode cannot be
+    /// committed, cannot be turned on in `ci.yml`, and cannot be left behind in
+    /// a working copy without the next audit run saying so — which matters,
+    /// because a suite stuck in record mode overwrites the evidence and passes.
     static var isRecording: Bool {
-        let raw = ProcessInfo.processInfo.environment["SNAPSHOT_RECORD"] ?? ""
-        return ["1", "true", "TRUE", "yes", "YES"].contains(raw)
+        FileManager.default.fileExists(
+            atPath: recordRequestURL.path(percentEncoded: false)
+        )
+    }
+
+    /// `.snapshot-record` at the repository root. Gitignored.
+    static var recordRequestURL: URL {
+        repositoryRoot.appending(path: recordRequestFileName)
     }
 
     static func goldenURL(named name: String) -> URL {

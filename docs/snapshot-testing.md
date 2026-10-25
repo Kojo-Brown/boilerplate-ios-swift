@@ -162,20 +162,29 @@ answer first is always *why* the pixels moved.
 **On a Mac**, in a checkout:
 
 ```sh
+touch .snapshot-record
 xcodebuild test \
   -scheme boilerplate-ios-swift-Package \
   -destination 'platform=iOS Simulator,name=iPhone 16' \
-  -only-testing:SnapshotTests \
-  TEST_RUNNER_SNAPSHOT_RECORD=1
+  -only-testing:SnapshotTests
+rm .snapshot-record
 ```
 
-`TEST_RUNNER_SNAPSHOT_RECORD=1`, and not `SNAPSHOT_RECORD=1` in front of the
-command. The test bundle is launched by the runner *inside* the simulator and
-inherits nothing from the `xcodebuild` process on your Mac, so an exported
-variable reaches nothing: the suite reports all seventeen cases as never
-recorded and writes none of them. xcodebuild forwards a build setting whose
-name starts with `TEST_RUNNER_` into the test process's environment with the
-prefix removed, which is how `SnapshotStore.isRecording` gets to see it.
+**The switch is a file, not an environment variable**, and that is not a
+stylistic choice. A test bundle on a simulator is launched by the test runner
+*inside* the simulator and inherits nothing from the `xcodebuild` process on
+your Mac, so `SNAPSHOT_RECORD=1 xcodebuild …` reaches nothing — the suite takes
+the verify path, reports all seventeen cases as never recorded, and writes none
+of them. `TEST_RUNNER_SNAPSHOT_RECORD=1` as a build setting, which is the
+documented way to put a variable into a test runner's environment, does not
+reach it either: on the scheme SwiftPM generates, the `.xctestrun` comes out
+with an empty `EnvironmentVariables` dictionary. Three CI runs established
+that. What the test process certainly can see is the source tree, because it is
+already reading and writing goldens there.
+
+Forgetting the `rm` is covered: `Tools/assert-snapshot-gate.py` fails while the
+file exists in a checkout, and it is gitignored, so the switch can be neither
+committed nor silently left on.
 
 The goldens are written straight into the source tree — `#filePath`, not the
 test bundle — so `git diff` is the review. Recording is not a free action: the
@@ -211,11 +220,11 @@ covers the state a green run cannot see:
    against;
 5. every file name decomposes into a subject, a scheme and an optional type
    size the source declares, and every declared subject has a golden;
-6. exactly one place reads `SNAPSHOT_RECORD`, `ci.yml` never names it, and the
-   record lane does;
+6. record mode is **off right now** — no `.snapshot-record` in the checkout —
+   exactly one place names it, `ci.yml` never does, and the record lane does;
 7. some job runs `-only-testing:SnapshotTests` and the main suite skips it;
 8. the record lane is limited to `snapshots/**` and refuses the default branch;
-9. `SnapshotFailures/` is gitignored;
+9. `.snapshot-record` and `SnapshotFailures/` are both gitignored;
 10. this page mentions every subject that has a golden.
 
 The inventory check is split in half on purpose. This script can see the
