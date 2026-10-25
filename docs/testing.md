@@ -142,6 +142,18 @@ against XCTest.
   on its first push: it ported three `HomeViewModel` live-update cases into the
   plain suite, where neither the backstop nor the idiom applies.
 
+## The suite that is not in this bundle
+
+`SnapshotTests` is a second test target, and deliberately not more files in
+`ViewModelTests`. It renders seven of the design system's views and compares
+them against committed PNGs, which makes it the one suite here whose verdict
+depends on *which simulator ran it* — so it gets its own CI job, asking for the
+runtime its goldens were recorded on, while this bundle goes on taking the
+newest runtime the SDK can drive. See
+[docs/snapshot-testing.md](./snapshot-testing.md) for what a picture catches
+that a structural assertion cannot, and for the four ways a snapshot suite
+stops being a test while every run stays green.
+
 ## The worked example
 
 [docs/tdd-kata.md](./tdd-kata.md) walks one use-case built test-first under

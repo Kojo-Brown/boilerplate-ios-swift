@@ -1,0 +1,171 @@
+name: Record snapshots
+
+# Phase 12 item 3. The lane that writes the images the diff gate compares
+# against, for the case where there is no Mac in the loop.
+#
+# Why it exists at all: the scheduled agent that maintains this repository runs
+# on Linux, where `swift`, `xcodebuild` and the iOS Simulator do not exist. It
+# can write a snapshot suite and it cannot produce a single pixel of a golden,
+# so without this workflow the gate could never have been bootstrapped — and a
+# snapshot gate with no recorded images is a gate that fails every case, which
+# is not a gate either. A developer on a Mac does not need it: one
+# `SNAPSHOT_RECORD=1 xcodebuild test -only-testing:SnapshotTests` does the same
+# thing in their own checkout, and `docs/snapshot-testing.md` has the command.
+#
+# Three properties keep a workflow that pushes commits from being a hole:
+#
+#   * it runs on `snapshots/**` branches only, never on `main` and never on a
+#     pull request's head — a recording is a proposal to be looked at and
+#     cherry-picked, not something that lands;
+#   * it pushes back to the ref it ran on, and nowhere else;
+#   * it records and *fails* if the recording does not survive a PNG round trip
+#     (see `SnapshotGateTests.record`), so a lane that cannot be trusted to
+#     write a usable image does not report success.
+#
+# What it cannot do is look at the images. Nothing here knows whether a recorded
+# snapshot shows the view or shows an empty rectangle where a platform-backed
+# control refused to render. That is why the recordings land on a branch of
+# their own: somebody has to open them before they become the thing every later
+# run is held to.
+
+on:
+  push:
+    branches: ['snapshots/**']
+  workflow_dispatch:
+
+concurrency:
+  group: record-snapshots-${{ github.ref }}
+  cancel-in-progress: true
+
+# The one workflow in this repository that can write to the repository. Scoped
+# to this file, used by one step, and the step pushes to `$GITHUB_REF` — the
+# branch this run was triggered on, which the filter above has already limited.
+permissions:
+  contents: write
+
+jobs:
+  record:
+    name: Record the snapshot goldens
+    runs-on: macos-15
+    timeout-minutes: 45
+    # The loop guard. A push made with GITHUB_TOKEN does not trigger workflows,
+    # so this cannot recurse today; it is here for the day somebody swaps in a
+    # PAT and finds out, which is a bad way to find out.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || !startsWith(github.event.head_commit.message, 'chore: record snapshot goldens')
+
+    steps:
+      # `workflow_dispatch` can name any ref, including the default branch, and
+      # this lane writes a commit to the ref it ran on. An error rather than a
+      # skipped job: a lane that quietly did nothing is how somebody concludes
+      # the recording worked.
+      - name: Refuse to record on the default branch
+        if: github.ref_name == 'main'
+        run: |
+          echo "::error::This lane commits recorded goldens to the branch it ran on, and main is not a branch to record onto. Push the change to a snapshots/* branch and run it there, then cherry-pick the recording."
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      - name: Print tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: swift package resolve
+
+      - name: Discover the scheme
+        run: |
+          scheme=$(xcodebuild -list -json | jq -r '
+            [ (.workspace.schemes // .project.schemes // [])[] ] as $schemes
+            | ( ($schemes | map(select(endswith("-Package"))) | first)
+                // ($schemes | first)
+                // empty )
+          ')
+          if [ -z "$scheme" ]; then
+            echo "::error::xcodebuild reported no schemes for this package."
+            exit 1
+          fi
+          echo "SCHEME=$scheme" >> "$GITHUB_ENV"
+
+      # No preferred runtime: this is the run that decides what the recorded
+      # runtime *is*, and it records the newest one the SDK can drive.
+      - name: Choose an iOS Simulator
+        timeout-minutes: 10
+        uses: ./.github/actions/select-simulator
+
+      - name: Build for the iOS Simulator
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee record-build.log
+
+      # The switch is a file in the checkout, which is the only channel that
+      # reaches a test bundle running inside a simulator — see
+      # `SnapshotStore.isRecording` for the two mechanisms that do not. It is
+      # removed again below whatever happens, so that nothing downstream of
+      # here can see a run still asking to record.
+      - name: Turn on record mode
+        run: touch .snapshot-record
+
+      - name: Record the goldens
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme "$SCHEME" \
+            -destination "id=$SIMULATOR_UDID" \
+            -only-testing:SnapshotTests \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee record-test.log
+
+      - name: Turn off record mode
+        if: always()
+        run: rm -f .snapshot-record
+
+      # Pull the handful of lines that say what broke to the end of the log,
+      # where anybody reading a red run looks first.
+      - name: Summarise failures
+        if: failure()
+        run: |
+          for log in record-build.log record-test.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log"
+            grep -E '(^|[[:space:]])(error|fatal error):|\*\* .* FAILED \*\*|^Testing failed:|✘' \
+              "$log" | sort -u | head -60 || true
+            echo "::endgroup::"
+          done
+
+      - name: Commit the recording
+        run: |
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git add Tests/SnapshotTests/__Snapshots__
+          if git diff --cached --quiet; then
+            echo "The recording is identical to what is already committed; nothing to push."
+            exit 0
+          fi
+          git status --short -- Tests/SnapshotTests/__Snapshots__
+          git commit -m 'chore: record snapshot goldens' \
+                     -m "Recorded by ${GITHUB_WORKFLOW} run ${GITHUB_RUN_ID} on ${RUNNER_OS}."
+          git push origin "HEAD:$GITHUB_REF"
+          echo "Pushed the recording to $GITHUB_REF. Open the images before trusting them."

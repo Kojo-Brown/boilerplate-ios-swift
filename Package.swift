@@ -135,5 +135,33 @@ let package = Package(
                 .swiftLanguageMode(.v6),
             ]
         ),
+
+        // Phase 12 item 3: the snapshot diff gate.
+        //
+        // Its own target rather than more files in `ViewModelTests`, because
+        // the two are run differently and for different reasons. The suite
+        // above is run on whatever simulator the runner image happens to carry
+        // the newest runtime for; a golden image is a picture taken by one
+        // renderer on one OS version, so the gate gets its own CI job that
+        // prefers the runtime the goldens were recorded on and says so when it
+        // cannot have it. `-skip-testing:SnapshotTests` in the main job and
+        // `-only-testing:SnapshotTests` in the gate's is what splits them, and
+        // that needs a target name to point at.
+        //
+        // `exclude:` is not optional here. `__Snapshots__` holds PNGs inside
+        // the target's own directory, and SwiftPM warns about every file in a
+        // target it has not been told what to do with. They are not resources:
+        // nothing in the bundle reads them. The suite reads them from the
+        // source tree through `#filePath`, which is also what lets the record
+        // lane write a file somebody can commit.
+        .testTarget(
+            name: "SnapshotTests",
+            dependencies: ["Core", "Features"],
+            path: "Tests/SnapshotTests",
+            exclude: ["__Snapshots__"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
     ]
 )
