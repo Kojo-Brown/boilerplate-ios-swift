@@ -6,7 +6,7 @@ import Testing
 /// The half of a snapshot gate that can be tested without a picture.
 ///
 /// Everything in ``SnapshotGateTests`` depends on a renderer, a simulator and
-/// seventeen committed PNGs, and none of it can say whether the comparison it
+/// fifteen committed PNGs, and none of it can say whether the comparison it
 /// trusts is right. These cases can: they build bitmaps by hand, so the
 /// expected answer is arithmetic rather than a recording, and they are the
 /// reason a tolerance, a mismatch budget and a bounding box are claims rather

@@ -146,12 +146,20 @@ enum SnapshotRenderer {
         width: CGFloat,
         appearance: SnapshotAppearance
     ) throws -> SnapshotBitmap {
+        // The order is load-bearing, and the first version had it wrong. An
+        // environment modifier applies to the subtree *underneath* it, so with
+        // `.background` written after `.environment` the canvas is a sibling
+        // layer outside the subtree: it resolved `systemBackground` in the
+        // ambient scheme and came out white behind every dark snapshot — which
+        // made `home-item-row.dark` white text on a white page, and left the
+        // white `AppColors.label` swatch invisible in the subject whose job is
+        // to prove the tokens resolve. Environment modifiers go last.
         let canvas = content
             .padding(canvasPadding)
             .frame(width: width)
+            .background(Color(uiColor: .systemBackground))
             .environment(\.colorScheme, appearance.scheme.colorScheme)
             .dynamicTypeSize(appearance.typeSize.dynamicTypeSize)
-            .background(Color(uiColor: .systemBackground))
 
         let renderer = ImageRenderer(content: canvas)
         renderer.scale = scale

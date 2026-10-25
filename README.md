@@ -129,7 +129,7 @@ build its own previews from doubles it ships itself.
 - [docs/tdd-kata.md](./docs/tdd-kata.md) — one use-case built test-first in
   four cycles, a commit per step: what each test was for, what the refactor
   decided, and which of the kata's claims a Linux agent cannot stand behind
-- [docs/snapshot-testing.md](./docs/snapshot-testing.md) — seventeen committed
+- [docs/snapshot-testing.md](./docs/snapshot-testing.md) — fifteen committed
   pictures and the CI job that compares them: why the renderer is the
   deterministic one rather than the faithful one, what it cannot draw, and the
   four ways a snapshot suite stops being a test while every run stays green

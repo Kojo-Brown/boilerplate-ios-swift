@@ -1,6 +1,6 @@
 # Snapshot tests and the CI diff gate
 
-Seventeen pictures, committed, compared pixel by pixel on every pull request.
+Fifteen pictures, committed, compared pixel by pixel on every pull request.
 
 This page is about what that buys, what it costs, and the four ways a snapshot
 suite stops being a test while every run stays green.
@@ -48,13 +48,24 @@ are excluded from the catalogue for that reason, not by oversight:
 | --- | --- |
 | `LoadingView`, `InlineLoadingView`, `PaginationFooter`, `AppButton` while loading | An indeterminate `ProgressView` is an animation. Its pixels are a function of the clock, so there is no "the" picture of it. |
 | `CameraPreviewView`, the Google sign-in button, `NavigationStack` chrome, `List` | Platform-backed. A `UIView` is not in SwiftUI's display list, so it renders blank — and blank records perfectly well, which is the trap. |
-| `AppTextField` at rest | Its background is `Material.regularMaterial`, which `ImageRenderer` does not draw. The error state is in the catalogue instead: it swaps the material for a flat red wash, and it is the state worth holding anyway. |
+| `AppTextField`, in any state | Its resting background is a `Material`, which `ImageRenderer` does not draw. The error state replaces the material with a flat red wash and *was* in the catalogue — until the first recording was looked at. The `TextField` and `SecureField` inside it come out as the renderer's own "cannot draw this" placeholder: a yellow bar with a no-entry sign, with the label, the border, the red wash and the error row rendering correctly around it. A golden of that is a picture of the renderer's limits. |
 
 A subject that renders blank is the failure mode to watch for, because nothing
 automated can see it: a blank rectangle is stable, reproducible, and passes
 forever. That is why a recording is reviewed by a person before it is
 committed, and why the record lane pushes to a branch of its own rather than to
 the branch under review.
+
+**That review is not a formality.** The first recording taken for this gate had
+two defects in it and neither one failed anything. `AppTextField` came out with
+a yellow "cannot draw this" bar where its text field should be, as above. And
+every dark snapshot was drawn on a *white* canvas, because `.background` had
+been written after `.environment(\.colorScheme, …)` in the renderer — an
+environment modifier applies to the subtree underneath it, so the canvas was a
+sibling layer outside it and resolved `systemBackground` in the ambient scheme.
+`home-item-row.dark` was white text on white. The light-versus-dark assertion
+passed anyway, every time, because the *content* really did differ. It now
+checks the canvas pixel as well as the picture.
 
 ## The catalogue
 
@@ -72,7 +83,6 @@ line reports a changed size rather than a diff of a clipped image.
 | `tag-chip-flow-narrow` | 220 | light | The same chips in a container too narrow for them. The line breaking is the subject; at a comfortable width it is invisible. |
 | `home-item-row` | 390 | light, dark | Two list rows, one of them long enough to wrap, with a divider between. |
 | `home-item-card` | 390 | light, dark | The iPad grid card: wrapping title, clipped corners, and the shadow the canvas padding exists for. |
-| `app-text-field-error` | 390 | light, dark | A text field and a secure field, both failing validation. |
 
 File names are `<subject>.<scheme>[.<type size>].png`, derived from the
 catalogue rather than written down. The standard type size is spelled by
@@ -174,7 +184,7 @@ rm .snapshot-record
 stylistic choice. A test bundle on a simulator is launched by the test runner
 *inside* the simulator and inherits nothing from the `xcodebuild` process on
 your Mac, so `SNAPSHOT_RECORD=1 xcodebuild …` reaches nothing — the suite takes
-the verify path, reports all seventeen cases as never recorded, and writes none
+the verify path, reports all fifteen cases as never recorded, and writes none
 of them. `TEST_RUNNER_SNAPSHOT_RECORD=1` as a build setting, which is the
 documented way to put a variable into a test runner's environment, does not
 reach it either: on the scheme SwiftPM generates, the `.xctestrun` comes out
@@ -251,7 +261,7 @@ than recorded.
   behaviour with materials and platform views is documented but not versioned,
   and the day it starts drawing a `Material` the resting `AppTextField` becomes
   recordable and this page is where that belongs.
-* **Eight subjects is a sample.** The screens themselves are not in the
+* **Seven subjects is a sample.** The screens themselves are not in the
   catalogue — `LoginView` carries a platform-backed sign-in button and
   `HomeView` a `List` — so what is held still is the design system, not the
   composition of it.

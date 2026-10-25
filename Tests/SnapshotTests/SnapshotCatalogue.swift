@@ -18,9 +18,14 @@ import SwiftUI
 /// * anything platform-backed — `CameraPreviewView`, the Google sign-in
 ///   button, `NavigationStack` chrome, a `List`. `ImageRenderer` draws
 ///   SwiftUI's display list and a `UIView` is not in it;
-/// * `AppTextField` in its resting state, whose background is
-///   `Material.regularMaterial`. The error state is here instead: it swaps the
-///   material for a flat red wash, which is the state worth holding anyway.
+/// * `AppTextField`, in any state. Its resting background is a `Material`,
+///   which `ImageRenderer` does not draw — and the error state, which replaces
+///   the material with a flat red wash, was in this catalogue until the first
+///   recording was looked at: the `TextField` and `SecureField` inside it come
+///   out as the renderer's own "cannot draw this" placeholder, a yellow bar
+///   with a no-entry sign. Everything around them renders. A golden of that is
+///   a picture of the renderer's limits, and committing it would have frozen
+///   those limits into the gate.
 ///
 /// The raw values are the subject half of every golden's file name, and
 /// `Tools/assert-snapshot-gate.py` checks the directory against this list in
@@ -51,7 +56,6 @@ enum SnapshotSubject: String, CaseIterable, Sendable {
 
     case homeItemRow = "home-item-row"
     case homeItemCard = "home-item-card"
-    case appTextFieldError = "app-text-field-error"
 
     /// The canvas width in points.
     var width: CGFloat {
@@ -59,7 +63,7 @@ enum SnapshotSubject: String, CaseIterable, Sendable {
         case .semanticColourSwatches: 320
         case .tagChipFlowNarrow: 220
         case .appButtonStyles, .inlineErrorBanner, .tagChipFlow: 390
-        case .homeItemRow, .homeItemCard, .appTextFieldError: 390
+        case .homeItemRow, .homeItemCard: 390
         }
     }
 
@@ -112,7 +116,6 @@ enum SnapshotCatalogue {
         case .tagChipFlowNarrow: AnyView(tagChips)
         case .homeItemRow: AnyView(homeItemRow)
         case .homeItemCard: AnyView(homeItemCard)
-        case .appTextFieldError: AnyView(appTextFieldError)
         }
     }
 
@@ -160,24 +163,6 @@ enum SnapshotCatalogue {
         HomeItemCard(item: longSampleItem)
     }
 
-    private static var appTextFieldError: some View {
-        VStack(spacing: 20) {
-            AppTextField(
-                "Email",
-                text: .constant("not-an-email"),
-                keyboardType: .emailAddress,
-                autocapitalization: .never,
-                autocorrectionDisabled: true,
-                errorMessage: "Please enter a valid email address."
-            )
-            AppTextField(
-                "Password",
-                text: .constant(""),
-                isSecure: true,
-                errorMessage: "Password is required."
-            )
-        }
-    }
 
     // MARK: - Fixtures
 

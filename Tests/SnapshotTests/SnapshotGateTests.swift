@@ -35,7 +35,7 @@ extension SnapshotCase: CustomTestStringConvertible {
 /// `.serialized` and the time limit follow the house rule for suites that drive
 /// SwiftUI (see `docs/testing.md`). This one needs neither a window nor a run
 /// loop turn — `ImageRenderer` is synchronous — but it is main-actor work all
-/// the way down, and seventeen renders racing the rest of the bundle for the
+/// the way down, and fifteen renders racing the rest of the bundle for the
 /// main actor is how the starvation failures in this repository's history
 /// started.
 @Suite("Snapshot diff gate", .serialized, .timeLimit(.minutes(1)))
@@ -130,6 +130,23 @@ struct SnapshotGateTests {
             \(subject.rawValue)'s light and dark goldens are the same picture: \
             \(comparison). Either the colour scheme never reached the renderer, \
             or this subject draws nothing that depends on it.
+            """
+        )
+
+        // The canvas, specifically, and not only the drawing on it. The two
+        // can disagree: an environment modifier applies to the subtree under
+        // it, so a background attached outside that subtree resolves in the
+        // ambient scheme while everything inside resolves correctly. That is
+        // not a hypothetical — it is what the first recording did, and the
+        // expectation above passed on every subject while it happened, because
+        // the difference in the *content* was real. The top-left pixel is
+        // inside the canvas padding, so it is background and nothing else.
+        #expect(
+            light.pixel(x: 0, y: 0) != dark.pixel(x: 0, y: 0),
+            """
+            \(subject.rawValue) is drawn on the same canvas in both schemes — \
+            \(light.pixel(x: 0, y: 0)). The background is resolving outside the \
+            environment the rest of the snapshot is rendered in.
             """
         )
     }

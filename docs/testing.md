@@ -145,7 +145,7 @@ against XCTest.
 ## The suite that is not in this bundle
 
 `SnapshotTests` is a second test target, and deliberately not more files in
-`ViewModelTests`. It renders eight of the design system's views and compares
+`ViewModelTests`. It renders seven of the design system's views and compares
 them against committed PNGs, which makes it the one suite here whose verdict
 depends on *which simulator ran it* — so it gets its own CI job, asking for the
 runtime its goldens were recorded on, while this bundle goes on taking the

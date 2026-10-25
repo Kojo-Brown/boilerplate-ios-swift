@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail if the snapshot diff gate is not in a state that can fail.
 
-Phase 12 item 3 added a snapshot suite: seventeen committed PNGs, a renderer,
+Phase 12 item 3 added a snapshot suite: fifteen committed PNGs, a renderer,
 a pixel comparison, and a CI job that runs them. Everything in that sentence is
 checked by the suite itself except the part that matters most — the *committed
 state* — and a snapshot gate has an unusually quiet way of switching itself off.
