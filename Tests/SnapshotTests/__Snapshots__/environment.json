@@ -1,0 +1,24 @@
+{
+  "cases" : [
+    "app-button-styles.dark",
+    "app-button-styles.light",
+    "app-button-styles.light.accessibility3",
+    "app-text-field-error.dark",
+    "app-text-field-error.light",
+    "home-item-card.dark",
+    "home-item-card.light",
+    "home-item-row.dark",
+    "home-item-row.light",
+    "inline-error-banner.dark",
+    "inline-error-banner.light",
+    "inline-error-banner.light.accessibility3",
+    "semantic-colour-swatches.dark",
+    "semantic-colour-swatches.light",
+    "tag-chip-flow-narrow.light",
+    "tag-chip-flow.dark",
+    "tag-chip-flow.light"
+  ],
+  "iosVersion" : "18.6",
+  "renderer" : "SwiftUI.ImageRenderer",
+  "scale" : 2
+}
