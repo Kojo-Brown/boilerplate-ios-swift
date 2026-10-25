@@ -114,9 +114,11 @@ runs:
         # measuring the wrong thing. When the runtime is not here, the warning
         # below is what turns an otherwise baffling pixel diff into a sentence.
         #
-        # The value arrives through `env:` rather than a `${{ }}` interpolation
-        # into this script, because it is read out of a file in the checkout —
-        # on a fork's pull request, a string somebody else wrote.
+        # The value arrives through `env:` rather than being interpolated into
+        # this script as a workflow expression, because it is read out of a file
+        # in the checkout — on a fork's pull request, a string somebody else
+        # wrote. (A literal empty expression in a comment is also enough to make
+        # the runner refuse to load this file, which is how that was learned.)
         udid=''
         if [ -n "$PREFERRED_RUNTIME" ]; then
           wanted="iOS-$(printf '%s' "$PREFERRED_RUNTIME" | tr '.' '-')"
