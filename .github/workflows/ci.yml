@@ -793,6 +793,25 @@ jobs:
 
     strategy:
       fail-fast: false
+      # One leg at a time, and this is a constraint of the account rather than
+      # of the tests.
+      #
+      # A GitHub Free plan carries five concurrent macOS slots. This workflow
+      # asked for three before this item — lint, build-and-test, snapshot — and
+      # three parallel legs take it to six. The first run on this branch showed
+      # exactly that: five jobs got runners, the sixth sat queued until lint
+      # finished and released one. The second run got no runners at all and
+      # every job was cancelled after twenty minutes with `runner_id: 0`,
+      # having never been assigned one — the whole check suite red for a reason
+      # that is not in the diff. Other repositories on the same account run
+      # macOS CI too, so the slots are not this workflow's to count on.
+      #
+      # Serialised, the peak is four and the three legs each keep their own
+      # sixty-minute budget. It costs wall-clock and nothing else: no leg
+      # depends on another, `fail-fast: false` still reports all three, and the
+      # alternative — dropping a device — would cost the grid branch or the
+      # smallest screen, which is the coverage this item exists for.
+      max-parallel: 1
       matrix:
         include:
           - device: iPhone 16
