@@ -47,12 +47,29 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (file, suite type) -> why XCTest rather than Swift Testing.
 #
-# Empty, and that is the honest state of the tree: the six `*XCTests.swift`
-# mirrors that used to be here were duplicate spellings of suites that already
-# existed in Swift Testing, not uses of anything XCTest alone provides, so they
-# were absorbed rather than kept. The table is here because the next XCTest
-# suite will have a reason, and this is where it gets written down.
-ALLOWED_XCTEST_SUITES: dict[tuple[str, str], str] = {}
+# It was empty until Phase 12 item 4, and the three entries it has now are all
+# the same reason: `XCUIApplication`, `XCUIElement` and everything around them
+# are XCTest-only. Swift Testing has no UI-automation surface at all, a UI test
+# bundle's runner discovers `XCTestCase` subclasses, and the one place a journey
+# is driven from is therefore the one place XCTest is not a choice.
+#
+# This is what `docs/testing.md` has said would happen since the migration:
+# "Phase 12 item 4 is that journey, and it will arrive as `XCTestCase`."
+UI_JOURNEY_REASON = (
+    "XCUITest is XCTest-only: Swift Testing has no UI-automation surface, and a "
+    "UI test bundle's runner discovers XCTestCase subclasses. See docs/ui-testing.md."
+)
+
+ALLOWED_XCTEST_SUITES: dict[tuple[str, str], str] = {
+    (
+        os.path.join("UITestHost", "UITests", "Journeys", "SignInJourneyTests.swift"),
+        "SignInJourneyTests",
+    ): UI_JOURNEY_REASON,
+    (
+        os.path.join("UITestHost", "UITests", "Journeys", "AdaptiveLayoutUITests.swift"),
+        "AdaptiveLayoutUITests",
+    ): UI_JOURNEY_REASON,
+}
 
 IMPORT = re.compile(r"^\s*(?:@\w+\s+)*import\s+(\w+)")
 
@@ -134,14 +151,23 @@ def is_annotated(lines: list[str], index: int) -> bool:
 
 def main(argv: list[str]) -> int:
     root = os.path.abspath(argv[1]) if len(argv) > 1 else REPO
-    tests = os.path.join(root, "Tests")
+    # Two roots since Phase 12 item 4. `Tests/` is the package's suites;
+    # `UITestHost/UITests/` is the Xcode target that drives the app. The second
+    # is in scope for the same reason the first is — an XCTest suite there is
+    # still an XCTest suite, and the allowlist is where its reason is written
+    # down — and leaving it out would have meant the one place in this
+    # repository that genuinely needs XCTest was the one place nothing checked.
+    test_roots = [
+        os.path.join(root, "Tests"),
+        os.path.join(root, "UITestHost", "UITests"),
+    ]
     problems: list[str] = []
     seen_suites: set[tuple[str, str]] = set()
     swift_testing_files = 0
     swift_testing_cases = 0
     xctest_suites = 0
 
-    for path in swift_files(tests):
+    for path in [p for test_root in test_roots for p in swift_files(test_root)]:
         rel = os.path.relpath(path, root)
         lines = code_lines(path)
         imports = {m.group(1) for m in (IMPORT.match(line) for line in lines) if m}

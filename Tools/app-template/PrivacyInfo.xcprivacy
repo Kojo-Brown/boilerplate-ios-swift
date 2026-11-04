@@ -5,11 +5,19 @@
   target — beside `Info.plist`, with "Target Membership" ticked — and keep it in
   step with the package.
 
-  Phase 11 item 6. This is a template rather than a shipped resource because
-  this repository has no app target: `Package.swift` declares a library, there
-  is no `.xcodeproj` or `.xcworkspace`, and the four manifests under `Sources/`
-  land in SwiftPM resource bundles rather than at the root of anything
-  installable.
+  Phase 11 item 6. This was a template rather than a shipped resource because
+  the repository had no app target: `Package.swift` declares a library, and the
+  four manifests under `Sources/` land in SwiftPM resource bundles rather than
+  at the root of anything installable.
+
+  Phase 12 item 4 gave it one reader. `UITestHost/` is an app target — the
+  XCUITest journey needs a bundle to launch — and its `project.yml` adds *this
+  file*, by path, to its Resources rather than copying it. So the instruction
+  above is one the repository now follows itself, and a reader can see what it
+  looks like done. It changes nothing about what the file is for: the host is a
+  simulator-only test host, built unsigned and uploaded nowhere, so the
+  required-reason check this manifest exists to satisfy still runs against an
+  app somebody else builds. See `docs/ui-testing.md`.
 
   **Why the app needs its own copy, and why it is the union.** The four target
   manifests are what Xcode reads to build the privacy report, and they say which

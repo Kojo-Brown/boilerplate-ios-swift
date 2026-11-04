@@ -398,6 +398,26 @@ jobs:
       - name: Audit the snapshot gate's committed state
         run: python3 Tools/assert-snapshot-gate.py
 
+      # Phase 12 item 4. The UI test host and the journey it runs, which is the
+      # one suite in this repository whose failures are mostly not assertions.
+      #
+      # The app and the test bundle share no module — XCUITest is black box by
+      # construction — so everything they agree on they agree on by convention:
+      # an identifier string, a launch argument, a `-skip-testing:` line in
+      # this file, two `Info.plist` keys without which the host does not finish
+      # launching. Each of those can drift without a compile error, and three
+      # of them drift into a suite that still goes green: a query for an
+      # identifier nothing carries waits out its timeout, a mistyped launch
+      # argument runs the journey against the *live* dependency graph, and a
+      # layout test skipped by every leg is an assertion nobody performs.
+      #
+      # So it is checked here rather than discovered there, and like the audits
+      # above it this one is syntactic and runs on the scheduled agent's Linux
+      # box — which it has to, because the agent can run no part of the
+      # `ui-test` job itself.
+      - name: Audit the UI test host and the journey
+        run: python3 Tools/assert-ui-test-journey.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15
@@ -728,5 +748,157 @@ jobs:
             SnapshotFailures
             snapshot-build.log
             snapshot-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Phase 12 item 4: the XCUITest journey, on a matrix of simulators.
+  #
+  # Its own job for the reason the snapshot gate is: it builds a different
+  # product. Everything above builds the SwiftPM package; this builds the Xcode
+  # project in `UITestHost/`, which wraps the package in the one thing SwiftPM
+  # cannot declare — an installable `.app` — so that there is something for a UI
+  # test to launch. See `UITestHost/project.yml` for why the project is
+  # generated rather than committed, and `docs/ui-testing.md` for the whole of
+  # it.
+  #
+  # ## What the matrix is actually testing
+  #
+  # Three devices, and each one is here because it can disagree with the others
+  # about something this app does:
+  #
+  #   * **iPhone 16** — the compact baseline, and the device the rest of CI
+  #     uses, so a failure here and nowhere else is about the journey rather
+  #     than about the device.
+  #   * **iPhone SE (3rd generation)** — the smallest screen still supported.
+  #     A row, a toolbar menu or a form that fits on a 16 and not on an SE is a
+  #     real defect, and it is invisible in a preview and in a snapshot taken at
+  #     one size.
+  #   * **iPad Pro 13-inch (M4)** — a regular horizontal size class, which is
+  #     the *other branch* of `HomeView.content`. Twelve phases of tests have
+  #     never rendered `itemGrid` on a device.
+  #
+  # `fail-fast: false`, because the useful information is which devices
+  # disagreed. A matrix that cancels its siblings on the first red leg reports
+  # one failure and hides whether the other two would have passed, which is the
+  # difference between "the grid branch is broken" and "the journey is broken".
+  #
+  # Each leg skips the layout test that does not apply to it. That is the whole
+  # of how a leg knows what to expect — see `AdaptiveLayoutUITests` — and the
+  # identifiers are held to naming real tests by
+  # `Tools/assert-ui-test-journey.py` in the lint job.
+  ui-test:
+    name: UI journey on ${{ matrix.device }}
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: iPhone 16
+            family: iPhone
+            slug: iphone-16
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+          - device: iPhone SE (3rd generation)
+            family: iPhone
+            slug: iphone-se-3
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+          - device: iPad Pro 13-inch (M4)
+            family: iPad
+            slug: ipad-pro-13
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      # The one tool this job needs that the package does not. It is a bottled
+      # formula, so this is a download rather than a build.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the host project
+        working-directory: UITestHost
+        run: |
+          xcodegen generate
+          xcodebuild -list -project UITestHost.xcodeproj
+
+      - name: Resolve Swift Package dependencies
+        working-directory: UITestHost
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost
+
+      - name: Choose an iOS Simulator
+        timeout-minutes: 10
+        uses: ./.github/actions/select-simulator
+        with:
+          device-family: ${{ matrix.family }}
+          preferred-device: ${{ matrix.device }}
+
+      - name: Build the host app and the UI tests
+        timeout-minutes: 30
+        working-directory: UITestHost
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost \
+            -destination "id=$SIMULATOR_UDID" \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ui-build.log
+
+      # `-test-timeouts-enabled` for the reason the package's suite has it: a UI
+      # test that waits for an element that will never arrive is the most likely
+      # thing in this workflow to hang, and without an allowance it costs the
+      # job's full hour and reports as "cancelled" — naming no test and
+      # uploading no screenshots.
+      #
+      # The allowance is per test and generous: a journey is ten screens, each
+      # with its own wait, and the whole of it runs in well under a minute on a
+      # warm runner.
+      - name: Run the journey
+        timeout-minutes: 25
+        working-directory: UITestHost
+        env:
+          SKIP_TEST: ${{ matrix.skip }}
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost \
+            -destination "id=$SIMULATOR_UDID" \
+            -skip-testing:"$SKIP_TEST" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -resultBundlePath UITestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ui-test.log
+
+      # The result bundle, which is where a UI test failure actually lives: the
+      # automatic screenshot of the screen as it was, the accessibility tree
+      # that was queried, and the `runActivity` step the journey had reached. A
+      # log line saying an element did not exist is a sentence; the bundle is
+      # the answer.
+      - name: Upload the UI test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-test-${{ matrix.slug }}-${{ github.run_number }}
+          path: |
+            UITestHost/UITestResults.xcresult
+            UITestHost/ui-build.log
+            UITestHost/ui-test.log
           if-no-files-found: warn
           retention-days: 14

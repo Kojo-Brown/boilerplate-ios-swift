@@ -8,15 +8,24 @@ Core  <-  Networking  <-  Features  <-  BoilerplateiOSSwift
 ```
 
 `Core` has no in-package dependency at all. `Networking` sees `Core`.
-`Features` sees both. `BoilerplateiOSSwift` — the composition root, `@main`, and
-the one subscriber to the session events — sees all three, and nothing sees it.
+`Features` sees both. `BoilerplateiOSSwift` — the composition root and the one
+subscriber to the session events — sees all three, and nothing in the package
+sees it.
+
+One thing does, from outside: Phase 12 item 4 moved `@main` out of this target
+and into `UITestHost/`, a small Xcode app target that links it and provides the
+entry point, so that an XCUITest has a bundle to launch. That is why
+`BoilerplateApp` is the one `public` type in the package — `package` does not
+reach a target that is not part of it — and it changes nothing about the graph
+below: the host names `BoilerplateApp.main()` and nothing else. See
+[ui-testing.md](./ui-testing.md).
 
 | Target | Path | Holds |
 |--------|------|-------|
 | `Core` | `Sources/Core` | Domain models, the error vocabulary, the concurrency primitives, SwiftData persistence, Keychain and biometrics, theming, navigation routes, the UDF contract |
 | `Networking` | `Sources/Networking` | The API client and its endpoints, the token store, the repository decorator chain, the sync strategies |
 | `Features` | `Sources/Features` | Five screens, their view models and feature services, and the design-system components they share |
-| `BoilerplateiOSSwift` | `Sources/App` | `AppContainer`, `BoilerplateApp`, `AppNavigationView`, `SessionObserver` |
+| `BoilerplateiOSSwift` | `Sources/App` | `AppContainer`, `BoilerplateApp`, `AppNavigationView`, `SessionObserver`, `UITestLaunch` |
 
 ## What the split found
 

@@ -52,10 +52,12 @@ package struct HomeView: View {
                             } label: {
                                 Label(FeatureStrings.Home.settings.string, systemImage: "gearshape")
                             }
+                            .accessibilityIdentifier(AccessibilityID.Home.settingsMenuItem)
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
                         .accessibilityLabel(Text(FeatureStrings.Home.moreOptions))
+                        .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                     }
                 }
             }
@@ -112,6 +114,13 @@ package struct HomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // Phase 12 item 4. This layout and the grid below each carry an
+        // identifier, and exactly one of them is ever in the tree: `content`
+        // resolves between them on the horizontal size class. That is what
+        // makes the simulator matrix worth running — a UI test on an iPad
+        // asserts it got the grid rather than a wider copy of this list, which
+        // nothing else in the suite can see. See `docs/ui-testing.md`.
+        .accessibilityIdentifier(AccessibilityID.Home.list)
     }
 
     // MARK: - Grid layout (regular / iPad)
@@ -141,6 +150,7 @@ package struct HomeView: View {
                 }
                 .padding(16)
             }
+            .accessibilityIdentifier(AccessibilityID.Home.grid)
         }
     }
 
@@ -155,6 +165,7 @@ package struct HomeView: View {
             Button(FeatureStrings.Home.retry.string) { Task { await viewModel.refresh() } }
                 .buttonStyle(.borderedProminent)
         }
+        .accessibilityIdentifier(AccessibilityID.Home.errorState)
     }
 
     private var emptyView: some View {
@@ -163,6 +174,7 @@ package struct HomeView: View {
             systemImage: "tray",
             description: Text(FeatureStrings.Home.emptyDescription)
         )
+        .accessibilityIdentifier(AccessibilityID.Home.emptyState)
     }
 }
 

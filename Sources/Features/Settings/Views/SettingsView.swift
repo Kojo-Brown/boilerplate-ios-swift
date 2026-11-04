@@ -37,6 +37,7 @@ package struct SettingsView: View {
                 Button(FeatureStrings.Settings.signOut.string, role: .destructive) {
                     store.send(.signOutTapped)
                 }
+                .accessibilityIdentifier(AccessibilityID.Settings.signOutButton)
             }
 
             Section {
@@ -49,6 +50,12 @@ package struct SettingsView: View {
 
             Section(FeatureStrings.Settings.appSection.string) {
                 LabeledContent(FeatureStrings.Settings.version.string, value: Bundle.main.appVersion)
+                    // Phase 12 item 4. Queried by `SettingsJourneyTests` for a
+                    // value that is not the em dash this reads when
+                    // `CFBundleShortVersionString` is missing — which is the
+                    // one assertion that holds the UI test host's `Info.plist`
+                    // to carrying the keys the app reads at runtime.
+                    .accessibilityIdentifier(AccessibilityID.Settings.versionRow)
                 LabeledContent(FeatureStrings.Settings.build.string, value: Bundle.main.buildNumber)
             }
         }
@@ -68,6 +75,7 @@ package struct SettingsView: View {
     private var accountRows: some View {
         if let user = store.state.user {
             LabeledContent(FeatureStrings.Settings.email.string, value: user.email)
+                .accessibilityIdentifier(AccessibilityID.Settings.emailRow)
             nameEditor
             if store.state.origin == .localCache {
                 Label(FeatureStrings.Settings.offlineCopy.string, systemImage: "wifi.slash")
@@ -84,6 +92,7 @@ package struct SettingsView: View {
             // hand when the profile fetch fails, so the row keeps working and
             // the failure is stated rather than swallowed.
             LabeledContent(FeatureStrings.Settings.email.string, value: appState.currentUserEmail ?? "—")
+                .accessibilityIdentifier(AccessibilityID.Settings.emailRow)
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -105,6 +114,7 @@ package struct SettingsView: View {
             TextField(FeatureStrings.Settings.name.string, text: draftName)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
+                .accessibilityIdentifier(AccessibilityID.Settings.nameField)
             if store.state.isSaving {
                 // The Save button is gone while this is on screen, so the
                 // spinner is the only thing left to say what happened to it.
@@ -116,6 +126,7 @@ package struct SettingsView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!store.state.canSave)
+                .accessibilityIdentifier(AccessibilityID.Settings.saveButton)
             }
         }
     }

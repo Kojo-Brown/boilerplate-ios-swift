@@ -13,6 +13,12 @@
 included:
   - Sources
   - Tests
+  # Phase 12 item 4. The UI test host and its journey are Swift this repository
+  # ships and reviews, so they are linted like the rest of it. They live outside
+  # `Sources/` and `Tests/` because they belong to an Xcode target rather than
+  # to a SwiftPM one — SwiftPM would have to be told what to do with them, and
+  # being told wrongly is a build warning in a gate that fails on warnings.
+  - UITestHost
 
 excluded:
   - .build
