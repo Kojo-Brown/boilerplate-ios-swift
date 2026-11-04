@@ -1,4 +1,3 @@
-
 /// The accessibility identifiers the shipped screens publish, in one place.
 ///
 /// Phase 12 item 4 is the first thing in this package that reads the published

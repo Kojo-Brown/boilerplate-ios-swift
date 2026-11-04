@@ -113,7 +113,7 @@ schemes:
     build:
       targets:
         UITestHost: all
-        UITests: [test]
+        UITests: all
     test:
       # No coverage: the figure every other item is measured against comes from
       # the package's own suite, and a second number gathered from a different
