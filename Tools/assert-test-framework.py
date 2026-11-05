@@ -47,8 +47,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (file, suite type) -> why XCTest rather than Swift Testing.
 #
-# It was empty until Phase 12 item 4, and the three entries it has now are all
-# the same reason: `XCUIApplication`, `XCUIElement` and everything around them
+# It was empty until Phase 12 item 4, and the two entries it has now are both
+# there for the same reason: `XCUIApplication`, `XCUIElement` and everything around them
 # are XCTest-only. Swift Testing has no UI-automation surface at all, a UI test
 # bundle's runner discovers `XCTestCase` subclasses, and the one place a journey
 # is driven from is therefore the one place XCTest is not a choice.
