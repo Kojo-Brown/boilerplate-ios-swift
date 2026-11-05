@@ -148,8 +148,8 @@ build its own previews from doubles it ships itself.
 - [docs/ui-testing.md](./docs/ui-testing.md) — the XCUITest journey and the
   simulator matrix: why the package needed an app target before it could have
   one, what the app does differently under test, why every query is an
-  identifier rather than a label, and the four ways a UI suite stops being a
-  test while every run stays green
+  identifier rather than a label, and the ways a UI suite stops being a test
+  while every run stays green
 
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

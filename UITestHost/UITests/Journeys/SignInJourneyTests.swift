@@ -55,8 +55,14 @@ final class SignInJourneyTests: XCTestCase {
     private static let hostVersion = "1.0.0"
 
     /// The row the journey opens, and the term that isolates it.
-    /// `HomeViewModel.catalogue` mints "Item 1" through "Item 10".
-    private static let openedRow = "Item 7"
+    ///
+    /// `HomeViewModel.catalogue` mints "Item 1" through "Item 10", and this is
+    /// deliberately the *last* of them, because reaching it is the only
+    /// viewport-independent evidence that the whole corpus arrived — see
+    /// ``searchDownToOneRow(_:)``. "Item 10" also happens to be the one term in
+    /// the ten that cannot match another row: "Item 1" is a prefix of it, not
+    /// the reverse.
+    private static let openedRow = "Item 10"
 
     @MainActor
     func testSignedOutUserCanSignInBrowseAnItemAndSignOut() {
@@ -123,16 +129,43 @@ final class SignInJourneyTests: XCTestCase {
             // arriving is the assertion that the event reached the observer.
             home.awaitLoadedRows()
             login.signInButton.awaitDisappearance("the sign-in screen")
-            XCTAssertTrue(home.row(titled: "Item 10").exists, "The stub fetch returns ten rows.")
+            // The authenticated layout is in the tree, which is the other half
+            // of the swap: the rows could in principle arrive under the login
+            // branch, and this is what says they did not.
+            //
+            // What used to be here was `home.row(titled: "Item 10").exists`,
+            // asserting "the stub fetch returns ten rows" — and it failed on
+            // the first run of this suite for a reason worth keeping written
+            // down. A `List` is lazy: it materialises the rows it can show, so
+            // the tenth of ten is not in the accessibility tree on an iPhone 16
+            // and is on an iPad. An existence check against it is a claim about
+            // the viewport wearing the words of a claim about the data, which
+            // is the exact mistake `AccessibilityID` argues against in its
+            // other form. The corpus is asserted in the next step instead,
+            // where the search brings the tenth row on screen itself.
+            XCTAssertTrue(
+                home.list.exists || home.grid.exists,
+                "Signing in must put one of HomeView's two layouts in the tree."
+            )
         }
     }
 
+    /// Two things at once, and the second is why the term is the last row.
+    ///
+    /// The search filters, which is what the step is named for. It also brings
+    /// "Item 10" on screen, and *that* is the assertion that the stub fetch
+    /// returned the whole catalogue rather than a prefix of it: the row cannot
+    /// be matched by a filter unless it is in the corpus, and once matched it
+    /// is the only row there is, so no amount of lazy rendering can hide it.
+    /// A device-independent claim about the data, made through the one lens
+    /// that does not depend on how many rows happen to fit.
     @MainActor
     private func searchDownToOneRow(_ app: XCUIApplication) {
         XCTContext.runActivity(named: "Search the list down to one row") { _ in
             let home = HomeScreen(app: app)
             home.search(for: Self.openedRow)
-            home.row(titled: Self.openedRow).awaitExistence("the matching row")
+            home.row(titled: Self.openedRow)
+                .awaitExistence("the tenth row, which only the fetched corpus can supply")
             home.row(titled: "Item 1").awaitDisappearance("a non-matching row")
         }
     }

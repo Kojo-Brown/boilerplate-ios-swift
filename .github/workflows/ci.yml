@@ -966,6 +966,33 @@ jobs:
           done
           exit "$missing"
 
+      # A UI test log is four hundred lines of event trace per test — every tap,
+      # every idle wait, every existence check — and three lines of it say what
+      # broke. The package's job has had this step since Phase 0 item 4 for the
+      # same reason; this one was written without it and the first red run cost
+      # a manual read of the whole trace to find one `XCTAssertTrue failed`.
+      #
+      # `if: failure()` only, and before the artifact upload so it is above the
+      # upload's own noise in the log.
+      - name: Summarise the journey's failures
+        if: failure()
+        working-directory: UITestHost
+        run: |
+          for log in ui-build.log ui-test.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log — failures"
+            grep -E '(^|[[:space:]])(error|fatal error):|XCTAssert[A-Za-z]* failed|^Failing tests:|^\t[A-Za-z]+Tests\.|\*\* .* FAILED \*\*|Timed out after|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
+              | grep -v '^[[:space:]]*/Applications/Xcode' \
+              | sort -u \
+              || echo "(no failure lines matched; see the uploaded $log)"
+            echo "::endgroup::"
+            # A test that hung leaves no failure line: the last thing the log
+            # says is the step it was waiting on.
+            echo "::group::$log — last 30 lines"
+            tail -30 "$log"
+            echo "::endgroup::"
+          done
+
       # The result bundle, which is where a UI test failure actually lives: the
       # automatic screenshot of the screen as it was, the accessibility tree
       # that was queried, and the `runActivity` step the journey had reached. A

@@ -5,7 +5,7 @@ search, a push, the toolbar menu, a profile edit and out the other side — on
 three simulators, on every pull request.
 
 This page is about what that buys, what had to exist before it could run at
-all, and the four ways a UI suite stops being a test while every run stays
+all, and the ways a UI suite stops being a test while every run stays
 green.
 
 ## What it catches that nothing else here does
@@ -213,7 +213,7 @@ preference, because runner images rename and retire models and the layout
 follows from the size class rather than from the model. A fallback within the
 family is a warning, not a failure.
 
-## The four ways a UI suite stops being a test
+## The ways a UI suite stops being a test
 
 Each of these is checked by `Tools/assert-ui-test-journey.py`, in the lint job,
 on Linux, with no toolchain:
@@ -233,7 +233,21 @@ on Linux, with no toolchain:
    each, which is what makes the post-run grep above a check rather than a
    formality.
 
-A fifth is checked by the suite itself rather than by the audit:
+A fifth was found by running it, and is the reason the journey asserts the
+corpus through a search rather than through a row. **An existence check against
+a lazily rendered row is a claim about the viewport in the words of a claim
+about the data.** The first run of this suite failed on
+`home.row(titled: "Item 10").exists` with the message "The stub fetch returns
+ten rows": `HomeViewModel.catalogue` had returned all ten, and `List`
+materialises the rows it can show, so the tenth was simply not in the
+accessibility tree on an iPhone 16 — and would have been on the iPad. The
+assertion was not too strict; it was about something else than it said. What
+replaced it is the search step, which brings the tenth row on screen by
+matching it, so the claim "the corpus has ten items" is made by the one lens
+that does not depend on how many rows happen to fit. The same trap is waiting
+for any assertion about a row count, a last row, or a row below the fold.
+
+A sixth is checked by the suite itself rather than by the audit:
 `XCUIElement.replaceText(with:)` reads the field's value back after typing,
 because `typeText` reports no error when the field never took keyboard focus —
 the characters go nowhere, and the journey would fail three steps later on a
