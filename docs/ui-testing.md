@@ -203,7 +203,28 @@ The grep is a substring match rather than a parse of the result bundle on
 purpose: `xcodebuild` has spelled its per-test lines three different ways across
 Xcode releases and the method name is in all three.
 
-### Picking the simulator
+#### The toolbar menu, and a modifier order that is load-bearing
+
+`HomeView`'s toolbar `Menu` carried `.accessibilityLabel` and then
+`.accessibilityIdentifier`, in that order, and the journey could not find it:
+the simulator reported no matches for `home.moreMenu` with the menu plainly on
+screen. A `Menu` inside a `ToolbarItem` is bridged to a UIKit bar button item,
+and applying `.accessibilityLabel` to it introduces an element that wraps what
+came before — so an identifier applied *on top of* that lands on the wrapper
+rather than on the button the bridge publishes. Applied first, it is on the
+element the label then names, and the query finds it.
+
+Two things follow, and both are in the source where they apply. The note
+explaining it sits above the `Menu` rather than between the symbol and its
+label, because `Tools/assert-accessibility-audit.py` wants a symbol named
+within ten lines of itself and counts a comment in the gap. And
+`HomeScreen.openSettings` prints the navigation bar's subtree when the query
+misses, because the message XCUITest gives on its own — "no matches found" —
+is the same message a renamed identifier, a menu that never rendered and a
+screen that never appeared would each have produced, and the element list it
+prints beside it is truncated.
+
+## Picking the simulator
 
 `.github/actions/select-simulator` does it, and this item gave it two inputs:
 `device-family`, which is a requirement — a leg that asked for an iPad and was

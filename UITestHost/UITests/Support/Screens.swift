@@ -88,8 +88,38 @@ struct HomeScreen {
         searchField.typeText(query)
     }
 
+    /// Opens the toolbar menu and picks Settings, and says what the bar held
+    /// if it cannot.
+    ///
+    /// The dump is here because of what the first simulator run cost to read.
+    /// `.accessibilityIdentifier` on a `Menu` inside a `ToolbarItem` had not
+    /// reached the published tree, and the failure said only that there were no
+    /// matches for `home.moreMenu` — true, and identical to what a renamed
+    /// identifier, a menu that never rendered and a screen that never appeared
+    /// would each have said. XCUITest truncates the element list it prints with
+    /// that message, so the one thing worth knowing — what the bar *does*
+    /// publish — was not in the log at all, and finding out cost a round of CI.
+    ///
+    /// A navigation bar is a handful of elements, so printing its subtree costs
+    /// a few lines and only on the way to a failure. It belongs here rather than
+    /// in the journey because this is where the query lives.
     func openSettings(file: StaticString = #filePath, line: UInt = #line) {
-        moreMenu.awaitExistence("the toolbar menu", file: file, line: line)
+        if !moreMenu.waitForExistence(timeout: UITestTimeout.transition) {
+            XCTFail(
+                """
+                The Home toolbar menu is not in the published tree under \
+                "\(AccessibilityID.Home.moreMenu)". A `Menu` in a `ToolbarItem` is bridged \
+                to a UIKit bar button item and does not always carry the modifier applied \
+                to it, so what the bar actually published is below.
+
+                Navigation bar:
+                \(app.navigationBars.firstMatch.debugDescription)
+                """,
+                file: file,
+                line: line
+            )
+            return
+        }
         moreMenu.tap()
         settingsMenuItem.awaitExistence("the Settings menu item", file: file, line: line)
         settingsMenuItem.tap()
