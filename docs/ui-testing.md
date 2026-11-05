@@ -203,26 +203,38 @@ The grep is a substring match rather than a parse of the result bundle on
 purpose: `xcodebuild` has spelled its per-test lines three different ways across
 Xcode releases and the method name is in all three.
 
-#### The toolbar menu, and a modifier order that is load-bearing
+#### The toolbar menu does not carry its identifier — still open
 
-`HomeView`'s toolbar `Menu` carried `.accessibilityLabel` and then
-`.accessibilityIdentifier`, in that order, and the journey could not find it:
-the simulator reported no matches for `home.moreMenu` with the menu plainly on
-screen. A `Menu` inside a `ToolbarItem` is bridged to a UIKit bar button item,
-and applying `.accessibilityLabel` to it introduces an element that wraps what
-came before — so an identifier applied *on top of* that lands on the wrapper
-rather than on the button the bridge publishes. Applied first, it is on the
-element the label then names, and the query finds it.
+`HomeView`'s toolbar `Menu` has `.accessibilityIdentifier(…moreMenu)` on it and
+the journey cannot find it. The simulator reports no matches for `home.moreMenu`
+with the menu plainly on screen, and `openSettings` is where the journey stops
+today. A `Menu` inside a `ToolbarItem` is bridged to a UIKit bar button item,
+and that bridge does not carry the modifier across.
 
-Two things follow, and both are in the source where they apply. The note
-explaining it sits above the `Menu` rather than between the symbol and its
-label, because `Tools/assert-accessibility-audit.py` wants a symbol named
-within ten lines of itself and counts a comment in the gap. And
+**Both orders of `.accessibilityIdentifier` and `.accessibilityLabel` have been
+tried on a simulator and neither publishes it.** The reasoning for putting the
+identifier first — that the label introduces an element wrapping what came
+before, so an identifier applied on top lands on the wrapper — is plausible and
+is *wrong*, or at least not sufficient: the run that tested it failed the same
+way. The order is back as it was and the source says not to try it again. That
+is one guess spent; the next attempt should be driven by the dump below rather
+than by another theory about modifier composition.
+
+Candidates not yet tried: the identifier on the `Menu`'s label content rather
+than on the `Menu`; a `Button` in the toolbar that presents the menu itself; or
+accepting a structural query, as `NavigationBarScreen.goBack` already does for
+the back button, which `NavigationStack` builds and which has nowhere to hang an
+identifier either. The last is the honest fallback if the bridge simply will not
+carry one — but it needs the dump first, because the Home bar also holds a
+search field, and `openSettings` runs *after* the search step has typed into it.
+
 `HomeScreen.openSettings` prints the navigation bar's subtree when the query
-misses, because the message XCUITest gives on its own — "no matches found" —
-is the same message a renamed identifier, a menu that never rendered and a
-screen that never appeared would each have produced, and the element list it
-prints beside it is truncated.
+misses, and this is why. "No matches found for `home.moreMenu`" is the same
+message a renamed identifier, a menu that never rendered, a screen that never
+appeared and a modifier that did not propagate would each have produced, and
+the element list XCUITest prints beside it is truncated. The first version of
+the CI failure-summary step then kept only the message's first line, which threw
+the dump away again — it greps with context now.
 
 ## Picking the simulator
 
@@ -299,6 +311,23 @@ automatic screenshot of the screen as it was, the accessibility tree that was
 queried, and the `XCTContext.runActivity` step the journey had reached. CI
 uploads it as `ui-test-<device>-<run>` on every run, pass or fail. A log line
 saying an element did not exist is a sentence; the bundle is the answer.
+
+## Runner contention, and why the matrix waits
+
+The `ui-test` job `needs: [build-and-test]`, and the second half of that is not
+about dependencies. Adding three simulator legs took the workflow from three
+concurrent macOS jobs to six, and the package's own suite then began failing on
+a *different* timing-sensitive test in each run — a body-evaluation count in
+one, an event-delivery assertion and a deadline assertion in the next, none of
+them twice, none touched by this work, all green on `main` under three jobs.
+Hosted macOS runners are VMs on shared hosts, so three extra simulators
+belonging to the same account are three more tenants competing with the one
+suite in this repository that measures time and render counts. Two earlier runs
+had failed the other way round, with every macOS job cancelled without ever
+being assigned a runner.
+
+Serialising costs wall-clock and buys a package suite whose result means
+something. It is worth knowing about before adding a fourth device.
 
 ## What this still does not do
 

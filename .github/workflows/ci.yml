@@ -791,6 +791,31 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
 
+    # Two reasons, and the second was measured rather than guessed.
+    #
+    # The honest dependency: this job builds an app that links the package, so
+    # a package that does not compile cannot produce a journey result worth
+    # reading — and three simulator legs are the most expensive thing in this
+    # workflow to spend on a known-broken compile.
+    #
+    # The one that forced it: before this line the workflow asked for six
+    # concurrent macOS jobs where it used to ask for three, and the package's
+    # own suite started failing on a *different* timing-sensitive test in each
+    # run — `ViewIdentityTests.unrelatedChangeSkipsMemoisedContent` in one,
+    # `SessionObserverTests.passwordSignInSetsStateAndAddress` and
+    # `TimeoutTests.aSuccessDoesNotWaitOutTheBudget` in the next, none of them
+    # twice, none of them touched by this branch, and all of them green on
+    # `main` with three jobs. Hosted macOS runners are VMs on shared hosts, so
+    # three extra simulators belonging to the same account are three more
+    # tenants competing with the suite that measures body-evaluation counts and
+    # deadlines. Two earlier runs had gone the other way and been cancelled
+    # without ever being assigned a runner at all.
+    #
+    # `needs` puts the peak back to the three that were green for twelve
+    # phases, and the legs then run after it, one at a time. It costs wall-clock
+    # and buys a suite whose result means something.
+    needs: [build-and-test]
+
     strategy:
       fail-fast: false
       # One leg at a time, and this is a constraint of the account rather than
@@ -981,9 +1006,14 @@ jobs:
           for log in ui-build.log ui-test.log; do
             [ -f "$log" ] || continue
             echo "::group::$log — failures"
-            grep -E '(^|[[:space:]])(error|fatal error):|XCTAssert[A-Za-z]* failed|^Failing tests:|^\t[A-Za-z]+Tests\.|\*\* .* FAILED \*\*|Timed out after|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
+            # `-A 12` rather than a bare match, and `sort -u` is gone with it.
+            # An XCUITest failure message is multi-line — the one that matters
+            # here ends in a dump of what the accessibility tree *did* contain —
+            # and a line-at-a-time grep kept only its first line, which is the
+            # half that was already obvious. Context costs a dozen lines and is
+            # the whole reason this step exists.
+            grep -E -A 12 '(^|[[:space:]])(error|fatal error):|XCTAssert[A-Za-z]* failed|^Failing tests:|\*\* .* FAILED \*\*|Timed out after|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
               | grep -v '^[[:space:]]*/Applications/Xcode' \
-              | sort -u \
               || echo "(no failure lines matched; see the uploaded $log)"
             echo "::endgroup::"
             # A test that hung leaves no failure line: the last thing the log

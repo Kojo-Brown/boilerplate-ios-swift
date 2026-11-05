@@ -33,27 +33,6 @@ package struct HomeView: View {
                         ProgressView()
                             .accessibilityLabel(Text(FeatureStrings.Home.refreshing))
                     } else {
-                        // Phase 12 item 4. On the menu below, the order of
-                        // `.accessibilityIdentifier` and `.accessibilityLabel`
-                        // is load-bearing rather than stylistic, and the note is
-                        // up here because `assert-accessibility-audit.py` wants
-                        // a symbol's name within ten lines of the symbol — a
-                        // comment in the gap is what it counts.
-                        //
-                        // The identifier went on *after* the label first, and
-                        // the journey then could not find this control at all:
-                        // the simulator reported `No matches found for Elements
-                        // matching predicate '"home.moreMenu" IN identifiers'`
-                        // with the menu plainly on screen. A `Menu` in a
-                        // `ToolbarItem` is bridged to a UIKit bar button item,
-                        // and `.accessibilityLabel` on it introduces an element
-                        // wrapping what came before, so an identifier added on
-                        // top of that lands on the wrapper rather than on the
-                        // button the bridge publishes. Applied first, it is on
-                        // the element the label then names.
-                        //
-                        // If this is ever reordered, `SignInJourneyTests` fails
-                        // at `openSettings` and prints the bar's subtree.
                         Menu {
                             Button {
                                 coordinator.push(.textRecognition)
@@ -77,9 +56,19 @@ package struct HomeView: View {
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
-                        // Before the label, deliberately — see above.
-                        .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                         .accessibilityLabel(Text(FeatureStrings.Home.moreOptions))
+                        // Phase 12 item 4. This identifier does not reach the
+                        // published accessibility tree, so the journey cannot
+                        // query by it: a `Menu` in a `ToolbarItem` is bridged to
+                        // a UIKit bar button item, which does not carry it.
+                        // *Both* orders of these two modifiers were tried on a
+                        // simulator and neither published it, so do not reorder
+                        // them again expecting a different result. It stays
+                        // because declaring it is right and costs nothing;
+                        // `HomeScreen.openSettings` holds the workaround and
+                        // prints what the bar does publish. See
+                        // `docs/ui-testing.md`.
+                        .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                     }
                 }
             }
