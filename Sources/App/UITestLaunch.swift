@@ -45,7 +45,7 @@ package enum UITestLaunch {
 
     /// The launch argument `UITestHost`'s XCUITest target passes.
     ///
-    /// Spelled in the same string in `UITestHost/UITests/Support/LaunchArgument.swift`.
+    /// Spelled in the same string in `UITestHost/UITests/Support/UITestApplication.swift`.
     /// `Tools/assert-ui-test-journey.py` holds the two to being equal, because
     /// a typo on either side is not a failure: it is a suite that drives the
     /// *live* graph, reaches a network it cannot have, and reports as a flake.

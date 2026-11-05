@@ -45,9 +45,12 @@ options:
   groupSortPosition: top
 
 packages:
-  # The package under test, by path. Its own remote dependency
-  # (GoogleSignIn-iOS) resolves through `Package.resolved` at the repository
-  # root, exactly as it does for `swift build`.
+  # The package under test, by path. Its version requirements — and so its
+  # one remote dependency, GoogleSignIn-iOS — come from `Package.swift` beside
+  # this directory, and the `xcodebuild -resolvePackageDependencies` step in
+  # the `ui-test` job is what fetches them before anything is built. An Xcode
+  # project keeps its own resolution file inside the generated `.xcodeproj`,
+  # which is why that file is as generated as the project is.
   Boilerplate:
     path: ..
 

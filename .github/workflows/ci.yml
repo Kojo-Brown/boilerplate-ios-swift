@@ -813,19 +813,28 @@ jobs:
       # smallest screen, which is the coverage this item exists for.
       max-parallel: 1
       matrix:
+        # `skip` is the layout test this leg's device cannot satisfy; `expect`
+        # is the one it must. Both are spelled out rather than one being
+        # derived from the other, because the pair is what the post-run step
+        # below and `Tools/assert-ui-test-journey.py` each check from their own
+        # end: that the leg ran the test it was for, and that between them the
+        # three legs run both layouts.
         include:
           - device: iPhone 16
             family: iPhone
             slug: iphone-16
             skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
           - device: iPhone SE (3rd generation)
             family: iPhone
             slug: iphone-se-3
             skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
           - device: iPad Pro 13-inch (M4)
             family: iPad
             slug: ipad-pro-13
             skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
 
     steps:
       - uses: actions/checkout@v7
@@ -843,13 +852,31 @@ jobs:
       # The one tool this job needs that the package does not. It is a bottled
       # formula, so this is a download rather than a build.
       - name: Install XcodeGen
+        # `HOMEBREW_NO_AUTO_UPDATE` because the default behaviour is to refresh
+        # every tap first, which is a one-to-three-minute download this job has
+        # no use for — the formula it wants is already in the runner image's
+        # index, and a `brew update` that fails upstream would fail a job whose
+        # own inputs are fine.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
         run: brew install xcodegen
 
       - name: Generate the host project
         working-directory: UITestHost
         run: |
           xcodegen generate
-          xcodebuild -list -project UITestHost.xcodeproj
+          xcodebuild -list -project UITestHost.xcodeproj | tee project-list.log
+          # `xcodegen generate` exits 0 for a spec that produced less than it
+          # says — an unreadable `sources` path is a warning, and a project with
+          # no UI test target still builds and still "tests", having run
+          # nothing. The scheme is what the two steps below name, so its absence
+          # is the thing to fail on here rather than twenty minutes later.
+          for required in UITestHost UITests; do
+            grep -qE "^[[:space:]]+$required\$" project-list.log || {
+              echo "::error::xcodegen produced no target called '$required'. See project-list.log."
+              exit 1
+            }
+          done
 
       - name: Resolve Swift Package dependencies
         working-directory: UITestHost
@@ -905,6 +932,40 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ui-test.log
 
+      # The one way this job reports success having established nothing.
+      #
+      # `xcodebuild test-without-building` exits 0 for a run that executed no
+      # tests at all, and there are several ordinary ways to get one: a scheme
+      # whose test action lost its target, a `-skip-testing:` that matched more
+      # than it was meant to, a test bundle that did not get installed. None of
+      # them produces a failure — they produce a short green log — which is the
+      # same class of defect as the three `Tools/assert-ui-test-journey.py`
+      # exists for, except that this one is only visible after the run.
+      #
+      # So the names are checked against the log. A substring rather than a
+      # parse of the result bundle: xcodebuild has spelled the per-test lines
+      # three different ways across Xcode releases, and the method name is in
+      # all three.
+      - name: Assert the journey actually ran
+        working-directory: UITestHost
+        env:
+          EXPECT_TEST: ${{ matrix.expect }}
+        run: |
+          missing=0
+          for test in \
+            testSignedOutUserCanSignInBrowseAnItemAndSignOut \
+            testSignInIsRefusedForAnIncompleteForm \
+            "${EXPECT_TEST##*/}"
+          do
+            if grep -q "$test" ui-test.log; then
+              echo "ran: $test"
+            else
+              echo "::error::$test does not appear in the test log. The run reported success without executing it."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       # The result bundle, which is where a UI test failure actually lives: the
       # automatic screenshot of the screen as it was, the accessibility tree
       # that was queried, and the `runActivity` step the journey had reached. A
@@ -917,6 +978,7 @@ jobs:
           name: ui-test-${{ matrix.slug }}-${{ github.run_number }}
           path: |
             UITestHost/UITestResults.xcresult
+            UITestHost/project-list.log
             UITestHost/ui-build.log
             UITestHost/ui-test.log
           if-no-files-found: warn

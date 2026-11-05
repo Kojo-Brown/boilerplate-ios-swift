@@ -50,7 +50,7 @@ package struct SettingsView: View {
 
             Section(FeatureStrings.Settings.appSection.string) {
                 LabeledContent(FeatureStrings.Settings.version.string, value: Bundle.main.appVersion)
-                    // Phase 12 item 4. Queried by `SettingsJourneyTests` for a
+                    // Phase 12 item 4. Queried by `SignInJourneyTests` for a
                     // value that is not the em dash this reads when
                     // `CFBundleShortVersionString` is missing — which is the
                     // one assertion that holds the UI test host's `Info.plist`

@@ -51,6 +51,14 @@ The rules, each one a failure mode this arrangement actually has:
   8. **The matrix is a matrix**, and it does not cancel its own legs: at least
      two distinct devices and `fail-fast: false`.
 
+  9. **Each leg's `skip` and `expect` are the two layout tests, one each.**
+     `expect` is what the workflow's post-run step greps the test log for, and
+     it is the only thing standing between this job and the one way it can
+     report success having established nothing: `xcodebuild` exits 0 for a run
+     that executed no tests. A leg whose `expect` is also its `skip` would
+     assert that the test it skipped had run, which can only fail; a leg with
+     no `expect` at all would check nothing.
+
 It reads source, a plist and a workflow file with the standard library only, so
 it runs on Linux in the lint job beside the other audits — which is where the
 scheduled agent can run it, since it can run none of the gates that need Xcode.
@@ -89,6 +97,7 @@ SPEC_BUNDLE = re.compile(r"^\s*PRODUCT_BUNDLE_IDENTIFIER:\s*(\S+)\s*$", re.MULTI
 SLEEP = re.compile(r"\b(?:Thread\.sleep|usleep|nanosleep)\b|(?<![\w.])sleep\s*\(")
 TEST_FUNCTION = re.compile(r"^\s*func\s+(test\w+)\s*\(", re.MULTILINE)
 SKIP_LINE = re.compile(r"^\s*skip:\s*(\S+)\s*$", re.MULTILINE)
+EXPECT_LINE = re.compile(r"^\s*expect:\s*(\S+)\s*$", re.MULTILINE)
 DEVICE_LINE = re.compile(r"^\s*- device:\s*(.+?)\s*$", re.MULTILINE)
 
 # The two tests the matrix divides between its legs.
@@ -273,6 +282,30 @@ def main() -> int:
                 f"{WORKFLOW}: every leg skips \"{name}\", so nothing in CI ever asserts it."
             )
 
+    # 9. Each leg skips one layout test and expects the other.
+    expected = EXPECT_LINE.findall(workflow)
+    if len(expected) != len(skipped):
+        problems.append(
+            f"{WORKFLOW}: the ui-test matrix has {len(skipped)} `skip:` and {len(expected)} "
+            "`expect:`. Every leg needs both — `expect` is what the post-run step greps the test "
+            "log for, and a leg without one cannot tell a run that executed nothing from a pass."
+        )
+    else:
+        for index, (skip_id, expect_id) in enumerate(zip(skipped, expected)):
+            skip_name = skip_id.rsplit("/", 1)[-1]
+            expect_name = expect_id.rsplit("/", 1)[-1]
+            if expect_name not in ui_test_names:
+                problems.append(
+                    f"{WORKFLOW}: leg {index + 1} expects \"{expect_name}\", which is not a test "
+                    f"in {UI_TESTS}. The post-run grep would fail every run of that leg."
+                )
+            if {skip_name, expect_name} != LAYOUT_TESTS:
+                problems.append(
+                    f"{WORKFLOW}: leg {index + 1} skips \"{skip_name}\" and expects "
+                    f"\"{expect_name}\"; the two have to be the two layout tests, one each. A leg "
+                    "that expects what it skipped asserts that a skipped test ran."
+                )
+
     if len(set(devices)) < 2:
         problems.append(
             f"{WORKFLOW}: the ui-test matrix names {len(set(devices))} device(s). A journey run on "
@@ -295,7 +328,8 @@ def main() -> int:
     print("UI test journey audit passed.")
     print(f"  {len(app_ids)} identifiers declared twice and applied in Sources/,")
     print(f"  launch argument agreed, no sleeps across {len(swift_files(UI_TESTS))} suite files,")
-    print(f"  host plist permits the refresh task, matrix covers {len(set(devices))} devices")
+    print(f"  host plist permits the refresh task, matrix covers {len(set(devices))} devices,")
+    print(f"  and each of its {len(expected)} legs expects the layout test it does not skip")
     return 0
 
 

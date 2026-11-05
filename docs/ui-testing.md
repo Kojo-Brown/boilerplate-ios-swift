@@ -186,6 +186,23 @@ red; it cannot leave a leg asserting nothing. The audit checks the identifiers
 name real tests, and that each layout test is skipped by at least one leg and
 run by at least one.
 
+Each leg therefore carries two names rather than one: `skip`, the layout test
+its device cannot satisfy, and `expect`, the one it must. `expect` exists
+because of the single way this job can report success having established
+nothing — `xcodebuild test-without-building` exits 0 for a run that executed no
+tests, and there are ordinary ways to get one: a scheme whose test action lost
+its target, a `-skip-testing:` that matched more than it was meant to, a bundle
+that never got installed. None of them produces a failure; they produce a short
+green log. So the step after the run greps the log for the three tests the leg
+was supposed to execute — the journey, the refused form, and its own `expect` —
+and fails if any is absent. The audit holds the pair to being the two layout
+tests, one each, since a leg that expected what it skipped would assert that a
+skipped test had run.
+
+The grep is a substring match rather than a parse of the result bundle on
+purpose: `xcodebuild` has spelled its per-test lines three different ways across
+Xcode releases and the method name is in all three.
+
 ### Picking the simulator
 
 `.github/actions/select-simulator` does it, and this item gave it two inputs:
@@ -211,7 +228,10 @@ on Linux, with no toolchain:
    previous step was supposed to produce, so a broken step fails as "the Home
    list never appeared" rather than as a later assertion against a screen that
    was not ready.
-4. **A test skipped by every leg.** An assertion nothing performs.
+4. **A test skipped by every leg.** An assertion nothing performs. The audit
+   also holds each leg's `skip` and `expect` to being the two layout tests, one
+   each, which is what makes the post-run grep above a check rather than a
+   formality.
 
 A fifth is checked by the suite itself rather than by the audit:
 `XCUIElement.replaceText(with:)` reads the field's value back after typing,
