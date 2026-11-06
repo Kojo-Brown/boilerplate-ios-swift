@@ -255,6 +255,30 @@ back: a suite that searches and then opens the toolbar menu has to call
 place — a Swift source order is not an execution order — so a misplaced call
 still fails on the simulator, but with the bar's subtree in the message.
 
+#### A regular width does not give the bar away, and the first fix assumed it did
+
+`dismissSearch()` returned early when the toolbar menu was already in the tree,
+on the reasoning that a bar still carrying its toolbar has nothing to leave.
+Both phone legs passed. The iPad leg failed on `leaveTheSearch`'s own
+assertion, waiting for "Item 1" with `Button "Cancel"` and `Button "Clear
+text"` still in the tree: a regular width seats the search field in the bar
+*beside* the toolbar rather than in place of it, so the menu was there, nothing
+was dismissed, the query stayed "Item 10" and the nine filtered-out rows never
+came back.
+
+**"The toolbar is reachable" and "the search is over" are one condition on a
+phone and two on an iPad.** The step is driven by the second now: the Cancel
+button where the bar has one, and the field itself where it does not — on that
+width clearing the query is the whole of the work, since the toolbar never
+left. `searchCancelButton` also has to exclude the toolbar menu by identifier
+to stay unambiguous there, because the bar's own buttons on an iPad are Cancel
+*and* the menu, and the menu is the one element in that bar this bundle can
+name.
+
+This is the clearest thing the matrix has earned so far. The defect is in the
+test rather than the app, it is invisible on every phone, and the two layout
+tests would not have caught it — the journey is what runs on all three legs.
+
 **The identifier does survive the bridge**, which the iPhone SE leg settled the
 first time it was asked with the toolbar actually in the bar:
 

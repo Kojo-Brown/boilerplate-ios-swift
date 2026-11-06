@@ -88,60 +88,70 @@ struct HomeScreen {
         searchField.typeText(query)
     }
 
-    /// The button the engaged search field puts in the bar beside itself.
+    /// The button the engaged search field puts in the bar beside itself, on a
+    /// width where the bar has one.
     ///
     /// Positional, like ``NavigationBarScreen/goBack(file:line:)`` and for the
     /// same reason: `.searchable` builds it, so there is nothing in `HomeView`
     /// to hang an identifier on, and its only name is the localised "Cancel".
     ///
-    /// `children(matching:)` rather than `buttons[…]` is the load-bearing part.
-    /// A descendant query matches the field's own clear button too — the bar
-    /// publishes `SearchField → Button "Clear text"` as well as its own
-    /// `Button "Cancel"` — and clearing the text leaves the field engaged,
-    /// which is the state this is here to leave. Direct children of the bar are
-    /// the bar's own buttons, and while the search presentation holds it there
-    /// is exactly one.
+    /// Two things narrow the position down to one element. `children(matching:)`
+    /// rather than `buttons[…]`, because a descendant query matches the field's
+    /// own clear button too — the bar publishes `SearchField → Button "Clear
+    /// text"` as well as its own `Button "Cancel"` — and clearing the text
+    /// leaves the field engaged, which is a different thing from leaving it.
+    /// And the toolbar menu is excluded by identifier, because a regular width
+    /// keeps the toolbar in the bar while the field is engaged, so the bar's
+    /// own buttons there are Cancel *and* the menu; the menu is the one element
+    /// in that bar this bundle can name, which is what makes the rest of the
+    /// query unambiguous.
     var searchCancelButton: XCUIElement {
-        app.navigationBars.firstMatch.children(matching: .button).firstMatch
+        app.navigationBars.firstMatch
+            .children(matching: .button)
+            .matching(NSPredicate(format: "identifier != %@", AccessibilityID.Home.moreMenu))
+            .firstMatch
     }
 
-    /// Leaves the search presentation, so the bar carries the toolbar again.
+    /// Leaves the search: the query is cleared, and on a width where the field
+    /// has taken the navigation bar over, the bar goes back to carrying the
+    /// toolbar.
     ///
-    /// A precondition of ``openSettings(file:line:)`` rather than a tidy-up,
-    /// and the reason is the one thing every leg of the three runs that
-    /// reached this step established: an
-    /// engaged `.searchable` field **replaces the navigation bar's contents**
-    /// on a compact width. The toolbar item is not hidden, not renamed and not
-    /// missing its identifier — it is not in the tree at all, and no query for
-    /// it can succeed until the search is dismissed. A journey that searches
-    /// and then reaches for the toolbar is asking the bar for something it is
-    /// not currently showing.
+    /// A precondition of ``openSettings(file:line:)`` rather than a tidy-up on
+    /// a compact width, and the reason is the one thing every leg of the three
+    /// runs that reached that step established: an engaged `.searchable` field
+    /// **replaces the navigation bar's contents** there. The toolbar item is
+    /// not hidden, not renamed and not missing its identifier — it is not in
+    /// the tree at all, and no query for it can succeed until the search is
+    /// dismissed. A journey that searches and then reaches for the toolbar is
+    /// asking the bar for something it is not currently showing.
     ///
-    /// Returning early when the menu is already there is what makes this work
-    /// across the matrix rather than on the phones: a regular width can seat
-    /// the field in the bar without taking it over, and then there is no Cancel
-    /// button to tap and nothing to leave.
+    /// **A regular width does not do that, and the first version of this method
+    /// was wrong about what follows.** It returned early when the menu was
+    /// already in the tree, on the reasoning that a bar still carrying its
+    /// toolbar has nothing to leave. The iPad leg failed on the step's own
+    /// assertion: the toolbar was there, so nothing was dismissed, so the query
+    /// was never cleared and the nine filtered-out rows never came back. "The
+    /// toolbar is reachable" and "the search is over" are the same condition on
+    /// a phone and two different ones on an iPad, and this is driven by the
+    /// second now — the Cancel button if the bar has one, and the field itself
+    /// if it does not.
     func dismissSearch(file: StaticString = #filePath, line: UInt = #line) {
-        guard !moreMenu.exists else { return }
-
         let cancel = searchCancelButton
-        guard cancel.waitForExistence(timeout: UITestTimeout.transition) else {
-            XCTFail(
-                """
-                The Home bar is showing neither the toolbar menu \
-                ("\(AccessibilityID.Home.moreMenu)") nor a button to leave the search by, \
-                so it is in neither of the two states this step knows how to be in. What \
-                the bar published is below.
-
-                Navigation bar:
-                \(app.navigationBars.firstMatch.debugDescription)
-                """,
-                file: file,
-                line: line
-            )
+        if cancel.waitForExistence(timeout: UITestTimeout.transition) {
+            cancel.tap()
             return
         }
-        cancel.tap()
+
+        // No button to leave by, so the field is seated in the bar without
+        // having taken it over and the toolbar never left. Clearing the query
+        // is then the whole of the work, and it is done through the field
+        // because every control the search presentation publishes is named
+        // only by a localised label.
+        searchField.awaitExistence("the search field", file: file, line: line)
+        searchField.tap()
+        if let typed = searchField.value as? String, !typed.isEmpty {
+            searchField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
+        }
     }
 
     /// Opens the toolbar menu and picks Settings, and says what the bar held

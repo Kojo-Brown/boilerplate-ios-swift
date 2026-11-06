@@ -218,6 +218,13 @@ final class SignInJourneyTests: XCTestCase {
     /// one line. Recorded in `docs/ui-testing.md` as the seventh way a UI
     /// suite stops being a test, and as rule 9 of
     /// `Tools/assert-ui-test-journey.py`.
+    ///
+    /// The two halves come apart on an iPad, which is what the matrix is for:
+    /// a regular width keeps the toolbar in the bar while the field is
+    /// engaged, so there the precondition costs nothing and the assertion is
+    /// the whole point. The first version of ``HomeScreen/dismissSearch()``
+    /// returned early on exactly that reading and left the query in place, and
+    /// this step's own assertion is what failed. Both phones were green on it.
     @MainActor
     private func leaveTheSearch(_ app: XCUIApplication) {
         XCTContext.runActivity(named: "Leave the search, and the rest of the corpus returns") { _ in
