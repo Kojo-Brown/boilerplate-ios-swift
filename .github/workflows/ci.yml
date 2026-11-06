@@ -51,13 +51,25 @@ on:
   # and sixty-six minutes in, and a sibling workflow on macOS was assigned a
   # runner in the same minute as one of them.
   #
-  # Without this trigger, a run lost that way can only be retried by someone
-  # with write access pressing "Re-run jobs" in the Actions tab, or by pushing
-  # a commit. An agent has neither — re-running is not in its token's scope —
-  # and pushing an empty commit to kick CI is not something this repository
-  # does. So an unassigned run means a verified change sits unverifiable until
-  # the next real commit, which is how a merge-on-green rule quietly becomes a
-  # merge-on-nothing rule.
+  # Without this trigger, a run lost that way can only be retried by pressing
+  # "Re-run jobs" in the Actions tab or by pushing another commit, and pushing
+  # an empty commit to kick CI is not something this repository does. So an
+  # unassigned run leaves a change unverifiable until the next real one, which
+  # is how a merge-on-green rule quietly becomes merge-on-nothing.
+  #
+  # Two limits on what this buys, both measured rather than assumed, because
+  # the first version of this comment implied more than it delivers:
+  #
+  #   * **It does not help the scheduled agent.** Its token has no `actions:
+  #     write`, so `POST /actions/workflows/ci.yml/dispatches` answers 403
+  #     exactly as `POST /actions/runs/{id}/rerun` does. The agent still cannot
+  #     retry a lost run, and still must not manufacture one with an empty
+  #     commit. This is for a person, who gets a ref picker and no push.
+  #
+  #   * **It does nothing until it is on the default branch.** GitHub offers
+  #     `workflow_dispatch` for workflows on the default branch only — the ref
+  #     picker then chooses which branch to run — so the trigger is inert on
+  #     the branch that adds it and becomes usable when it merges.
   workflow_dispatch:
 
 concurrency:
