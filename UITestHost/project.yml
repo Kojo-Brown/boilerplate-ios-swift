@@ -1,0 +1,126 @@
+# The UI test host: the one `.app` bundle in this repository, and the Xcode
+# project that produces it.
+#
+# Phase 12 item 4. An XCUITest launches an application and reads the
+# accessibility tree it publishes; both halves need a bundle that installs on a
+# simulator. `Package.swift` cannot declare one — SwiftPM has no product type
+# that installs, which is why `Tools/app-template/` has spent two phases being a
+# template for an app target this repository did not have — so there is a small
+# Xcode project here that links the package and provides the three things it
+# cannot: `@main`, an `Info.plist`, and the privacy manifest at the root of an
+# installable bundle.
+#
+# ## Why a spec rather than a committed `.xcodeproj`
+#
+# A `project.pbxproj` is a few hundred lines of generated plist keyed by opaque
+# UUIDs. Nobody reviews a diff in one, every Xcode version rewrites parts of it
+# on open, and two branches that both touch it conflict in a way that cannot be
+# resolved by reading. This file is the same project in 90 lines a reviewer can
+# check against the settings it claims to set, and `xcodegen generate` is what
+# turns it into one. The generated project is therefore *not* committed — see
+# `.gitignore` — and CI generates it in the job that needs it.
+#
+# The cost is one tool: `brew install xcodegen`. See `docs/ui-testing.md` for
+# the local run, and `.github/workflows/ci.yml`'s `ui-test` job for the CI one.
+#
+# ## What this is not
+#
+# It is not a shipping app, and nothing here should grow into one. It carries no
+# assets, no entitlements, no signing configuration and no scheme but the one
+# the tests run under; the moment it needs any of those, what it needs is a real
+# app target in a real app repository that consumes this package. Everything
+# below exists so that the journey has something to launch.
+
+name: UITestHost
+
+options:
+  bundleIdPrefix: com.example
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+  # Two of the keys below (`platform` on a target, `buildPhase` on a source)
+  # changed meaning in older releases. Fail on an ancient xcodegen rather than
+  # generate a project that is subtly not this one.
+  minimumXcodeGenVersion: "2.38.0"
+  groupSortPosition: top
+
+packages:
+  # The package under test, by path. Its version requirements — and so its
+  # one remote dependency, GoogleSignIn-iOS — come from `Package.swift` beside
+  # this directory, and the `xcodebuild -resolvePackageDependencies` step in
+  # the `ui-test` job is what fetches them before anything is built. An Xcode
+  # project keeps its own resolution file inside the generated `.xcodeproj`,
+  # which is why that file is as generated as the project is.
+  Boilerplate:
+    path: ..
+
+# Applied to both targets. `CODE_SIGNING_ALLOWED: NO` is what lets this project
+# build on a runner with no keychain and no provisioning profile: a simulator
+# build needs no signature, and the rest of CI already passes the same setting
+# to `xcodebuild`.
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: "NO"
+
+targets:
+  UITestHost:
+    type: application
+    platform: iOS
+    sources:
+      - path: Host
+      # The privacy manifest the app bundle is checked against at upload, taken
+      # from the template rather than copied beside it. `Tools/app-template/`
+      # said "copy this file to the root of your app target"; this is the first
+      # app target in the repository, so it does, and
+      # `Tools/assert-privacy-manifest.py` goes on being the one check that the
+      # file is a true union of the four target manifests.
+      - path: ../Tools/app-template/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: Boilerplate
+        product: BoilerplateiOSSwift
+    settings:
+      base:
+        INFOPLIST_FILE: Host/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.boilerplate-ios-swift
+        PRODUCT_NAME: UITestHost
+        # Both families, because the simulator matrix runs an iPad leg and an
+        # app restricted to family 1 is letterboxed there — which would make
+        # the horizontal size class compact and the grid layout unreachable.
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: "NO"
+
+  UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: UITestHost
+    settings:
+      base:
+        TEST_TARGET_NAME: UITestHost
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.boilerplate-ios-swift.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  UITestHost:
+    build:
+      targets:
+        UITestHost: all
+        UITests: all
+    test:
+      # No coverage: the figure every other item is measured against comes from
+      # the package's own suite, and a second number gathered from a different
+      # product would only ever be mistaken for it.
+      gatherCoverageData: false
+      targets:
+        - UITests

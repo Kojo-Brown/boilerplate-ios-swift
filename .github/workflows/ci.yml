@@ -41,6 +41,36 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual re-run, and it is not a convenience.
+  #
+  # Five of the nine runs on the branch that added the `ui-test` job never
+  # executed a step: every macOS job sat at `runner_id: 0` — queued, never
+  # assigned a hosted runner — and was then cancelled, which takes the matrix
+  # with it because `ui-test` needs `build-and-test`. That is GitHub's side
+  # rather than this repository's: the cancel has come anywhere between eight
+  # and sixty-six minutes in, and a sibling workflow on macOS was assigned a
+  # runner in the same minute as one of them.
+  #
+  # Without this trigger, a run lost that way can only be retried by pressing
+  # "Re-run jobs" in the Actions tab or by pushing another commit, and pushing
+  # an empty commit to kick CI is not something this repository does. So an
+  # unassigned run leaves a change unverifiable until the next real one, which
+  # is how a merge-on-green rule quietly becomes merge-on-nothing.
+  #
+  # Two limits on what this buys, both measured rather than assumed, because
+  # the first version of this comment implied more than it delivers:
+  #
+  #   * **It does not help the scheduled agent.** Its token has no `actions:
+  #     write`, so `POST /actions/workflows/ci.yml/dispatches` answers 403
+  #     exactly as `POST /actions/runs/{id}/rerun` does. The agent still cannot
+  #     retry a lost run, and still must not manufacture one with an empty
+  #     commit. This is for a person, who gets a ref picker and no push.
+  #
+  #   * **It does nothing until it is on the default branch.** GitHub offers
+  #     `workflow_dispatch` for workflows on the default branch only — the ref
+  #     picker then chooses which branch to run — so the trigger is inert on
+  #     the branch that adds it and becomes usable when it merges.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -398,6 +428,26 @@ jobs:
       - name: Audit the snapshot gate's committed state
         run: python3 Tools/assert-snapshot-gate.py
 
+      # Phase 12 item 4. The UI test host and the journey it runs, which is the
+      # one suite in this repository whose failures are mostly not assertions.
+      #
+      # The app and the test bundle share no module — XCUITest is black box by
+      # construction — so everything they agree on they agree on by convention:
+      # an identifier string, a launch argument, a `-skip-testing:` line in
+      # this file, two `Info.plist` keys without which the host does not finish
+      # launching. Each of those can drift without a compile error, and three
+      # of them drift into a suite that still goes green: a query for an
+      # identifier nothing carries waits out its timeout, a mistyped launch
+      # argument runs the journey against the *live* dependency graph, and a
+      # layout test skipped by every leg is an assertion nobody performs.
+      #
+      # So it is checked here rather than discovered there, and like the audits
+      # above it this one is syntactic and runs on the scheduled agent's Linux
+      # box — which it has to, because the agent can run no part of the
+      # `ui-test` job itself.
+      - name: Audit the UI test host and the journey
+        run: python3 Tools/assert-ui-test-journey.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15
@@ -728,5 +778,295 @@ jobs:
             SnapshotFailures
             snapshot-build.log
             snapshot-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Phase 12 item 4: the XCUITest journey, on a matrix of simulators.
+  #
+  # Its own job for the reason the snapshot gate is: it builds a different
+  # product. Everything above builds the SwiftPM package; this builds the Xcode
+  # project in `UITestHost/`, which wraps the package in the one thing SwiftPM
+  # cannot declare — an installable `.app` — so that there is something for a UI
+  # test to launch. See `UITestHost/project.yml` for why the project is
+  # generated rather than committed, and `docs/ui-testing.md` for the whole of
+  # it.
+  #
+  # ## What the matrix is actually testing
+  #
+  # Three devices, and each one is here because it can disagree with the others
+  # about something this app does:
+  #
+  #   * **iPhone 16** — the compact baseline, and the device the rest of CI
+  #     uses, so a failure here and nowhere else is about the journey rather
+  #     than about the device.
+  #   * **iPhone SE (3rd generation)** — the smallest screen still supported.
+  #     A row, a toolbar menu or a form that fits on a 16 and not on an SE is a
+  #     real defect, and it is invisible in a preview and in a snapshot taken at
+  #     one size.
+  #   * **iPad Pro 13-inch (M4)** — a regular horizontal size class, which is
+  #     the *other branch* of `HomeView.content`. Twelve phases of tests have
+  #     never rendered `itemGrid` on a device.
+  #
+  # `fail-fast: false`, because the useful information is which devices
+  # disagreed. A matrix that cancels its siblings on the first red leg reports
+  # one failure and hides whether the other two would have passed, which is the
+  # difference between "the grid branch is broken" and "the journey is broken".
+  #
+  # Each leg skips the layout test that does not apply to it. That is the whole
+  # of how a leg knows what to expect — see `AdaptiveLayoutUITests` — and the
+  # identifiers are held to naming real tests by
+  # `Tools/assert-ui-test-journey.py` in the lint job.
+  ui-test:
+    name: UI journey on ${{ matrix.device }}
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    # Two reasons, and the second was measured rather than guessed.
+    #
+    # The honest dependency: this job builds an app that links the package, so
+    # a package that does not compile cannot produce a journey result worth
+    # reading — and three simulator legs are the most expensive thing in this
+    # workflow to spend on a known-broken compile.
+    #
+    # The one that forced it: before this line the workflow asked for six
+    # concurrent macOS jobs where it used to ask for three, and the package's
+    # own suite started failing on a *different* timing-sensitive test in each
+    # run — `ViewIdentityTests.unrelatedChangeSkipsMemoisedContent` in one,
+    # `SessionObserverTests.passwordSignInSetsStateAndAddress` and
+    # `TimeoutTests.aSuccessDoesNotWaitOutTheBudget` in the next, none of them
+    # twice, none of them touched by this branch, and all of them green on
+    # `main` with three jobs. Hosted macOS runners are VMs on shared hosts, so
+    # three extra simulators belonging to the same account are three more
+    # tenants competing with the suite that measures body-evaluation counts and
+    # deadlines. Two earlier runs had gone the other way and been cancelled
+    # without ever being assigned a runner at all.
+    #
+    # `needs` puts the peak back to the three that were green for twelve
+    # phases, and the legs then run after it, one at a time. It costs wall-clock
+    # and buys a suite whose result means something.
+    needs: [build-and-test]
+
+    strategy:
+      fail-fast: false
+      # One leg at a time, and this is a constraint of the account rather than
+      # of the tests.
+      #
+      # A GitHub Free plan carries five concurrent macOS slots. This workflow
+      # asked for three before this item — lint, build-and-test, snapshot — and
+      # three parallel legs take it to six. The first run on this branch showed
+      # exactly that: five jobs got runners, the sixth sat queued until lint
+      # finished and released one. The second run got no runners at all and
+      # every job was cancelled after twenty minutes with `runner_id: 0`,
+      # having never been assigned one — the whole check suite red for a reason
+      # that is not in the diff. Other repositories on the same account run
+      # macOS CI too, so the slots are not this workflow's to count on.
+      #
+      # Serialised, the peak is four and the three legs each keep their own
+      # sixty-minute budget. It costs wall-clock and nothing else: no leg
+      # depends on another, `fail-fast: false` still reports all three, and the
+      # alternative — dropping a device — would cost the grid branch or the
+      # smallest screen, which is the coverage this item exists for.
+      max-parallel: 1
+      matrix:
+        # `skip` is the layout test this leg's device cannot satisfy; `expect`
+        # is the one it must. Both are spelled out rather than one being
+        # derived from the other, because the pair is what the post-run step
+        # below and `Tools/assert-ui-test-journey.py` each check from their own
+        # end: that the leg ran the test it was for, and that between them the
+        # three legs run both layouts.
+        include:
+          - device: iPhone 16
+            family: iPhone
+            slug: iphone-16
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
+          - device: iPhone SE (3rd generation)
+            family: iPhone
+            slug: iphone-se-3
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
+          - device: iPad Pro 13-inch (M4)
+            family: iPad
+            slug: ipad-pro-13
+            skip: UITests/AdaptiveLayoutUITests/testHomeResolvesTheListLayoutOnACompactWidth
+            expect: UITests/AdaptiveLayoutUITests/testHomeResolvesTheGridLayoutOnARegularWidth
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::No Xcode 16 on this runner image; the project targets Swift 6."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode/Contents/Developer"
+
+      # The one tool this job needs that the package does not. It is a bottled
+      # formula, so this is a download rather than a build.
+      - name: Install XcodeGen
+        # `HOMEBREW_NO_AUTO_UPDATE` because the default behaviour is to refresh
+        # every tap first, which is a one-to-three-minute download this job has
+        # no use for — the formula it wants is already in the runner image's
+        # index, and a `brew update` that fails upstream would fail a job whose
+        # own inputs are fine.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install xcodegen
+
+      - name: Generate the host project
+        working-directory: UITestHost
+        run: |
+          xcodegen generate
+          xcodebuild -list -project UITestHost.xcodeproj | tee project-list.log
+          # `xcodegen generate` exits 0 for a spec that produced less than it
+          # says — an unreadable `sources` path is a warning, and a project with
+          # no UI test target still builds and still "tests", having run
+          # nothing. The scheme is what the two steps below name, so its absence
+          # is the thing to fail on here rather than twenty minutes later.
+          for required in UITestHost UITests; do
+            grep -qE "^[[:space:]]+$required\$" project-list.log || {
+              echo "::error::xcodegen produced no target called '$required'. See project-list.log."
+              exit 1
+            }
+          done
+
+      - name: Resolve Swift Package dependencies
+        working-directory: UITestHost
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost
+
+      - name: Choose an iOS Simulator
+        timeout-minutes: 10
+        uses: ./.github/actions/select-simulator
+        with:
+          device-family: ${{ matrix.family }}
+          preferred-device: ${{ matrix.device }}
+
+      - name: Build the host app and the UI tests
+        timeout-minutes: 30
+        working-directory: UITestHost
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost \
+            -destination "id=$SIMULATOR_UDID" \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ui-build.log
+
+      # `-test-timeouts-enabled` for the reason the package's suite has it: a UI
+      # test that waits for an element that will never arrive is the most likely
+      # thing in this workflow to hang, and without an allowance it costs the
+      # job's full hour and reports as "cancelled" — naming no test and
+      # uploading no screenshots.
+      #
+      # The allowance is per test and generous: a journey is ten screens, each
+      # with its own wait, and the whole of it runs in well under a minute on a
+      # warm runner.
+      - name: Run the journey
+        timeout-minutes: 25
+        working-directory: UITestHost
+        env:
+          SKIP_TEST: ${{ matrix.skip }}
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project UITestHost.xcodeproj \
+            -scheme UITestHost \
+            -destination "id=$SIMULATOR_UDID" \
+            -skip-testing:"$SKIP_TEST" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
+            -resultBundlePath UITestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ui-test.log
+
+      # The one way this job reports success having established nothing.
+      #
+      # `xcodebuild test-without-building` exits 0 for a run that executed no
+      # tests at all, and there are several ordinary ways to get one: a scheme
+      # whose test action lost its target, a `-skip-testing:` that matched more
+      # than it was meant to, a test bundle that did not get installed. None of
+      # them produces a failure — they produce a short green log — which is the
+      # same class of defect as the three `Tools/assert-ui-test-journey.py`
+      # exists for, except that this one is only visible after the run.
+      #
+      # So the names are checked against the log. A substring rather than a
+      # parse of the result bundle: xcodebuild has spelled the per-test lines
+      # three different ways across Xcode releases, and the method name is in
+      # all three.
+      - name: Assert the journey actually ran
+        working-directory: UITestHost
+        env:
+          EXPECT_TEST: ${{ matrix.expect }}
+        run: |
+          missing=0
+          for test in \
+            testSignedOutUserCanSignInBrowseAnItemAndSignOut \
+            testSignInIsRefusedForAnIncompleteForm \
+            "${EXPECT_TEST##*/}"
+          do
+            if grep -q "$test" ui-test.log; then
+              echo "ran: $test"
+            else
+              echo "::error::$test does not appear in the test log. The run reported success without executing it."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      # A UI test log is four hundred lines of event trace per test — every tap,
+      # every idle wait, every existence check — and three lines of it say what
+      # broke. The package's job has had this step since Phase 0 item 4 for the
+      # same reason; this one was written without it and the first red run cost
+      # a manual read of the whole trace to find one `XCTAssertTrue failed`.
+      #
+      # `if: failure()` only, and before the artifact upload so it is above the
+      # upload's own noise in the log.
+      - name: Summarise the journey's failures
+        if: failure()
+        working-directory: UITestHost
+        run: |
+          for log in ui-build.log ui-test.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log — failures"
+            # `-A 12` rather than a bare match, and `sort -u` is gone with it.
+            # An XCUITest failure message is multi-line — the one that matters
+            # here ends in a dump of what the accessibility tree *did* contain —
+            # and a line-at-a-time grep kept only its first line, which is the
+            # half that was already obvious. Context costs a dozen lines and is
+            # the whole reason this step exists.
+            grep -E -A 12 '(^|[[:space:]])(error|fatal error):|XCTAssert[A-Za-z]* failed|^Failing tests:|\*\* .* FAILED \*\*|Timed out after|exceeded execution time allowance|Test Case .* (failed|timed out)' "$log" \
+              | grep -v '^[[:space:]]*/Applications/Xcode' \
+              || echo "(no failure lines matched; see the uploaded $log)"
+            echo "::endgroup::"
+            # A test that hung leaves no failure line: the last thing the log
+            # says is the step it was waiting on.
+            echo "::group::$log — last 30 lines"
+            tail -30 "$log"
+            echo "::endgroup::"
+          done
+
+      # The result bundle, which is where a UI test failure actually lives: the
+      # automatic screenshot of the screen as it was, the accessibility tree
+      # that was queried, and the `runActivity` step the journey had reached. A
+      # log line saying an element did not exist is a sentence; the bundle is
+      # the answer.
+      - name: Upload the UI test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-test-${{ matrix.slug }}-${{ github.run_number }}
+          path: |
+            UITestHost/UITestResults.xcresult
+            UITestHost/project-list.log
+            UITestHost/ui-build.log
+            UITestHost/ui-test.log
           if-no-files-found: warn
           retention-days: 14

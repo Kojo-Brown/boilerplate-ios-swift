@@ -15,7 +15,9 @@ package struct ItemDetailView: View {
         List {
             Section(FeatureStrings.ItemDetail.section.string) {
                 LabeledContent(FeatureStrings.ItemDetail.title.string, value: title)
+                    .accessibilityIdentifier(AccessibilityID.ItemDetail.titleRow)
                 LabeledContent(FeatureStrings.ItemDetail.identifier.string, value: id.uuidString)
+                    .accessibilityIdentifier(AccessibilityID.ItemDetail.identifierRow)
             }
         }
         .navigationTitle(title)

@@ -45,6 +45,15 @@ Gemfile.lock
 # how one of them gets mistaken for the other. See docs/snapshot-testing.md.
 SnapshotFailures/
 
+# The UI test host's Xcode project, generated from `UITestHost/project.yml` by
+# `xcodegen generate`. A `project.pbxproj` is machine-written plist keyed by
+# opaque UUIDs: nobody reviews a diff in one, Xcode rewrites parts of it on
+# open, and two branches that both touch it conflict unresolvably. The spec is
+# the reviewable artefact and this is its output. See `docs/ui-testing.md`.
+UITestHost/*.xcodeproj
+UITestHost/*.xcworkspace
+UITestHost/UITestResults.xcresult
+
 # Misc
 .DS_Store
 *.log

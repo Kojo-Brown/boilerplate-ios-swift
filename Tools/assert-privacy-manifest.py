@@ -588,9 +588,10 @@ def check_docs(repo: str, categories: dict[str, set[str]], data_types: set[str],
 
     The same rule the threat model has, for the same reason: a privacy page
     listing only the comfortable half is the marketing version, and the gaps
-    here are the part an adopter has to act on — this package has no app target,
-    so the manifest that an upload is actually checked against is one they have
-    to place themselves.
+    here are the part an adopter has to act on — this package has no shippable
+    app target (`UITestHost/` is a simulator-only XCUITest host), so the
+    manifest that an upload is actually checked against is one they have to
+    place themselves.
     """
     path = os.path.join(repo, DOCS)
     if not os.path.isfile(path):

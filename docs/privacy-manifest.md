@@ -193,19 +193,29 @@ bodies while its manifest says it collects nothing, and it would not catch a
 module that starts sending a *different* field in a body it already sends. That
 direction is review, not CI.
 
-**There is no app target, so the file that matters is not shipped.**
+**There is no shippable app target, so the file that matters is not shipped.**
 `Tools/app-template/PrivacyInfo.xcprivacy` is a template an adopter has to copy
 into their app target and tick for membership. Nothing in this repository can
-check that they did, because this repository has no `.xcodeproj` and
-`Package.swift` declares a library.
+check that they did, because `Package.swift` declares a library and the one
+app target here cannot be uploaded: `UITestHost/` is a simulator-only host for
+the XCUITest journey, built unsigned, with no archive, no release
+configuration and no path to App Store Connect. What it does do, since Phase 12
+item 4, is carry that template as its own bundle's manifest rather than a copy
+of it — so the template is at least built into something, and
+`Tools/assert-ui-test-journey.py` checks the host references the file the
+audit here keeps a true union. The upload check it exists for still runs
+nowhere. See [ui-testing.md](./ui-testing.md).
 
-**The `Info.plist` usage descriptions are a separate mechanism and are also
-missing.** `CameraService` calls `AVCaptureDevice.requestAccess(for: .video)`,
-which terminates the process if `NSCameraUsageDescription` is absent — and it is
-absent, because there is no `Info.plist` here either. The privacy manifest does
-not cover usage strings and this audit does not look for them. An app target
-embedding this package needs `NSCameraUsageDescription`, and `NSFaceIDUsageDescription`
-for the biometric gate in `docs/security.md`.
+**The `Info.plist` usage descriptions are a separate mechanism and are not
+checked.** `CameraService` calls `AVCaptureDevice.requestAccess(for: .video)`,
+which terminates the process if `NSCameraUsageDescription` is absent. The
+package has no `Info.plist` to put it in; `UITestHost/Host/Info.plist` carries
+it and `NSFaceIDUsageDescription` so that the host is an app that *could*
+reach those resources, but that plist belongs to a test host and an adopter
+inherits none of it. The privacy manifest does not cover usage strings and this
+audit does not look for them. An app target embedding this package needs
+`NSCameraUsageDescription`, and `NSFaceIDUsageDescription` for the biometric
+gate in `docs/security.md`.
 
 **Third-party SDK manifests are taken on trust.** GoogleSignIn, GTMAppAuth,
 GTMSessionFetcher and AppAuth each ship their own `PrivacyInfo.xcprivacy` inside
