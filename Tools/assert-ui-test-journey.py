@@ -51,7 +51,19 @@ The rules, each one a failure mode this arrangement actually has:
   8. **The matrix is a matrix**, and it does not cancel its own legs: at least
      two distinct devices and `fail-fast: false`.
 
-  9. **Each leg's `skip` and `expect` are the two layout tests, one each.**
+  9. **A suite that searches and then reaches for the toolbar dismisses the
+     search in between.** An engaged `.searchable` field replaces the
+     navigation bar's contents, so `HomeView`'s `ToolbarItem` is not in the
+     published tree at all while one is open — not hidden, not unidentified,
+     absent. A query for it then times out, and a timeout reads as a broken
+     toolbar rather than as a bar showing something else; three runs of this
+     job and one wrong change to the app went into that reading. This checks the call
+     is present, not that it is in the right place: ordering is the test's own
+     business and a Swift source order is not an execution order, so a
+     misplaced call still fails on the simulator — with the bar's subtree in
+     the message, which is what makes that failure readable.
+
+ 10. **Each leg's `skip` and `expect` are the two layout tests, one each.**
      `expect` is what the workflow's post-run step greps the test log for, and
      it is the only thing standing between this job and the one way it can
      report success having established nothing: `xcodebuild` exits 0 for a run
@@ -99,6 +111,12 @@ TEST_FUNCTION = re.compile(r"^\s*func\s+(test\w+)\s*\(", re.MULTILINE)
 SKIP_LINE = re.compile(r"^\s*skip:\s*(\S+)\s*$", re.MULTILINE)
 EXPECT_LINE = re.compile(r"^\s*expect:\s*(\S+)\s*$", re.MULTILINE)
 DEVICE_LINE = re.compile(r"^\s*- device:\s*(.+?)\s*$", re.MULTILINE)
+# Rule 9's three calls, as a test writes them against `HomeScreen`. Matched on
+# the method rather than on a receiver name, because the receiver is `home` in
+# one step and `HomeScreen(app: app)` in the next.
+SEARCH_CALL = re.compile(r"\.search\(for:")
+TOOLBAR_CALL = re.compile(r"\.openSettings\(")
+DISMISS_CALL = re.compile(r"\.dismissSearch\(")
 
 # The two tests the matrix divides between its legs.
 LAYOUT_TESTS = {
@@ -282,7 +300,18 @@ def main() -> int:
                 f"{WORKFLOW}: every leg skips \"{name}\", so nothing in CI ever asserts it."
             )
 
-    # 9. Each leg skips one layout test and expects the other.
+    # 9. A suite that searches and then opens the toolbar dismisses the search.
+    for path in swift_files(UI_TESTS):
+        body = read(path)
+        if SEARCH_CALL.search(body) and TOOLBAR_CALL.search(body) and not DISMISS_CALL.search(body):
+            problems.append(
+                f"{path}: searches and then opens the Home toolbar menu without calling "
+                "dismissSearch(). An engaged .searchable field replaces the navigation bar's "
+                "contents, so the ToolbarItem is not in the published tree while one is open and "
+                "the query can only time out."
+            )
+
+    # 10. Each leg skips one layout test and expects the other.
     expected = EXPECT_LINE.findall(workflow)
     if len(expected) != len(skipped):
         problems.append(

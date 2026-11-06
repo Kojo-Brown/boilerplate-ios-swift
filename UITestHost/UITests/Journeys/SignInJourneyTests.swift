@@ -73,6 +73,7 @@ final class SignInJourneyTests: XCTestCase {
         signIn(app)
         searchDownToOneRow(app)
         pushAndPopTheItemDetail(app)
+        leaveTheSearch(app)
         openSettings(app)
         assertProfileAndHostVersion(app)
         renameTheProfile(app)
@@ -193,6 +194,42 @@ final class SignInJourneyTests: XCTestCase {
             // would mean `HomeView` had been rebuilt from scratch.
             home.row(titled: Self.openedRow).awaitExistence("the searched row after the pop")
             XCTAssertFalse(home.row(titled: "Item 1").exists, "The search term survived the pop.")
+        }
+    }
+
+    /// Leaves the search, which is both an assertion and a precondition.
+    ///
+    /// The assertion is that the filter runs in both directions: nine rows the
+    /// term hid come back. ``searchDownToOneRow(_:)`` establishes only that
+    /// filtering removes rows, and a filter that emptied the list on any input
+    /// would satisfy it.
+    ///
+    /// The precondition is the more important half, and it is what every red
+    /// leg of this suite so far was failing on. An engaged `.searchable`
+    /// field **takes the navigation bar over** on a compact width: the bar
+    /// publishes the field and a Cancel button, and the `ToolbarItem` holding
+    /// the menu is not in the tree under any name. ``openSettings(_:)`` ran
+    /// straight after the pop, with the term still in the field — the pop
+    /// preserving it is the previous step's own assertion — so its query could
+    /// not have matched whatever the identifier did. Two rounds of CI and one
+    /// wrong change to `HomeView` went into reading that as a `Menu` not
+    /// carrying its identifier across the bridge to `UIBarButtonItem`; the
+    /// navigation bar's subtree, once a failure printed it, said otherwise in
+    /// one line. Recorded in `docs/ui-testing.md` as the seventh way a UI
+    /// suite stops being a test, and as rule 9 of
+    /// `Tools/assert-ui-test-journey.py`.
+    @MainActor
+    private func leaveTheSearch(_ app: XCUIApplication) {
+        XCTContext.runActivity(named: "Leave the search, and the rest of the corpus returns") { _ in
+            let home = HomeScreen(app: app)
+            home.dismissSearch()
+            // "Item 1" rather than the whole corpus, and deliberately not
+            // `Self.openedRow`: with the filter gone the list is ten rows
+            // again, a `List` is lazy, and the tenth of them is back off the
+            // fold on a phone — which is the trap this suite has already
+            // walked into once, three paragraphs up in `signIn(_:)`.
+            home.row(titled: "Item 1")
+                .awaitExistence("a row the search term had filtered out")
         }
     }
 

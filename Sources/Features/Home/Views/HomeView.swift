@@ -57,16 +57,23 @@ package struct HomeView: View {
                             Image(systemName: "ellipsis.circle")
                         }
                         .accessibilityLabel(Text(FeatureStrings.Home.moreOptions))
-                        // Phase 12 item 4. This identifier does not reach the
-                        // published accessibility tree, so the journey cannot
-                        // query by it: a `Menu` in a `ToolbarItem` is bridged to
-                        // a UIKit bar button item, which does not carry it.
-                        // *Both* orders of these two modifiers were tried on a
-                        // simulator and neither published it, so do not reorder
-                        // them again expecting a different result. It stays
-                        // because declaring it is right and costs nothing;
-                        // `HomeScreen.openSettings` holds the workaround and
-                        // prints what the bar does publish. See
+                        // Phase 12 item 4. Two runs of the journey could not
+                        // find this identifier and both were read as the
+                        // modifier not propagating through the bridge to
+                        // `UIBarButtonItem` — *both* orders of these two
+                        // modifiers were tried on a simulator on that theory
+                        // and neither changed anything, which is the shape of a
+                        // wrong diagnosis rather than of a stubborn one. The
+                        // navigation bar's subtree, once the failure printed it,
+                        // held a search field and a Cancel button and no
+                        // toolbar item under any name: `.searchable` above takes
+                        // the whole bar over while its field is engaged, and the
+                        // journey had searched and never left. So nothing here
+                        // was ever under test. The suite dismisses the search
+                        // before it reaches for this — see
+                        // `HomeScreen.dismissSearch()` — and whether the bridge
+                        // carries an identifier is a question the matrix is
+                        // answering for the first time. See
                         // `docs/ui-testing.md`.
                         .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                     }

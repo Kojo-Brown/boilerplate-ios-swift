@@ -203,38 +203,67 @@ The grep is a substring match rather than a parse of the result bundle on
 purpose: `xcodebuild` has spelled its per-test lines three different ways across
 Xcode releases and the method name is in all three.
 
-#### The toolbar menu does not carry its identifier — still open
+#### The search field takes the navigation bar, and took the toolbar with it
 
-`HomeView`'s toolbar `Menu` has `.accessibilityIdentifier(…moreMenu)` on it and
-the journey cannot find it. The simulator reports no matches for `home.moreMenu`
-with the menu plainly on screen, and `openSettings` is where the journey stops
-today. A `Menu` inside a `ToolbarItem` is bridged to a UIKit bar button item,
-and that bridge does not carry the modifier across.
+`openSettings` was where the journey stopped on every leg of the three runs
+that reached it. `HomeView`'s
+toolbar `Menu` carries `.accessibilityIdentifier(…moreMenu)`, the menu was
+plainly on screen in the automatic screenshot, and the simulator reported no
+matches for `home.moreMenu`. That was read as the bridge from a SwiftUI `Menu`
+inside a `ToolbarItem` to a `UIBarButtonItem` not carrying the modifier across
+— a real and documented limitation, and not what was happening here. **Both
+orders of `.accessibilityIdentifier` and `.accessibilityLabel` were tried on a
+simulator on that theory and neither changed anything**, which is the shape of
+a wrong diagnosis rather than of a stubborn bug, and that round of CI plus one
+reverted change to `HomeView` is what the theory cost.
 
-**Both orders of `.accessibilityIdentifier` and `.accessibilityLabel` have been
-tried on a simulator and neither publishes it.** The reasoning for putting the
-identifier first — that the label introduces an element wrapping what came
-before, so an identifier applied on top lands on the wrapper — is plausible and
-is *wrong*, or at least not sufficient: the run that tested it failed the same
-way. The order is back as it was and the source says not to try it again. That
-is one guess spent; the next attempt should be driven by the dump below rather
-than by another theory about modifier composition.
+What settled it was the dump, in one line. The bar held:
 
-Candidates not yet tried: the identifier on the `Menu`'s label content rather
-than on the `Menu`; a `Button` in the toolbar that presents the menu itself; or
-accepting a structural query, as `NavigationBarScreen.goBack` already does for
-the back button, which `NavigationStack` builds and which has nowhere to hang an
-identifier either. The last is the honest fallback if the bridge simply will not
-carry one — but it needs the dump first, because the Home bar also holds a
-search field, and `openSettings` runs *after* the search step has typed into it.
+```
+→NavigationBar, identifier: 'Home'
+   SearchField, label: 'Search items', value: Item 10
+     Image, identifier: 'magnifyingglass', label: 'Search'
+     Button, label: 'Clear text'
+   Button, label: 'Cancel'
+```
 
-`HomeScreen.openSettings` prints the navigation bar's subtree when the query
-misses, and this is why. "No matches found for `home.moreMenu`" is the same
-message a renamed identifier, a menu that never rendered, a screen that never
-appeared and a modifier that did not propagate would each have produced, and
-the element list XCUITest prints beside it is truncated. The first version of
-the CI failure-summary step then kept only the message's first line, which threw
-the dump away again — it greps with context now.
+No toolbar item, under any name, with or without an identifier. **An engaged
+`.searchable` field replaces the navigation bar's contents on a compact
+width** — the field and its Cancel button are the bar while the search is open,
+and the `ToolbarItem` is not in the published tree to be queried. The journey
+had searched two steps earlier, and the step in between asserts that the term
+*survives* the pop, so the field was still engaged by design. The query could
+not have matched whatever the identifier did.
+
+The fix is a step, not a workaround: `leaveTheSearch` calls
+`HomeScreen.dismissSearch()` and then asserts that the nine rows the term hid
+come back, which is the other direction of the filter and something the search
+step cannot establish on its own. `dismissSearch()` taps the bar's own Cancel
+button, found structurally as `NavigationBarScreen.goBack` finds the back
+button and for the same reason — `.searchable` builds it, so there is nothing
+in `HomeView` to hang an identifier on, and its only name is the localised
+"Cancel". It is `children(matching: .button)` rather than `buttons[…]` because
+a descendant query also matches the field's own "Clear text" button, and
+clearing the text leaves the field engaged, which is the state being left. It
+returns early when the toolbar menu is already in the tree, which is what lets
+the same step run on a regular width that seats the field without taking the
+bar over.
+
+Rule 9 of `Tools/assert-ui-test-journey.py` is what keeps this from coming
+back: a suite that searches and then opens the toolbar menu has to call
+`dismissSearch()`. It checks the call is present, not that it is in the right
+place — a Swift source order is not an execution order — so a misplaced call
+still fails on the simulator, but with the bar's subtree in the message.
+
+**Whether the `Menu`'s identifier survives the bridge is still unknown**, and
+is now being asked for the first time: no run so far has queried it with the
+toolbar actually in the bar. The identifier stays on the `Menu`, and
+`openSettings` names both causes in its failure message with the dump beside
+them, because the dump tells them apart — a search field and a Cancel button
+means the dismiss step is missing, while a bar holding a "More options" button
+with no identifier means the bridge dropped it and the fallback is a structural
+query. If the matrix comes back red on that second shape, the fallback is the
+answer rather than another theory about modifier composition.
 
 ## Picking the simulator
 
@@ -288,6 +317,16 @@ Sign In button that is disabled because the form it validates is empty. Two
 things make that read tricky and both are commented where it happens: an empty
 field's value is its *placeholder*, and a `SecureField` publishes bullets, so
 length is the strongest assertion available there.
+
+A seventh was found by running it too, and is now rule 9 of the audit. **A
+query against a navigation bar is a query against whatever the bar is currently
+showing**, which is not always the bar the view declared: an engaged search
+field replaces its contents, and the toolbar item is then absent rather than
+hidden. The timeout that follows reads as a broken toolbar, which is how three
+red runs and one reverted change to `HomeView` happened; the section above has
+the detail. The general form is worth carrying to any bar-mounted control: a
+query that passes in isolation can fail in a journey purely because of what an
+earlier step left the chrome in the middle of doing.
 
 ## Running it
 
