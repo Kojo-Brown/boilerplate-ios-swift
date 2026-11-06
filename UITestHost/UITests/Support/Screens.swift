@@ -162,6 +162,12 @@ struct HomeScreen {
     /// and the answer was the fifth of those five and cost two rounds of CI and
     /// a wrong fix to the app.
     ///
+    /// The fourth of the five is now answered and the answer is no, it did
+    /// propagate: once the search was dismissed, the iPhone SE leg published
+    /// `Button, identifier: 'home.moreMenu', label: 'More options'`. A `Menu`
+    /// in a `ToolbarItem` carries the modifier across the bridge after all, so
+    /// nothing in this file needs to query the bar by position.
+    ///
     /// A navigation bar is a handful of elements, so printing its subtree costs
     /// a few lines and only on the way to a failure. It belongs here rather than
     /// in the journey because this is where the query lives.
@@ -170,14 +176,11 @@ struct HomeScreen {
             XCTFail(
                 """
                 The Home toolbar menu is not in the published tree under \
-                "\(AccessibilityID.Home.moreMenu)". Two causes are known and the bar's own \
-                subtree tells them apart: an engaged search field replaces the bar's \
-                contents, in which case the dump below is a search field and a Cancel \
-                button and the missing step is `dismissSearch()`; or the bar is showing its \
-                toolbar and the `Menu`'s identifier did not survive the bridge to \
-                `UIBarButtonItem`, in which case the dump holds a button with the \
-                "More options" label and no identifier, and the fallback is a structural \
-                query as `NavigationBarScreen.goBack` already uses.
+                "\(AccessibilityID.Home.moreMenu)". The known cause is an engaged search \
+                field, which replaces the bar's contents — the dump below is then a search \
+                field and a Cancel button, and the missing step is `dismissSearch()` before \
+                this one. The identifier itself is known to reach the tree, so a dump that \
+                shows a settled Home bar without it is new and worth reading closely.
 
                 Navigation bar:
                 \(app.navigationBars.firstMatch.debugDescription)
@@ -187,8 +190,43 @@ struct HomeScreen {
             )
             return
         }
-        moreMenu.tap()
-        settingsMenuItem.awaitExistence("the Settings menu item", file: file, line: line)
+        // A coordinate tap rather than `moreMenu.tap()`, and this is the one
+        // place in the bundle that needs one.
+        //
+        // `tap()` asks the element for a hit point, and a `Menu` bridged to a
+        // `UIBarButtonItem` vends none: the simulator computed `{-1, -1}` for
+        // it, fell back to scrolling the element into visibility, and a bar
+        // item cannot perform that action — `kAXErrorCannotComplete performing
+        // AXAction kAXScrollToVisibleAction`, three times, which were
+        // XCUITest's own retries rather than three different problems. The
+        // element is there and its frame is on screen (`{{325, 25}, {34, 34}}`
+        // on an iPhone SE); only the hit point is missing. A normalised offset
+        // is computed from the frame, so it needs neither the hit point nor
+        // the scroll.
+        //
+        // This changes how the button is pressed and nothing about what is
+        // asserted: the query above still has to find the element under its
+        // identifier, and the menu still has to open.
+        moreMenu.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        if !settingsMenuItem.waitForExistence(timeout: UITestTimeout.transition) {
+            XCTFail(
+                """
+                The Home toolbar menu was tapped and no Settings item appeared under \
+                "\(AccessibilityID.Home.settingsMenuItem)". Either the menu did not open — a \
+                coordinate tap lands on a frame rather than on an element, so it hits whatever \
+                is there — or a `Button` inside `Menu` content does not carry its identifier \
+                either, which is the question the toolbar `Menu` itself has just answered yes \
+                to. The buttons the app published after the tap are below.
+
+                Buttons:
+                \(app.descendants(matching: .button).debugDescription)
+                """,
+                file: file,
+                line: line
+            )
+            return
+        }
         settingsMenuItem.tap()
     }
 }

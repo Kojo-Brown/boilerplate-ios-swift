@@ -71,10 +71,11 @@ package struct HomeView: View {
                         // journey had searched and never left. So nothing here
                         // was ever under test. The suite dismisses the search
                         // before it reaches for this — see
-                        // `HomeScreen.dismissSearch()` — and whether the bridge
-                        // carries an identifier is a question the matrix is
-                        // answering for the first time. See
-                        // `docs/ui-testing.md`.
+                        // `HomeScreen.dismissSearch()` — and with that in place
+                        // the iPhone SE leg published `Button, identifier:
+                        // 'home.moreMenu', label: 'More options'`. The bridge
+                        // does carry it; the theory it was blamed on was never
+                        // the problem. See `docs/ui-testing.md`.
                         .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                     }
                 }

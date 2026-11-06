@@ -255,15 +255,44 @@ back: a suite that searches and then opens the toolbar menu has to call
 place — a Swift source order is not an execution order — so a misplaced call
 still fails on the simulator, but with the bar's subtree in the message.
 
-**Whether the `Menu`'s identifier survives the bridge is still unknown**, and
-is now being asked for the first time: no run so far has queried it with the
-toolbar actually in the bar. The identifier stays on the `Menu`, and
-`openSettings` names both causes in its failure message with the dump beside
-them, because the dump tells them apart — a search field and a Cancel button
-means the dismiss step is missing, while a bar holding a "More options" button
-with no identifier means the bridge dropped it and the fallback is a structural
-query. If the matrix comes back red on that second shape, the fallback is the
-answer rather than another theory about modifier composition.
+**The identifier does survive the bridge**, which the iPhone SE leg settled the
+first time it was asked with the toolbar actually in the bar:
+
+```
+Button, {{325.0, 25.0}, {34.0, 34.0}}, identifier: 'home.moreMenu', label: 'More options'
+```
+
+So the `UIBarButtonItem` theory was wrong twice over — wrong about the cause,
+and wrong about the mechanism it blamed. No structural query is needed, and
+`openSettings` names one known cause now rather than two.
+
+#### What a bar button item does not have is a hit point
+
+The same run then failed one line later, on the tap:
+
+```
+Computed hit point {-1, -1} after scrolling to visible
+Failed: Failed to scroll to visible (by AX action) Button, identifier: 'home.moreMenu'
+error: kAXErrorCannotComplete performing AXAction kAXScrollToVisibleAction
+```
+
+`XCUIElement.tap()` resolves a hit point first, and the bridged bar item vends
+none. XCUITest then falls back to scrolling the element into visibility, which
+a navigation bar item cannot do, and retries the whole thing three times —
+three identical failures in the log are its retries, not three problems. The
+element is in the tree and its frame is on screen; only the activation point is
+missing.
+
+`moreMenu.coordinate(withNormalizedOffset:).tap()` is the answer, because a
+normalised offset is resolved against the frame and needs neither the hit point
+nor the scroll. It is the one coordinate tap in the bundle and it is confined
+to this control, which matters: a coordinate tap lands on a *place*, so it hits
+whatever is there and cannot report that the thing it meant to press was gone.
+What keeps that honest here is that the identifier query above it still has to
+find the element first — the tap is how the button is pressed, not what is
+asserted — and the step now dumps every published button if no Settings item
+appears after it, since "the menu did not open" and "the menu item has no
+identifier either" are otherwise the same silence.
 
 ## Picking the simulator
 
