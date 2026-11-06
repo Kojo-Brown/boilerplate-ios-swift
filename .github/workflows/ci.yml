@@ -41,6 +41,24 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual re-run, and it is not a convenience.
+  #
+  # Five of the nine runs on the branch that added the `ui-test` job never
+  # executed a step: every macOS job sat at `runner_id: 0` — queued, never
+  # assigned a hosted runner — and was then cancelled, which takes the matrix
+  # with it because `ui-test` needs `build-and-test`. That is GitHub's side
+  # rather than this repository's: the cancel has come anywhere between eight
+  # and sixty-six minutes in, and a sibling workflow on macOS was assigned a
+  # runner in the same minute as one of them.
+  #
+  # Without this trigger, a run lost that way can only be retried by someone
+  # with write access pressing "Re-run jobs" in the Actions tab, or by pushing
+  # a commit. An agent has neither — re-running is not in its token's scope —
+  # and pushing an empty commit to kick CI is not something this repository
+  # does. So an unassigned run means a verified change sits unverifiable until
+  # the next real commit, which is how a merge-on-green rule quietly becomes a
+  # merge-on-nothing rule.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
