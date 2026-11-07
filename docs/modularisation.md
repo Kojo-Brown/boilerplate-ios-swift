@@ -123,7 +123,7 @@ what `ModularisationTests` checks the five conformances against.
 
 ## Why there is a script
 
-`Tools/assert-module-boundaries.py`, wired into the lint job, fails on three
+`Tools/assert-module-boundaries.py`, wired into the audits job, fails on three
 things the build cannot:
 
 1. **A widened manifest.** `.target(dependencies:)` is the compiler's boundary,

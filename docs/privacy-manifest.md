@@ -17,7 +17,7 @@ item is a gate and a set of files rather than a file.
 | `Sources/Features/Resources/PrivacyInfo.xcprivacy` | `Features`'. Declares what the sign-in forms send. |
 | `Sources/App/Resources/PrivacyInfo.xcprivacy` | The composition root's. Declares nothing, deliberately. |
 | `Tools/app-template/PrivacyInfo.xcprivacy` | **The one an adopter has to copy.** The union of the four, for the app bundle's root. |
-| `Tools/assert-privacy-manifest.py` | The standing check. Runs on Linux in the lint job. |
+| `Tools/assert-privacy-manifest.py` | The standing check. Runs on Linux in the audits job. |
 | `Tests/ViewModelTests/PrivacyManifestTests.swift` | Proves each manifest is *in* its bundle, which no script can see. |
 
 ## Why there are five manifests and not one
@@ -156,8 +156,8 @@ becomes collection only at the upload, which is why the declaration lives in
 
 ## What the gates check
 
-`Tools/assert-privacy-manifest.py`, in the lint job beside the other seven
-audits. Each rule was verified by reintroducing the defect it names:
+`Tools/assert-privacy-manifest.py`, in the audits job beside the other
+seven. Each rule was verified by reintroducing the defect it names:
 
 1. Every target ships a manifest; it parses; it carries all four top-level keys
    with the right types and no others.

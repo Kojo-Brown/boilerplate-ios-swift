@@ -62,7 +62,7 @@ from being reported as a false failure in an unrelated suite.
 
 ## The three ways a test here can silently stop being able to fail
 
-`Tools/assert-test-framework.py` runs in the lint job and fails on each of
+`Tools/assert-test-framework.py` runs in the audits job and fails on each of
 these. All three compile, link, run, and report success.
 
 **1. An XCTest assertion inside a `@Test`.** `XCTAssertEqual` and friends

@@ -112,13 +112,48 @@ jobs:
             exit 1
           fi
 
+  # Phase 12 item 4. Fifteen gates that need no Mac, in a job that does not ask
+  # for one.
+  #
+  # Every one of these steps is syntactic — no toolchain, no resolved packages,
+  # no simulator — and every one of their docstrings has said so since it was
+  # written, most of them in the same sentence that names them as gates the
+  # scheduled agent can run on its Linux box before pushing. They had
+  # nonetheless been sitting in the `lint` job, on `macos-15`, behind the one
+  # step in it that genuinely needs a Mac.
+  #
+  # **That cost this branch its merge, which is how it was noticed.** Six of
+  # thirteen runs here executed no macOS step at all: every job sat at
+  # `runner_id: 0`, never assigned, and was dropped at roughly fifteen minutes
+  # of queue. At `5f5be78` three of the four macOS jobs a pull request here
+  # opens were served and `lint` was the one that was not — so these fifteen
+  # gates went unreported on a commit whose other seven checks were green, and
+  # a merge-on-green rule with an unreported gate is a merge-on-nothing rule.
+  # None of the fifteen could have been affected by macOS capacity in the first
+  # place.
+  #
+  # On `ubuntu-latest` they report in about thirty seconds and they report
+  # whatever the Mac queue is doing. `swiftlint --strict` stays on `macos-15`
+  # because it is the one thing that was ever there for a reason.
+  #
+  # `ruby -c` on the fastlane configuration comes too: it is a syntax check,
+  # ubuntu runner images carry Ruby, and it was verified on this Linux box
+  # before being moved.
+  audits:
+    name: Audits (no toolchain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
       # Phase 7 item 1. Swift 6 mode checks `Sendable` for you everywhere the
       # source does not opt out; `@unchecked Sendable` and `nonisolated(unsafe)`
       # are the two ways to opt out, and a build that is already warning-free
       # says nothing about either. This fails on any occurrence that is not
       # recorded with a reason, and on any recorded reason whose code is gone.
       #
-      # It sits in the lint job rather than the build job because it is
+      # It sits in the audits job rather than the build job because it is
       # syntactic: it needs no toolchain, no resolved packages and no simulator,
       # so it reports even when the build is broken — and, unlike every other
       # gate in this repo, it can be run locally on the Linux agent.
@@ -152,7 +187,7 @@ jobs:
       # docstring carries the measurement that established it, and
       # `docs/accessibility.md` says what reading the real tree would need.
       #
-      # It sits in the lint job with the other two audits for the same reason
+      # It sits in the audits job with the other gates for the same reason
       # they do: it is syntactic, so it needs no toolchain, no resolved
       # packages and no simulator, it reports even when the build is broken,
       # and it is one of the few gates the scheduled agent can run on Linux
@@ -682,6 +717,22 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
 
+    # The same argument that already gates `ui-test`, applied to the job it was
+    # not applied to, and for a reason this branch measured: a pull request here
+    # opens three macOS jobs at once in `ci.yml` plus a fourth in
+    # `dependency-resolution.yml`, and at `5f5be78` three of the four were
+    # served. The fourth sat at `runner_id: 0` for fifteen minutes and was
+    # dropped, which is a check that cannot be read rather than a check that
+    # failed — and it landed on `lint`, the job carrying every gate that needs
+    # no Mac.
+    #
+    # A gate that renders this package's views cannot report anything if the
+    # package does not compile, so waiting for the build costs nothing it was
+    # going to report. What it buys is one fewer macOS job in the queue at the
+    # moment the run starts, which is the only lever this repository has over a
+    # capacity limit outside it.
+    needs: [build-and-test]
+
     steps:
       - uses: actions/checkout@v7
 
@@ -697,7 +748,7 @@ jobs:
 
       # A hard failure, not a default. A gate with no provenance cannot say
       # whether a difference it reports is the code or the runtime, and
-      # `Tools/assert-snapshot-gate.py` has already failed the lint job by the
+      # `Tools/assert-snapshot-gate.py` has already failed the audits job by the
       # time this runs — this is the second half of the same rule, where the
       # file is read rather than parsed.
       - name: Read the runtime the goldens were recorded on
@@ -750,7 +801,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee snapshot-build.log
 
-      # No `SNAPSHOT_RECORD` here, and the audit in the lint job is what keeps
+      # No `SNAPSHOT_RECORD` here, and the audit in the audits job is what keeps
       # it that way: a gate in record mode overwrites what it was meant to
       # compare against and then passes.
       - name: Run the snapshot diff gate
@@ -815,7 +866,7 @@ jobs:
   # Each leg skips the layout test that does not apply to it. That is the whole
   # of how a leg knows what to expect — see `AdaptiveLayoutUITests` — and the
   # identifiers are held to naming real tests by
-  # `Tools/assert-ui-test-journey.py` in the lint job.
+  # `Tools/assert-ui-test-journey.py` in the audits job.
   ui-test:
     name: UI journey on ${{ matrix.device }}
     runs-on: macos-15

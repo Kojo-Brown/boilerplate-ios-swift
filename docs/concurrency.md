@@ -863,7 +863,7 @@ own deadline while the policy owns the budget of attempts.
 
 Twelve gates, none of which depend on anyone remembering the rules:
 
-- **`.github/scripts/assert-sendable-audit.py`** (CI: *SwiftLint (strict)* job).
+- **`.github/scripts/assert-sendable-audit.py`** (CI: the *Audits (no toolchain)* job).
   Finds every `@unchecked Sendable` and `nonisolated(unsafe)` under `Sources/`
   and `Tests/` and fails on any that is not in its table with a reason. It fails
   in the other direction too: an entry whose code is gone is a stale suppression,

@@ -11,7 +11,7 @@ run, or in the deploy log.
 So the arrangement below is not "match plus some secrets". It is a set of
 decisions about *what cannot happen*, and `Tools/assert-signing-credentials.py`
 is what keeps each of them true as the pipeline changes. That script runs in the
-lint job on every pull request; it is the only gate in this repository that can
+audits job on every pull request; it is the only gate in this repository that can
 see any of this.
 
 ## What holds what

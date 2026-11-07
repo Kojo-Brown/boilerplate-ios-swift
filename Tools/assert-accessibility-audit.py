@@ -25,7 +25,7 @@ So the runtime claim is replaced with a static one, and this file is honest
 about the difference: it checks the *shape* of the three defects, in the source,
 rather than what VoiceOver would say. That is less than was wanted and more than
 nothing, and it has one property the runtime version would not have had — it
-runs on Linux, in the lint job, alongside the module-boundary and Sendable
+runs on Linux, in the audits job, alongside the module-boundary and Sendable
 audits, which is where the scheduled agent can run it before pushing.
 
 The rules, each of which is a bug this package shipped:

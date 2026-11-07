@@ -330,7 +330,7 @@ family is a warning, not a failure.
 
 ## The ways a UI suite stops being a test
 
-Each of these is checked by `Tools/assert-ui-test-journey.py`, in the lint job,
+Each of these is checked by `Tools/assert-ui-test-journey.py`, in the audits job,
 on Linux, with no toolchain:
 
 1. **A query for an identifier nothing carries.** It does not fail fast. It
@@ -420,6 +420,38 @@ being assigned a runner.
 
 Serialising costs wall-clock and buys a package suite whose result means
 something. It is worth knowing about before adding a fourth device.
+
+### The other half: a check that is never read is not a check
+
+Contention has a second failure mode, and it is worse than a flaky test
+because it looks like nothing at all. A pull request here opens three macOS
+jobs in `ci.yml` and a fourth in `dependency-resolution.yml`. When the account
+is not being allocated that many, the job that does not get a runner is not
+reported as failed — it sits at `runner_id: 0`, never executes a step, and is
+dropped at roughly fifteen minutes of queue with the conclusion `cancelled`.
+Six of this branch's thirteen runs placed no macOS job whatsoever. At
+`5f5be78`, three of the four were served and `lint` was the one that was not,
+on a commit whose other seven checks were green.
+
+A merge-on-green rule with an unreadable check is a merge-on-nothing rule, so
+the response is to stop asking for Macs that are not needed:
+
+* **`snapshot` now `needs: [build-and-test]`**, on the same argument that
+  already gated `ui-test`. A gate that renders this package's views cannot
+  report anything if the package will not compile, so the wait costs nothing it
+  was going to say, and it takes one macOS job out of the queue at the moment
+  the run starts.
+* **The fifteen gates that need no Mac moved to `ubuntu-latest`**, as the
+  `audits` job. Every one is syntactic — the thirteen `Tools/assert-*.py`
+  audits, the Sendable opt-out audit, and `ruby -c` over the fastlane
+  configuration — and every one of their docstrings had said so for phases
+  while they sat behind `swiftlint` on a `macos-15` runner. They report in
+  about thirty seconds now, and they report whatever the Mac queue is doing.
+  `swiftlint --strict` is what is left in `lint`, because it is the one step
+  there that was ever on macOS for a reason.
+
+Neither of these makes a Mac appear. They reduce how much of this repository's
+verdict depends on getting one.
 
 ## What this still does not do
 

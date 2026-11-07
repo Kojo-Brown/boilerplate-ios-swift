@@ -37,7 +37,7 @@ package uses is the same false statement one file further out.
 Each rule below was verified by reintroducing the defect it names and watching
 this script fail. It is deliberately a script rather than a test: it needs no
 toolchain, no resolved packages and no simulator, so it runs on Linux in the
-lint job, reports even when the build is broken, and is one of the few gates the
+audits job, reports even when the build is broken, and is one of the few gates the
 scheduled agent can run before pushing.
 
 What it does **not** check, and cannot: whether the collected-data rows are

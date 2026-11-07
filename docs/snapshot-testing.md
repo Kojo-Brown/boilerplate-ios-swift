@@ -222,7 +222,7 @@ and it is the only workflow here with `contents: write`.
 
 ## What the audit holds
 
-`Tools/assert-snapshot-gate.py` runs in the lint job, needs no toolchain, and
+`Tools/assert-snapshot-gate.py` runs in the audits job, needs no toolchain, and
 covers the state a green run cannot see:
 
 1. the goldens directory holds images, the manifest and the readme, nothing else;

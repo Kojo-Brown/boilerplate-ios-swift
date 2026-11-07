@@ -325,7 +325,7 @@ Nothing here verifies anything; this is the client half.
 
 ## What the gates check
 
-`Tools/assert-crash-reporting.py`, in the lint job beside the other audits. Ten
+`Tools/assert-crash-reporting.py`, in the audits job beside the others. Ten
 rules, each verified by reintroducing the defect it names:
 
 1. `accept` is neither `async` nor missing, and the drain keeps its reentrancy

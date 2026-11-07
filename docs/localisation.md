@@ -256,7 +256,7 @@ catalog entry here could carry. `APIError.networkUnavailable` and
 
 ### `Tools/assert-localisation.py`
 
-Runs in the lint job beside the Sendable, module-boundary and accessibility
+Runs in the audits job beside the Sendable, module-boundary and accessibility
 audits. Like them it is syntactic — no toolchain, no simulator, and runnable on
 Linux, which is where the scheduled agent can run it before pushing.
 

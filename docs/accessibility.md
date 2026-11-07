@@ -51,7 +51,7 @@ So the pass is verified two ways, and neither is the one that was wanted:
   an `Image(systemName:)` that is neither hidden nor named. Every exception is
   recorded with a reason and every recorded exception must still exist, the
   same both-directions rule the Sendable audit uses. It is syntactic, so it
-  runs in the lint job on Linux — which is where the scheduled agent can run it
+  runs in the audits job on Linux — which is where the scheduled agent can run it
   before pushing, unlike every other gate in this repository.
 * **`DynamicTypeTests`** measures heights through
   `UIHostingController.sizeThatFits(in:)`, which is the layout system rather

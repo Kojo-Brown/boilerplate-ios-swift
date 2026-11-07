@@ -72,7 +72,7 @@ The rules, each one a failure mode this arrangement actually has:
      no `expect` at all would check nothing.
 
 It reads source, a plist and a workflow file with the standard library only, so
-it runs on Linux in the lint job beside the other audits — which is where the
+it runs on Linux in the audits job beside the others — which is where the
 scheduled agent can run it, since it can run none of the gates that need Xcode.
 
 Run it with `python3 Tools/assert-ui-test-journey.py`.

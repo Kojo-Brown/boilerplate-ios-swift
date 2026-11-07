@@ -242,7 +242,7 @@ Four rules, each verified by reintroducing the defect it names: sessions are
 built in one file only, nothing reaches for `URLSession.shared` (which takes no
 delegate and therefore cannot be pinned), the transport has no session default a
 caller could silently accept, and the delegate evaluates system trust before it
-accepts a pin. It runs in the lint job beside the other audits, needs no
+accepts a pin. It runs in the audits job beside the others, needs no
 toolchain, and is one of the few gates that can be run on Linux before pushing.
 
 The behavioural half is `CertificatePinningTests`, `CertificatePinningDelegateTests`
