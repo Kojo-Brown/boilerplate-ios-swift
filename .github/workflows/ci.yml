@@ -717,21 +717,30 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
 
-    # The same argument that already gates `ui-test`, applied to the job it was
-    # not applied to, and for a reason this branch measured: a pull request here
-    # opens three macOS jobs at once in `ci.yml` plus a fourth in
-    # `dependency-resolution.yml`, and at `5f5be78` three of the four were
-    # served. The fourth sat at `runner_id: 0` for fifteen minutes and was
-    # dropped, which is a check that cannot be read rather than a check that
-    # failed — and it landed on `lint`, the job carrying every gate that needs
-    # no Mac.
+    # No `needs:` here, deliberately, and the deliberation is recorded because
+    # this job had one for the length of a single CI run.
     #
-    # A gate that renders this package's views cannot report anything if the
-    # package does not compile, so waiting for the build costs nothing it was
-    # going to report. What it buys is one fewer macOS job in the queue at the
-    # moment the run starts, which is the only lever this repository has over a
-    # capacity limit outside it.
-    needs: [build-and-test]
+    # It was added to take a macOS job out of the queue at the moment a run
+    # starts, which is the starvation `lint` had been losing to. Moving the
+    # fifteen no-toolchain gates to `ubuntu-latest` turned out to be the whole
+    # of that fix: `lint` is now a 15-second job, so it occupies a slot barely
+    # long enough to measure, and the run where that first happened placed all
+    # three of its macOS jobs.
+    #
+    # What the `needs:` cost was visible in that same run. `build-and-test`
+    # came back red on a host that had stalled — 238 seconds elapsed for 5.7
+    # seconds of test work, Swift Testing reporting all 120 tests passed while
+    # xcodebuild named one as failing, and two unrelated macOS system daemons
+    # writing crash reports on the runner mid-window — and because this job
+    # waited on it, the snapshot gate and all three UI legs reported `skipped`.
+    # One sick host took the entire macOS verdict with it.
+    #
+    # The snapshot gate reads pixels out of this package's own views. It has no
+    # dependency on the package's test suite passing, so coupling its verdict to
+    # that suite's luck buys queue pressure that is already paid for elsewhere
+    # and costs a gate that can no longer be read. `ui-test` keeps its `needs:`
+    # because an app that links the package genuinely cannot be built if the
+    # package will not compile.
 
     steps:
       - uses: actions/checkout@v7

@@ -436,11 +436,6 @@ on a commit whose other seven checks were green.
 A merge-on-green rule with an unreadable check is a merge-on-nothing rule, so
 the response is to stop asking for Macs that are not needed:
 
-* **`snapshot` now `needs: [build-and-test]`**, on the same argument that
-  already gated `ui-test`. A gate that renders this package's views cannot
-  report anything if the package will not compile, so the wait costs nothing it
-  was going to say, and it takes one macOS job out of the queue at the moment
-  the run starts.
 * **The fifteen gates that need no Mac moved to `ubuntu-latest`**, as the
   `audits` job. Every one is syntactic — the thirteen `Tools/assert-*.py`
   audits, the Sendable opt-out audit, and `ruby -c` over the fastlane
@@ -450,8 +445,25 @@ the response is to stop asking for Macs that are not needed:
   `swiftlint --strict` is what is left in `lint`, because it is the one step
   there that was ever on macOS for a reason.
 
-Neither of these makes a Mac appear. They reduce how much of this repository's
-verdict depends on getting one.
+That does not make a Mac appear. It reduces how much of this repository's
+verdict depends on getting one, and it is most of the fix on its own: `lint` is
+now a 15-second job, so it holds a slot barely long enough to measure, and the
+first run under this layout placed all three of its macOS jobs.
+
+A second change was tried in the same commit and taken back out one run later:
+`snapshot` was given `needs: [build-and-test]` to drop one more job from the
+opening queue. That run put the cost on display. `build-and-test` came back red
+on a host that had stalled — 238 seconds elapsed for 5.7 seconds of test work,
+Swift Testing reporting all 120 tests passed while xcodebuild named one as
+failing, and two unrelated macOS system daemons writing crash reports on the
+runner mid-window — and the snapshot gate and all three UI legs then reported
+`skipped`. One sick host took the whole macOS verdict with it.
+
+**The snapshot gate has no dependency on the package's suite passing**; it
+renders views and compares pixels. Coupling its verdict to that suite's luck
+bought queue pressure already paid for by the move to Linux and cost a gate
+that could no longer be read. `ui-test` keeps its `needs:` because an app that
+links the package genuinely cannot be built if the package will not compile.
 
 ## What this still does not do
 
