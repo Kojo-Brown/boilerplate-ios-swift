@@ -465,6 +465,33 @@ bought queue pressure already paid for by the move to Linux and cost a gate
 that could no longer be read. `ui-test` keeps its `needs:` because an app that
 links the package genuinely cannot be built if the package will not compile.
 
+### Telling a stalled host from a failing test
+
+A stalled host does not report as a stall. `xcodebuild` reports a list of test
+names, and that list reads exactly like a regression in whatever the branch
+touched. Three runs have now been diagnosed by hand and all three were the
+host; the names were different every time and all of them belonged to tests
+that measure elapsed time or render counts.
+
+`.github/scripts/diagnose-test-stall.py` runs in the `Summarise failures`
+group and reads the two numbers that settle it, both of which were already in
+`test.log`:
+
+* **The two reporters disagree.** Swift Testing prints its own tally — `Test
+  run with 120 tests passed after 5.695 seconds` — and `xcodebuild` prints
+  `Failing tests:`. A test that fails an assertion reports that issue to the
+  harness, so a run where the harness saw everything pass and xcodebuild named
+  one as failing is not one.
+* **The clock disagrees with itself.** `IDETestOperationsObserverDebug: N
+  elapsed` is wall-clock around the whole phase. 238 seconds of it around 5.7
+  seconds of test work is 232 seconds spent not running tests, and teardown
+  plus coverage export are seconds.
+
+It is a diagnosis and never a gate: it always exits 0, so it cannot turn a red
+run green. When it finds no stall signature it says so, and says to fix the
+named failures rather than re-run and hope. Verified against synthetic logs
+reproducing all three observed stalls and a genuine single-test failure.
+
 ## What this still does not do
 
 * **Nothing here is run on a device.** The matrix is simulators, and a

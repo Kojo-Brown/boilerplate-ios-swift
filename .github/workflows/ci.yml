@@ -649,6 +649,27 @@ jobs:
             echo "::endgroup::"
           done
 
+      # Phase 12 item 4. A red `xcodebuild test` prints a list of test names,
+      # and on this account's current macOS capacity that list is as often the
+      # host as it is the branch — three runs have now been diagnosed by hand
+      # and all three were the host. The tell is never the names: it is that
+      # Swift Testing's own tally and xcodebuild's disagree, or that the phase
+      # spent minutes of wall-clock around seconds of test work. Both numbers
+      # are already in `test.log` and nothing was reading them.
+      #
+      # It is a diagnosis and not a gate. It always exits 0, it cannot turn a
+      # red run green, and it does not decide whether to retry — it prints the
+      # sentence somebody needs in order to decide, including the case where
+      # there is no stall signature and the named failures are simply real.
+      - name: Say whether that was a failing test or a stalled host
+        if: failure()
+        run: |
+          if [ -f test.log ]; then
+            python3 .github/scripts/diagnose-test-stall.py test.log
+          else
+            echo "No test.log: the run did not reach the test phase."
+          fi
+
       # When the test process dies rather than failing an assertion, xcodebuild
       # reports every test that had not finished as "failing" and says nothing
       # about why the process went away. The crash report does, and it is written
