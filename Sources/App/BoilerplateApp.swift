@@ -4,8 +4,21 @@ import SwiftData
 import SwiftUI
 import os
 
-@main
-struct BoilerplateApp: App {
+/// The app, as a type the host target's entry point can name.
+///
+/// Phase 12 item 4 moved `@main` off this struct and into
+/// `UITestHost/Host/HostEntryPoint.swift`, and the reason is the one thing an
+/// XCUITest cannot do without: a `.app` bundle to launch. A SwiftPM package
+/// cannot declare one — `Package.swift` declares a library, and there is no
+/// product type that installs — so the host is a small Xcode target that links
+/// this library and provides nothing but `@main`, an `Info.plist` and the
+/// privacy manifest. Two entry points in one binary is a duplicate `_main`
+/// symbol and a link error, so there is exactly one and it is over there.
+///
+/// This type is therefore `public` rather than `package`: the host target is
+/// not part of this package and `package` would not reach it. Everything
+/// below it stays as it was.
+public struct BoilerplateApp: App {
     @State private var appState: AppState
     @State private var coordinator = AppCoordinator()
 
@@ -57,18 +70,35 @@ struct BoilerplateApp: App {
     /// handed to `AppContainer.live()`. Before Phase 8 item 3 the container was
     /// installed in the environment and read by nothing — `docs/solid.md`
     /// finding 6 — and this is the line that stops being true.
-    init() {
+    public init() {
+        // Phase 12 item 4. Read once, here, so the whole process is either the
+        // shipped app or the doubled one — see `UITestLaunch` for what the
+        // three substitutions below are and why each exists.
+        let uiTesting = UITestLaunch.isActive
+        if uiTesting {
+            UITestLaunch.resetPersistentState()
+        }
+
         let modelContainer: ModelContainer
         do {
-            modelContainer = try PersistenceController.makeContainer()
+            if uiTesting {
+                modelContainer = try PersistenceController.makeInMemoryContainer()
+            } else {
+                modelContainer = try PersistenceController.makeContainer()
+            }
         } catch {
             fatalError("SwiftData container failed to initialise: \(error)")
         }
 
         let state = AppState()
-        let graph = AppContainer.live(
-            userStore: SwiftDataUserPersistenceService(context: modelContainer.mainContext)
-        )
+        let graph: AppContainer
+        if uiTesting {
+            graph = AppContainer.preview
+        } else {
+            graph = AppContainer.live(
+                userStore: SwiftDataUserPersistenceService(context: modelContainer.mainContext)
+            )
+        }
 
         // Subscribed here, before a single view exists, which is what makes the
         // first event unmissable: `EventBus` registers synchronously, so the app
@@ -92,7 +122,7 @@ struct BoilerplateApp: App {
         _appState = State(wrappedValue: state)
     }
 
-    var body: some Scene {
+    public var body: some Scene {
         // Bound to a local before the scene, so the handler below captures the
         // coordinator and not `self`. The action is `@Sendable` and this type
         // holds `@State`; more to the point, that closure can run in a process

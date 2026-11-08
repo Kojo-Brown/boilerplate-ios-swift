@@ -11,7 +11,7 @@ run, or in the deploy log.
 So the arrangement below is not "match plus some secrets". It is a set of
 decisions about *what cannot happen*, and `Tools/assert-signing-credentials.py`
 is what keeps each of them true as the pipeline changes. That script runs in the
-lint job on every pull request; it is the only gate in this repository that can
+audits job on every pull request; it is the only gate in this repository that can
 see any of this.
 
 ## What holds what
@@ -193,11 +193,18 @@ servers, in every fork, and in every clone from the moment of the push.
 
 ## What has never run
 
-The `beta` job has never executed and cannot as the repository stands. There is
-no app target: `Package.swift` declares a library, there is no `.xcodeproj` or
-`.xcworkspace`, and `build_app` has nothing to archive. The `SCHEME` and
-`WORKSPACE` constants at the top of the Fastfile name things that do not exist
-here.
+The `beta` job has never executed and cannot as the repository stands.
+`Package.swift` declares a library, and `build_app` has nothing to archive.
+
+Phase 12 item 4 added an Xcode project — `UITestHost/`, generated from a spec —
+and it is deliberately not the one this job needs. It builds for the simulator
+only, unsigned (`CODE_SIGNING_ALLOWED=NO`), with no entitlements, no release
+configuration, no archive action and no bundle identifier anyone owns. It exists
+so an XCUITest has something to launch; an archive signed by `match` and
+uploaded to TestFlight is a different artefact, and treating a test host as one
+is how an unsigned simulator build reaches a release lane. The `SCHEME` and
+`WORKSPACE` constants at the top of the Fastfile still name things that do not
+exist here.
 
 So what is real today is the credential wiring and the audit over it — which is
 the half of signing that a template gets wrong, and the half no other gate in

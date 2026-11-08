@@ -22,7 +22,7 @@ import PackageDescription
 // `Sources/`, and fails on any edge that is not declared here — because
 // `.target(dependencies:)` alone cannot say "these two must never meet": adding
 // a dependency is a one-line change nobody reviews, and a layering violation
-// that compiles is one nobody sees. It runs in the lint job, where it needs no
+// that compiles is one nobody sees. It runs in the audits job, where it needs no
 // toolchain and no simulator.
 let package = Package(
     name: "boilerplate-ios-swift",

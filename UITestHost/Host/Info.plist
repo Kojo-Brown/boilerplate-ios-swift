@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<!--
+	  An empty `UILaunchScreen` is not a placeholder. Without the key, iOS runs
+	  the app in iPhone compatibility mode on an iPad — a letterboxed window,
+	  a compact horizontal size class, and `HomeView` resolving to the list
+	  layout on the one device in the matrix that exists to exercise the grid.
+	-->
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!--
+	  `BoilerplateApp`'s scene carries `.backgroundTask(.appRefresh(…))`, and
+	  that registration raises — it does not throw — for an identifier absent
+	  from this array. A host without these two keys is therefore an app that
+	  cannot finish launching, which is the first thing every test in the suite
+	  would report and the last thing any of them would explain. The identifier
+	  is `AppContainer.backgroundRefreshIdentifier`; the two are held equal by
+	  `Tools/assert-ui-test-journey.py`. See `docs/background-refresh.md`.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.example.boilerplate-ios-swift.refresh-profile</string>
+	</array>
+
+	<!--
+	  The purpose strings. No journey opens the scanner or reaches for Face ID —
+	  the doubled graph has neither behind it — but a host that could not is a
+	  host the suite could never be extended to, and an app that reaches a
+	  protected resource without the matching key is terminated rather than
+	  denied. They say what this build is so that a prompt in a UI test run
+	  cannot be mistaken for the shipped app asking.
+	-->
+	<key>NSCameraUsageDescription</key>
+	<string>The UI test host uses the camera only to exercise the text and barcode scanners.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>The UI test host uses Face ID only to exercise the biometric sign-in flow.</string>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>

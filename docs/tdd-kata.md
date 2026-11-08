@@ -148,7 +148,7 @@ papered over. What it leaves standing:
   `xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'`.
   The red rows are predictions that a single command falsifies, which is a
   better position than a kata whose intermediate states were never committed.
-* The twelve audits in the lint job are syntactic and *were* run at each commit
+* The twelve audits that now make up the audits job are syntactic and *were* run at each commit
   on the agent's box — localisation, module boundaries, test framework, the
   Sendable opt-outs, and the eight security and release checks.
 * The head of the branch was green in CI before the merge: build with no

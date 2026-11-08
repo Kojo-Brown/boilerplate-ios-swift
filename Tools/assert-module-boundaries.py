@@ -21,7 +21,7 @@ So the graph is declared here, checked against the manifest, and checked against
 every `import` and every cross-directory type reference in `Sources/`.
 
 It is deliberately a script and not a test: it needs no toolchain, no resolved
-packages and no simulator, so it runs on Linux in the lint job and reports even
+packages and no simulator, so it runs on Linux in the audits job and reports even
 when the build is broken. Run it with `python3 Tools/assert-module-boundaries.py`.
 """
 from __future__ import annotations

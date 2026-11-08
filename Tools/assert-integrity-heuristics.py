@@ -38,7 +38,7 @@ app launches, and the suite has quietly become decoration:
 Each rule below was verified by reintroducing the defect it names and watching
 this script fail. It is deliberately a script rather than a test: it needs no
 toolchain, no resolved packages and no simulator, so it runs on Linux in the
-lint job, reports even when the build is broken, and is one of the few gates the
+audits job, reports even when the build is broken, and is one of the few gates the
 scheduled agent can run before pushing.
 
 Run it with `python3 Tools/assert-integrity-heuristics.py [repo-root]`.

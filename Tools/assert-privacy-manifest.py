@@ -37,7 +37,7 @@ package uses is the same false statement one file further out.
 Each rule below was verified by reintroducing the defect it names and watching
 this script fail. It is deliberately a script rather than a test: it needs no
 toolchain, no resolved packages and no simulator, so it runs on Linux in the
-lint job, reports even when the build is broken, and is one of the few gates the
+audits job, reports even when the build is broken, and is one of the few gates the
 scheduled agent can run before pushing.
 
 What it does **not** check, and cannot: whether the collected-data rows are
@@ -588,9 +588,10 @@ def check_docs(repo: str, categories: dict[str, set[str]], data_types: set[str],
 
     The same rule the threat model has, for the same reason: a privacy page
     listing only the comfortable half is the marketing version, and the gaps
-    here are the part an adopter has to act on — this package has no app target,
-    so the manifest that an upload is actually checked against is one they have
-    to place themselves.
+    here are the part an adopter has to act on — this package has no shippable
+    app target (`UITestHost/` is a simulator-only XCUITest host), so the
+    manifest that an upload is actually checked against is one they have to
+    place themselves.
     """
     path = os.path.join(repo, DOCS)
     if not os.path.isfile(path):

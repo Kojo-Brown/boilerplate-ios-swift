@@ -33,7 +33,15 @@ That was read off a window with a real `UIWindowScene`, made key and visible,
 fully laid out, on the iOS 18.5 simulator, after the tree had rendered. It is a
 gate rather than laziness, and no arrangement of windows gets past it. Reading
 the published tree needs an XCUITest target with a host app, which this package
-does not have — it belongs with the simulator-matrix item in Phase 12.
+did not have when the audit below was written.
+
+Phase 12 item 4 built that host — `UITestHost/`, see
+[ui-testing.md](./ui-testing.md) — and the journey it runs reads the published
+tree for real: a control missing from it fails there. What the host has not yet
+been used for is this page's subject. An identifier is not a label, and
+existence is not an announcement, so holding the names, values, traits and
+rotor of every control to what a reader would hear is still ahead, and the two
+checks below are still what stands behind the claims on this page.
 
 So the pass is verified two ways, and neither is the one that was wanted:
 
@@ -43,7 +51,7 @@ So the pass is verified two ways, and neither is the one that was wanted:
   an `Image(systemName:)` that is neither hidden nor named. Every exception is
   recorded with a reason and every recorded exception must still exist, the
   same both-directions rule the Sendable audit uses. It is syntactic, so it
-  runs in the lint job on Linux — which is where the scheduled agent can run it
+  runs in the audits job on Linux — which is where the scheduled agent can run it
   before pushing, unlike every other gate in this repository.
 * **`DynamicTypeTests`** measures heights through
   `UIHostingController.sizeThatFits(in:)`, which is the layout system rather
@@ -209,9 +217,12 @@ the assumption that everything below was done.
 * **No VoiceOver was run.** The scheduled agent runs on Linux; CI runs a
   simulator, and — as the section at the top of this file records — the
   published tree cannot be read from a unit-test process either. `xcodebuild`
-  cannot run VoiceOver, so this is a gap the gates here cannot close: an
-  XCUITest journey with `XCUIDevice` accessibility auditing is the route, and
-  it belongs with the simulator-matrix item in Phase 12.
+  cannot run VoiceOver, so this is a gap the gates here cannot close. Phase 12
+  item 4 built the host an XCUITest needs and the journey now reads the
+  published tree, which is the precondition rather than the thing: auditing the
+  announcements — `XCUIDevice`'s accessibility audit, or assertions on each
+  element's label, value and traits — is the route from here, and it is not
+  done. See [ui-testing.md](./ui-testing.md).
 * **Contrast is unmeasured.** Nothing here checks colour contrast ratios, and
   several of the semantic colours are opacity-modulated
   (`.secondary.opacity(0.3)`, `Color.red.opacity(0.1)`), which is where

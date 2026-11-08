@@ -51,7 +51,7 @@ credential the lane needs; in the other, a job that refuses to start over a
 credential nothing reads.
 
 It is deliberately a script rather than a test: it needs no toolchain, no
-resolved packages and no simulator, so it runs on Linux in the lint job, reports
+resolved packages and no simulator, so it runs on Linux in the audits job, reports
 even when the build is broken, and is one of the few gates the scheduled agent
 can run before pushing. Nothing else in this repository can check any of it —
 the deploy workflow has never executed and cannot until there is an app target

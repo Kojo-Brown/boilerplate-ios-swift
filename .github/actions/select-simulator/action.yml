@@ -53,6 +53,29 @@ inputs:
       what every caller but the snapshot gate wants.
     required: false
     default: ""
+  device-family:
+    description: >
+      The device name prefix a candidate must carry — "iPhone" or "iPad".
+      Unlike `preferred-device` this one is a requirement, not a preference: a
+      caller that asks for an iPad and is handed an iPhone is a matrix leg
+      silently running its sibling's test, so an image with nothing in the
+      family fails the step instead.
+
+      Phase 12 item 4 added it. The selection was written when every caller
+      wanted a phone and said so in three places; the UI test matrix is the
+      first caller that wants something else.
+    required: false
+    default: iPhone
+  preferred-device:
+    description: >
+      An exact device name such as "iPad Pro 13-inch (M4)" to prefer within
+      `device-family`. Asked for and not required, like `preferred-runtime`:
+      runner images rename and retire models, and the layout a UI test asserts
+      follows from the size class rather than from the model, so falling back
+      to another device in the same family is the right answer and a warning is
+      the right amount of noise about it.
+    required: false
+    default: iPhone 16
 
 outputs:
   udid:
@@ -69,6 +92,8 @@ runs:
       shell: bash
       env:
         PREFERRED_RUNTIME: ${{ inputs.preferred-runtime }}
+        DEVICE_FAMILY: ${{ inputs.device-family }}
+        PREFERRED_DEVICE: ${{ inputs.preferred-device }}
       run: |
         sdk_major=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)
         echo "iphonesimulator SDK major version: $sdk_major"
@@ -122,33 +147,39 @@ runs:
         udid=''
         if [ -n "$PREFERRED_RUNTIME" ]; then
           wanted="iOS-$(printf '%s' "$PREFERRED_RUNTIME" | tr '.' '-')"
-          udid=$(printf '%s' "$devices" | jq -r --arg want "$wanted" '
+          udid=$(printf '%s' "$devices" | jq -r \
+            --arg want "$wanted" \
+            --arg family "$DEVICE_FAMILY" \
+            --arg preferred "$PREFERRED_DEVICE" '
             [ .devices
               | to_entries[]
               | select(.key | endswith($want))
               | .value[]
-              | select(.isAvailable and (.name | startswith("iPhone")))
+              | select(.isAvailable and (.name | startswith($family)))
             ] as $all
             | if ($all | length) == 0 then empty else
-                ( ($all | map(select(.name == "iPhone 16")) | first)
+                ( ($all | map(select(.name == $preferred)) | first)
                   // ($all | first) ).udid
               end
           ')
           if [ -n "$udid" ]; then
             echo "Pinned to the runtime the goldens were recorded on: iOS $PREFERRED_RUNTIME"
           else
-            echo "::warning::This image has no iPhone simulator on iOS $PREFERRED_RUNTIME, which is what the recorded snapshots were taken on. Falling back to the newest runtime present: a pixel difference reported now may be the runtime rather than the code. Re-record the goldens if the diff image shows only antialiasing."
+            echo "::warning::This image has no $DEVICE_FAMILY simulator on iOS $PREFERRED_RUNTIME, which is what the recorded snapshots were taken on. Falling back to the newest runtime present: a pixel difference reported now may be the runtime rather than the code. Re-record the goldens if the diff image shows only antialiasing."
           fi
         fi
 
         if [ -z "$udid" ]; then
-          udid=$(printf '%s' "$devices" | jq -r --argjson sdk "$sdk_major" '
+          udid=$(printf '%s' "$devices" | jq -r \
+            --argjson sdk "$sdk_major" \
+            --arg family "$DEVICE_FAMILY" \
+            --arg preferred "$PREFERRED_DEVICE" '
             [ .devices
               | to_entries[]
               | select(.key | test("SimRuntime\\.iOS-"))
               | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
               | .value[]
-              | select(.isAvailable and (.name | startswith("iPhone")))
+              | select(.isAvailable and (.name | startswith($family)))
               | { version: [($v.major | tonumber), ($v.minor | tonumber)],
                   name: .name,
                   udid: .udid }
@@ -157,12 +188,12 @@ runs:
             | if ($all | length) == 0 then empty else
                 ($all | map(.version) | max) as $newest
                 | ($all | map(select(.version == $newest))) as $latest
-                | ( ($latest | map(select(.name == "iPhone 16")) | first)
+                | ( ($latest | map(select(.name == $preferred)) | first)
                     // ($latest | first) ).udid
               end
           ')
           if [ -z "$udid" ]; then
-            echo "::error::No iPhone simulator available on this runner image."
+            echo "::error::No $DEVICE_FAMILY simulator available on this runner image, capped at the iOS $sdk_major SDK."
             exit 1
           fi
         fi
@@ -174,6 +205,9 @@ runs:
           [ .devices | to_entries[] | select(.value | any(.udid == $u)) | .key ]
           | first // ""
         ' | sed -E 's/.*SimRuntime\.iOS-//; s/-/./g')
+        if [ -n "$PREFERRED_DEVICE" ] && [ "$name" != "$PREFERRED_DEVICE" ]; then
+          echo "::warning::This image has no simulator called '$PREFERRED_DEVICE'; using '$name' from the $DEVICE_FAMILY family instead."
+        fi
         echo "Using simulator $name ($udid) on iOS $runtime"
         echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
         echo "udid=$udid" >> "$GITHUB_OUTPUT"

@@ -20,11 +20,23 @@ Modern iOS app starter with clean architecture and ML features.
 ## Quick Start
 
 1. Open `Package.swift` in Xcode 16+ — this is a Swift Package, there is no
-   `.xcodeproj` to open
+   `.xcodeproj` for it to open
 2. Let Xcode resolve dependencies (or run `swift package resolve` first)
 3. Select simulator (iOS 17+)
 4. Add `Config.xcconfig` with your API_URL
 5. Build & Run
+
+To run the UI journey you need the one app target in the repository, and it is
+generated rather than committed:
+
+```sh
+brew install xcodegen
+cd UITestHost && xcodegen generate && open UITestHost.xcodeproj
+```
+
+It is a simulator-only host for the XCUITest suite — unsigned, uploaded
+nowhere, not a starting point for a shipping app. See
+[docs/ui-testing.md](./docs/ui-testing.md).
 
 ### Dependencies
 
@@ -133,6 +145,11 @@ build its own previews from doubles it ships itself.
   pictures and the CI job that compares them: why the renderer is the
   deterministic one rather than the faithful one, what it cannot draw, and the
   four ways a snapshot suite stops being a test while every run stays green
+- [docs/ui-testing.md](./docs/ui-testing.md) — the XCUITest journey and the
+  simulator matrix: why the package needed an app target before it could have
+  one, what the app does differently under test, why every query is an
+  identifier rather than a label, and the ways a UI suite stops being a test
+  while every run stays green
 
 ## Spec Progress
 See [SPEC.md](./SPEC.md).

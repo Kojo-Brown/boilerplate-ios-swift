@@ -52,10 +52,31 @@ package struct HomeView: View {
                             } label: {
                                 Label(FeatureStrings.Home.settings.string, systemImage: "gearshape")
                             }
+                            .accessibilityIdentifier(AccessibilityID.Home.settingsMenuItem)
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
                         .accessibilityLabel(Text(FeatureStrings.Home.moreOptions))
+                        // Phase 12 item 4. Two runs of the journey could not
+                        // find this identifier and both were read as the
+                        // modifier not propagating through the bridge to
+                        // `UIBarButtonItem` — *both* orders of these two
+                        // modifiers were tried on a simulator on that theory
+                        // and neither changed anything, which is the shape of a
+                        // wrong diagnosis rather than of a stubborn one. The
+                        // navigation bar's subtree, once the failure printed it,
+                        // held a search field and a Cancel button and no
+                        // toolbar item under any name: `.searchable` above takes
+                        // the whole bar over while its field is engaged, and the
+                        // journey had searched and never left. So nothing here
+                        // was ever under test. The suite dismisses the search
+                        // before it reaches for this — see
+                        // `HomeScreen.dismissSearch()` — and with that in place
+                        // the iPhone SE leg published `Button, identifier:
+                        // 'home.moreMenu', label: 'More options'`. The bridge
+                        // does carry it; the theory it was blamed on was never
+                        // the problem. See `docs/ui-testing.md`.
+                        .accessibilityIdentifier(AccessibilityID.Home.moreMenu)
                     }
                 }
             }
@@ -112,6 +133,13 @@ package struct HomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // Phase 12 item 4. This layout and the grid below each carry an
+        // identifier, and exactly one of them is ever in the tree: `content`
+        // resolves between them on the horizontal size class. That is what
+        // makes the simulator matrix worth running — a UI test on an iPad
+        // asserts it got the grid rather than a wider copy of this list, which
+        // nothing else in the suite can see. See `docs/ui-testing.md`.
+        .accessibilityIdentifier(AccessibilityID.Home.list)
     }
 
     // MARK: - Grid layout (regular / iPad)
@@ -141,6 +169,7 @@ package struct HomeView: View {
                 }
                 .padding(16)
             }
+            .accessibilityIdentifier(AccessibilityID.Home.grid)
         }
     }
 
@@ -155,6 +184,7 @@ package struct HomeView: View {
             Button(FeatureStrings.Home.retry.string) { Task { await viewModel.refresh() } }
                 .buttonStyle(.borderedProminent)
         }
+        .accessibilityIdentifier(AccessibilityID.Home.errorState)
     }
 
     private var emptyView: some View {
@@ -163,6 +193,7 @@ package struct HomeView: View {
             systemImage: "tray",
             description: Text(FeatureStrings.Home.emptyDescription)
         )
+        .accessibilityIdentifier(AccessibilityID.Home.emptyState)
     }
 }
 

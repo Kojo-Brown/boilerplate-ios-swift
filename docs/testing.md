@@ -62,7 +62,7 @@ from being reported as a false failure in an unrelated suite.
 
 ## The three ways a test here can silently stop being able to fail
 
-`Tools/assert-test-framework.py` runs in the lint job and fails on each of
+`Tools/assert-test-framework.py` runs in the audits job and fails on each of
 these. All three compile, link, run, and report success.
 
 **1. An XCTest assertion inside a `@Test`.** `XCTAssertEqual` and friends
@@ -100,16 +100,23 @@ Testing cannot express:
   `XCTMemoryMetric`, and the recorded baseline that makes a regression fail
   rather than merely print. Swift Testing has no performance API.
 * **A UI journey.** `XCUIApplication` and the whole XCUITest surface are
-  XCTest-only. Phase 12 item 4 is that journey, and it will arrive as
-  `XCTestCase`.
+  XCTest-only, and a UI test bundle's runner discovers `XCTestCase` subclasses.
+  Phase 12 item 4 is that journey, it arrived as `XCTestCase`, and it lives in
+  `UITestHost/UITests/` rather than in `Tests/` because it belongs to an Xcode
+  target — see [ui-testing.md](./ui-testing.md).
 
 A new `XCTestCase` has to be recorded in `ALLOWED_XCTEST_SUITES` in
 `Tools/assert-test-framework.py` with the reason XCTest is the right choice
 there. The table is checked in both directions: an unrecorded suite fails, and
 so does an entry whose suite is gone, because a suppression that outlives the
-code it was granted for is how an allowlist turns into a rubber stamp. It is
-empty today, and that is the honest state of the tree rather than a policy
-against XCTest.
+code it was granted for is how an allowlist turns into a rubber stamp. It holds
+two entries, both of them UI journeys and both for the same reason: XCUITest is
+not a preference there, it is the only surface that exists.
+
+The audit walks `Tests/` *and* `UITestHost/UITests/`, which is the second of
+those two directories being in scope on purpose — an XCTest suite is an XCTest
+suite wherever it lives, and the one place in this repository that genuinely
+needs XCTest should not be the one place nothing checks.
 
 ## Conventions in the Swift Testing suites
 
@@ -142,7 +149,7 @@ against XCTest.
   on its first push: it ported three `HomeViewModel` live-update cases into the
   plain suite, where neither the backstop nor the idiom applies.
 
-## The suite that is not in this bundle
+## The two suites that are not in this bundle
 
 `SnapshotTests` is a second test target, and deliberately not more files in
 `ViewModelTests`. It renders seven of the design system's views and compares
@@ -153,6 +160,15 @@ newest runtime the SDK can drive. See
 [docs/snapshot-testing.md](./snapshot-testing.md) for what a picture catches
 that a structural assertion cannot, and for the four ways a snapshot suite
 stops being a test while every run stays green.
+
+`UITestHost/UITests/` is further away still: not a SwiftPM target at all, but an
+Xcode one, because an XCUITest launches an application and SwiftPM cannot
+declare a product that installs. It is the only suite here that reads the
+accessibility tree the app actually publishes, the only one that executes
+`BoilerplateApp.init()`, and the only one run on more than one simulator — three
+of them, because `HomeView` renders a different view tree on a regular
+horizontal size class than on a compact one. See
+[docs/ui-testing.md](./ui-testing.md).
 
 ## The worked example
 

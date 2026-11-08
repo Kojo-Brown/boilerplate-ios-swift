@@ -239,4 +239,4 @@ itself, so a retry cannot copy a spent assertion; the header names live in one
 file; the canonical client data still covers the format, method, path, query,
 body and challenge; the attestation endpoints do not go through the client that
 attests them; and the composition root states its enforcement out loud. It runs
-in the lint job and needs no toolchain, so it also runs on Linux.
+in the audits job and needs no toolchain, so it also runs on Linux.

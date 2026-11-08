@@ -129,6 +129,7 @@ package struct LoginView: View {
                 .background(.regularMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .accessibilityLabel(Text(FeatureStrings.Login.email))
+                .accessibilityIdentifier(AccessibilityID.Login.emailField)
 
             SecureField(FeatureStrings.Login.passwordPlaceholder.string, text: $viewModel.password)
                 .textContentType(.password)
@@ -137,12 +138,14 @@ package struct LoginView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .accessibilityLabel(Text(FeatureStrings.Login.password))
                 .accessibilityHint(Text(FeatureStrings.Login.passwordHint))
+                .accessibilityIdentifier(AccessibilityID.Login.passwordField)
         }
     }
 
     private func errorBanner(_ message: String) -> some View {
         InlineErrorBanner(message, onDismiss: clearErrors)
             .accessibilityFocused($errorIsFocused)
+            .accessibilityIdentifier(AccessibilityID.Login.errorBanner)
     }
 
     /// One closure for both ways of dismissing the banner, so the tap gesture
@@ -179,6 +182,9 @@ package struct LoginView: View {
         // and the one that replaces it is a spinner.
         .accessibilityLabel(Text(FeatureStrings.Login.signIn))
         .accessibilityBusy(viewModel.isLoading, doing: FeatureStrings.Login.signingIn)
+        // Phase 12 item 4. The name above is prose and the journey does not
+        // query by it; see `AccessibilityID` for why not.
+        .accessibilityIdentifier(AccessibilityID.Login.signInButton)
     }
 
     /// Two rules and the word between them. The rules are drawing; the word is

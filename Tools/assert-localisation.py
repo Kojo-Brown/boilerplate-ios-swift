@@ -52,7 +52,7 @@ check that belongs in a syntactic audit would have to name a hardcoded left or
 right edge, and this package has none to hold it to.
 
 Every rule below was verified by reintroducing the defect it names and watching
-this script fail on it. It runs on Linux, in the lint job, beside the Sendable,
+this script fail on it. It runs on Linux, in the audits job, beside the Sendable,
 module-boundary and accessibility audits — no toolchain, no simulator, and
 runnable by the scheduled agent before it pushes.
 

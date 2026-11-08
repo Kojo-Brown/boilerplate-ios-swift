@@ -213,6 +213,6 @@ Six rules, each verified by reintroducing the defect it names: no credential in
 a defaults-backed store, no credential written to a file, the token account
 names confined to the store that owns them, exactly one `KeychainStoring` write
 and it takes a policy, every Keychain write in the app naming one, and the
-composition root still naming a `BiometricUnlockPolicy`. It runs in the lint job
+composition root still naming a `BiometricUnlockPolicy`. It runs in the audits job
 beside the other four audits, needs no toolchain, and is one of the few gates
 that can be run on Linux before pushing.
