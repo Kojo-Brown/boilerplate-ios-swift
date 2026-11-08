@@ -196,22 +196,56 @@ struct HomeViewModelConcurrencyTests {
         #expect(viewModel.items.count == settled)
     }
 
+    /// The last fixed sleep in this suite, and the last member of the family the
+    /// three comments above describe. The sleeps were 50 ms either side of the
+    /// restart, which asserts that six of this stream's 20 ms ticks fit into
+    /// 50 ms of a main actor that 1042 tests are contending for — a deadline
+    /// belonging to the runner, not a claim about the view model. It is the same
+    /// defect its three siblings were repaired for, left behind because it was
+    /// the one of the four that happened to be passing at the time.
+    ///
+    /// Polling instead is strictly stronger than what it replaces. The closing
+    /// expectation is unchanged — the count grows after the restart — and the
+    /// loops cannot manufacture it: each exits either on growth it then asserts,
+    /// or on a budget whose expiry leaves the count where the assertion fails.
+    /// The midway expectation is new, and it closes a hole: a first stream that
+    /// never ticked at all used to leave `countMidway` at the baseline, which the
+    /// second stream then exceeded on its own, so the test passed without the
+    /// restart having been shown to replace anything.
+    ///
+    /// `stopLiveUpdates()` moves into a `defer` for the reason
+    /// `startLiveUpdatesAppendsItems` already has one: a cancelled `Task.sleep`
+    /// throws out of the loops above, and on that path the trailing call never
+    /// ran — leaving a 20 ms poller appending on the main actor for the rest of
+    /// the bundle.
+    ///
+    /// Note what this does *not* establish, which its name has always overstated:
+    /// two streams both running would also grow the count. It covers the restart,
+    /// not the cancellation; `onDisappear cancels live updates` covers that.
     @Test("startLiveUpdates cancels previous task before starting new one")
     func startLiveUpdatesCancelsPreviousTask() async throws {
         let viewModel = HomeViewModel()
         await viewModel.onAppear()
+        let baseline = viewModel.items.count
 
         viewModel.startLiveUpdates(interval: .milliseconds(20))
-        try await Task.sleep(for: .milliseconds(50))
+        defer { viewModel.stopLiveUpdates() }
+
+        for _ in 0..<200 {
+            if viewModel.items.count > baseline { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
         let countMidway = viewModel.items.count
+        #expect(countMidway > baseline, "the first stream never ticked, so the restart replaces nothing")
 
         // Re-calling startLiveUpdates should cancel the old task and start fresh
         viewModel.startLiveUpdates(interval: .milliseconds(20))
-        try await Task.sleep(for: .milliseconds(50))
 
+        for _ in 0..<200 {
+            if viewModel.items.count > countMidway { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(viewModel.items.count > countMidway)
-
-        viewModel.stopLiveUpdates()
     }
 }
 
