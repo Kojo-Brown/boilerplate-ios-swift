@@ -170,6 +170,21 @@ of them, because `HomeView` renders a different view tree on a regular
 horizontal size class than on a compact one. See
 [docs/ui-testing.md](./ui-testing.md).
 
+## The doubles the suites run against
+
+Almost every suite in this bundle substitutes a protocol fake for the network,
+the store, or both. That substitution is a claim — *nothing a caller can observe
+changes* — and until Phase 12 item 5 the claim was checked for exactly one of
+the nine requirements on `UserPersistenceService` and none of `APIClient`'s.
+
+A double has two failure modes and neither is a red build: it drifts from the
+implementation it replaces, or it is scripted into answering something the real
+implementation could never answer. See
+[docs/test-doubles.md](./test-doubles.md) for the differential contract suites
+that close both, for when to arm `MockAPIClient` with a handler and when with
+`script(_:)`, and for the one transport path the double deliberately does not
+model.
+
 ## The worked example
 
 [docs/tdd-kata.md](./tdd-kata.md) walks one use-case built test-first under
