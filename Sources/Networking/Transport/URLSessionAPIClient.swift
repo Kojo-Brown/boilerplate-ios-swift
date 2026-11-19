@@ -78,11 +78,7 @@ package struct URLSessionAPIClient: APIClient {
 
     package func send<Response: Decodable & Sendable>(_ endpoint: APIEndpoint) async throws -> Response {
         let data = try await performRequest(endpoint)
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch let error as DecodingError {
-            throw APIError.decodingFailed(error.localizedDescription)
-        }
+        return try APIResponseValidation.decode(Response.self, from: data, using: decoder)
     }
 
     // MARK: - Request execution
@@ -92,7 +88,7 @@ package struct URLSessionAPIClient: APIClient {
         let (data, http) = try await send(attesting: request)
 
         // On 401, refresh tokens and retry once.
-        if http.statusCode == 401 && endpoint.requiresAuth {
+        if APIResponseValidation.isUnauthorized(http.statusCode) && endpoint.requiresAuth {
             let newToken = try await refreshTokens()
             var retryRequest = request
             retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
@@ -192,14 +188,11 @@ package struct URLSessionAPIClient: APIClient {
 
     // MARK: - Status validation
 
+    /// Delegates to `APIResponseValidation`, which is where this `switch` used
+    /// to be spelled out. It is shared with `MockAPIClient` so that the double
+    /// cannot be scripted into an outcome this transport would never produce —
+    /// see `APIResponseValidation` for the argument.
     private func validate(_ data: Data, response: HTTPURLResponse) throws -> Data {
-        switch response.statusCode {
-        case 200...299:
-            return data
-        case 401:
-            throw APIError.unauthorized
-        default:
-            throw APIError.httpError(statusCode: response.statusCode, data: data)
-        }
+        try APIResponseValidation.validate(data, statusCode: response.statusCode)
     }
 }

@@ -165,6 +165,14 @@ Two divergences are live today.
 > the past tense because it is what the audit found and what the repair had to
 > answer.
 
+> **Generalised in Phase 12 item 5.** This finding was one requirement of nine
+> on `UserPersistenceService`, and the pin that closed it covers that one. The
+> other eight are now compared across both implementations by
+> `PersistenceDoubleContractTests`, and `APIClient` has the same treatment —
+> see [docs/test-doubles.md](./test-doubles.md). The mechanism this finding
+> describes is not specific to `save`: two hand-written implementations of one
+> protocol, with nothing comparing them.
+
 `SwiftDataUserPersistenceService.save(user:)` inserted:
 
 ```swift

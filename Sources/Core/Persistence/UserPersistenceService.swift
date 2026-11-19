@@ -201,11 +201,19 @@ package final class MockUserPersistenceService: UserPersistenceService {
     package var shouldThrow = false
     package var stubbedError: PersistenceError = .userNotFound
 
-    private(set) var saveCallCount = 0
-    private(set) var fetchCallCount = 0
-    private(set) var updateCallCount = 0
-    private(set) var deleteCallCount = 0
-    private(set) var deleteAllCallCount = 0
+    /// Call counts, readable wherever the double is.
+    ///
+    /// They were plain `internal` until Phase 12 item 5, which made them
+    /// visible only to a `@testable import Core`. That is most of this bundle,
+    /// so nothing was failing — but `Features` and `Networking` also hold this
+    /// double, through `UserPersistenceService`, and a suite over either could
+    /// see the rows and not the number of writes that produced them. `package`
+    /// is the access level the rest of the double already has.
+    package private(set) var saveCallCount = 0
+    package private(set) var fetchCallCount = 0
+    package private(set) var updateCallCount = 0
+    package private(set) var deleteCallCount = 0
+    package private(set) var deleteAllCallCount = 0
 
     package func save(user: User) throws {
         try save(user: user, refreshedAt: nil)

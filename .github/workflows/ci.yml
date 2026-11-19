@@ -442,6 +442,32 @@ jobs:
       - name: Audit which test framework each suite can actually fail in
         run: python3 Tools/assert-test-framework.py
 
+      # Phase 12 item 5. The network and persistence seams now have differential
+      # contract suites: one table of scenarios, run against the live
+      # implementation and against the hand-written double, asserting the same
+      # outcomes of both. Those suites stop meaning anything the moment a third
+      # conformer appears that nobody wrote a contract for, a registry row
+      # outlives the type it describes, or a suite stops naming the double it is
+      # registered to hold — none of which is visible in a green run, because
+      # everything that is still there still passes.
+      #
+      # It also checks the structural half of the network contract. The
+      # status-to-outcome mapping moved out of `URLSessionAPIClient` into
+      # `APIResponseValidation` so that `MockAPIClient.script(_:)` could call the
+      # same code; re-inlining it into the transport would leave both halves of
+      # the contract suite agreeing with whichever copy each one reads, which is
+      # the one divergence a differential test cannot see.
+      #
+      # Every rule here was checked against the defect it names — a third
+      # conformer, a renamed double, a silenced suite, a deleted suite, a suite
+      # with no `@Test`, a re-inlined switch, a double that stopped calling the
+      # mapping — before this step was added.
+      #
+      # Syntactic, like the audits around it: no toolchain, no resolved packages,
+      # no simulator, and runnable on the scheduled agent's Linux box.
+      - name: Audit the test doubles against the implementations they replace
+        run: python3 Tools/assert-test-doubles.py
+
       # Phase 12 item 3. The snapshot gate's committed state, which is the part
       # of it a green run cannot see.
       #
