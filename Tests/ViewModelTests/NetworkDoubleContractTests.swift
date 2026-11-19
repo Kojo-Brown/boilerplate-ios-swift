@@ -89,7 +89,7 @@ class ContractStubURLProtocol: URLProtocol {
 /// may reword between OS versions; asserting on it would make this suite fail
 /// on an Xcode upgrade and say nothing about the double. The *case* is the
 /// contract — a caller branches on it — and the case is what is compared.
-private enum APIFailure: Equatable, Sendable {
+enum ContractAPIFailure: Equatable, Sendable {
     case unauthorized
     case http(statusCode: Int, body: Data)
     case decodingFailed
@@ -127,9 +127,9 @@ private enum APIFailure: Equatable, Sendable {
 }
 
 /// What one `send` produced: the value, or the failure, and nothing about how.
-private enum SendOutcome<Value: Equatable & Sendable>: Equatable, Sendable {
+enum ContractSendOutcome<Value: Equatable & Sendable>: Equatable, Sendable {
     case value(Value)
-    case failure(APIFailure)
+    case failure(ContractAPIFailure)
 }
 
 /// Runs one `send` through whichever client it is handed and reports the
@@ -142,12 +142,12 @@ private func outcome<Response: Decodable & Sendable & Equatable>(
     _ type: Response.Type,
     from client: any APIClient,
     sending endpoint: APIEndpoint
-) async -> SendOutcome<Response> {
+) async -> ContractSendOutcome<Response> {
     do {
         let value: Response = try await client.send(endpoint)
         return .value(value)
     } catch {
-        return .failure(APIFailure(error))
+        return .failure(ContractAPIFailure(error))
     }
 }
 
@@ -197,16 +197,19 @@ private func makeTransport() async throws -> URLSessionAPIClient {
 /// `expected` is written out rather than derived, so the suite says what the
 /// contract *is* instead of only that the two agree. Two implementations that
 /// are wrong in the same way would satisfy "they agree" and fail this.
-private struct WireScenario: Sendable, CustomTestStringConvertible {
+/// Internal rather than `private`, which is not a style choice: a `@Test`
+/// method is internal, and Swift refuses an internal method whose parameter
+/// uses a private type. `PinningFixture` is internal for the same reason.
+struct ContractWireScenario: Sendable, CustomTestStringConvertible {
     let name: String
     let exchanges: [MockAPIClient.Exchange]
     let endpoint: APIEndpoint
-    let expected: SendOutcome<User>
+    let expected: ContractSendOutcome<User>
 
     var testDescription: String { name }
 
-    static let all: [WireScenario] = [
-        WireScenario(
+    static let all: [ContractWireScenario] = [
+        ContractWireScenario(
             name: "200 carrying the row",
             exchanges: [.success(contractUserJSON)],
             endpoint: .get("/users/me"),
@@ -215,13 +218,13 @@ private struct WireScenario: Sendable, CustomTestStringConvertible {
         // 299 is in range and 300 is not, and the boundary is a `switch` case
         // in one place now. Before the extraction it was a literal in the
         // transport and absent from the double entirely.
-        WireScenario(
+        ContractWireScenario(
             name: "299 is still a success",
             exchanges: [MockAPIClient.Exchange(statusCode: 299, body: Data(contractUserJSON.utf8))],
             endpoint: .get("/users/me"),
             expected: .value(contractUser)
         ),
-        WireScenario(
+        ContractWireScenario(
             name: "200 carrying a body that is not the row",
             exchanges: [.success(#"{"unexpected": true}"#)],
             endpoint: .get("/users/me"),
@@ -234,19 +237,19 @@ private struct WireScenario: Sendable, CustomTestStringConvertible {
         // implementations report it the same way, which is what this pins; that
         // the shared answer is `decodingFailed` rather than a success is a
         // property of the transport and a note in `docs/test-doubles.md`.
-        WireScenario(
+        ContractWireScenario(
             name: "200 carrying nothing at all",
             exchanges: [MockAPIClient.Exchange(statusCode: 200)],
             endpoint: .get("/users/me"),
             expected: .failure(.decodingFailed)
         ),
-        WireScenario(
+        ContractWireScenario(
             name: "404 with a body the server explained itself in",
             exchanges: [MockAPIClient.Exchange(statusCode: 404, body: serverErrorBody)],
             endpoint: .get("/users/me"),
             expected: .failure(.http(statusCode: 404, body: serverErrorBody))
         ),
-        WireScenario(
+        ContractWireScenario(
             name: "500 with no body",
             exchanges: [MockAPIClient.Exchange(statusCode: 500)],
             endpoint: .get("/users/me"),
@@ -255,7 +258,7 @@ private struct WireScenario: Sendable, CustomTestStringConvertible {
         // The one 401 both halves answer identically, because `requiresAuth`
         // is what gates the refresh: an endpoint that sends no credential has
         // no credential to refresh.
-        WireScenario(
+        ContractWireScenario(
             name: "401 on an endpoint that needs no auth",
             exchanges: [.unauthorized],
             endpoint: .get("/public", requiresAuth: false),
@@ -287,8 +290,8 @@ private struct WireScenario: Sendable, CustomTestStringConvertible {
 @MainActor
 struct NetworkDoubleContractTests {
 
-    @Test("The double and the transport answer one script the same way", arguments: WireScenario.all)
-    func theDoubleAgreesWithTheTransport(scenario: WireScenario) async throws {
+    @Test("The double and the transport answer one script the same way", arguments: ContractWireScenario.all)
+    func theDoubleAgreesWithTheTransport(scenario: ContractWireScenario) async throws {
         ContractStubURLProtocol.script(scenario.exchanges)
         let transport = try await makeTransport()
         let fromTransport = await outcome(User.self, from: transport, sending: scenario.endpoint)

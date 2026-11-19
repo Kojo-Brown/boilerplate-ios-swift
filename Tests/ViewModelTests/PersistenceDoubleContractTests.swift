@@ -7,13 +7,16 @@ import Testing
 
 /// Phase 12 item 5. Which `UserPersistenceService` a case runs against.
 ///
-/// Every test below is `@Test(arguments: StoreKind.allCases)`, so each one runs
+/// Every test below is `@Test(arguments: ContractStoreKind.allCases)`, so each one runs
 /// twice and the test name in the report says which half failed. A `for` loop
 /// over the two would report one failure for the pair and stop at the first,
 /// which is the wrong shape for a differential test: the interesting outcome is
 /// "the live store does this and the double does that", and that needs both
 /// halves to run and be named.
-private enum StoreKind: String, CaseIterable, Sendable, CustomTestStringConvertible {
+/// Internal rather than `private`, which is not a style choice: a `@Test`
+/// method is internal, and Swift refuses an internal method whose parameter
+/// uses a private type. `PinningFixture` is internal for the same reason.
+enum ContractStoreKind: String, CaseIterable, Sendable, CustomTestStringConvertible {
 
     /// `SwiftDataUserPersistenceService` over an in-memory `ModelContainer` —
     /// real SwiftData, real `ModelContext`, real fetches, no file on disk.
@@ -34,7 +37,7 @@ private enum StoreKind: String, CaseIterable, Sendable, CustomTestStringConverti
 /// `FetchDescriptor` of its own, which is the thing this suite deliberately
 /// never does.
 @MainActor
-private func makeStore(_ kind: StoreKind) throws -> any UserPersistenceService {
+private func makeStore(_ kind: ContractStoreKind) throws -> any UserPersistenceService {
     switch kind {
     case .live:
         let container = try PersistenceController.makeInMemoryContainer()
@@ -109,8 +112,8 @@ private func expectSameInstant(_ actual: Date?, _ expected: Date, _ label: Strin
 @MainActor
 struct PersistenceDoubleContractTests {
 
-    @Test("An empty store answers nil rather than throwing", arguments: StoreKind.allCases)
-    func anEmptyStoreIsEmpty(kind: StoreKind) async throws {
+    @Test("An empty store answers nil rather than throwing", arguments: ContractStoreKind.allCases)
+    func anEmptyStoreIsEmpty(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         let user = try await store.fetchCurrentUser()
@@ -130,8 +133,8 @@ struct PersistenceDoubleContractTests {
     /// is delete once and look again: a store that inserted twice still holds
     /// the second row after one `delete`, because `delete` removes the row it
     /// matched and not every row carrying that identity.
-    @Test("Saving the same identity twice leaves one row", arguments: StoreKind.allCases)
-    func saveUpsertsRatherThanInserting(kind: StoreKind) async throws {
+    @Test("Saving the same identity twice leaves one row", arguments: ContractStoreKind.allCases)
+    func saveUpsertsRatherThanInserting(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(name: "First"))
@@ -145,8 +148,8 @@ struct PersistenceDoubleContractTests {
         #expect(afterDelete == nil)
     }
 
-    @Test("A save that heard from the API records when", arguments: StoreKind.allCases)
-    func saveRecordsTheConfirmation(kind: StoreKind) async throws {
+    @Test("A save that heard from the API records when", arguments: ContractStoreKind.allCases)
+    func saveRecordsTheConfirmation(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(), refreshedAt: confirmedAt)
@@ -164,8 +167,8 @@ struct PersistenceDoubleContractTests {
     /// to be got wrong by a double written to make a test pass: leaving the old
     /// stamp is a one-line difference, and it produces a row that claims the
     /// server confirmed a value the server never saw.
-    @Test("A bare save clears an existing confirmation", arguments: StoreKind.allCases)
-    func bareSaveClearsTheConfirmation(kind: StoreKind) async throws {
+    @Test("A bare save clears an existing confirmation", arguments: ContractStoreKind.allCases)
+    func bareSaveClearsTheConfirmation(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(), refreshedAt: confirmedAt)
@@ -179,8 +182,8 @@ struct PersistenceDoubleContractTests {
 
     /// The mirror image: an update says what the row contains and not where it
     /// came from, so the stamp outlives it.
-    @Test("An update leaves the confirmation alone", arguments: StoreKind.allCases)
-    func updateLeavesTheConfirmation(kind: StoreKind) async throws {
+    @Test("An update leaves the confirmation alone", arguments: ContractStoreKind.allCases)
+    func updateLeavesTheConfirmation(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(), refreshedAt: confirmedAt)
@@ -192,8 +195,8 @@ struct PersistenceDoubleContractTests {
         expectSameInstant(record.refreshedAt, confirmedAt, "\(kind.rawValue)")
     }
 
-    @Test("Updating a row that is not there is userNotFound", arguments: StoreKind.allCases)
-    func updatingAnAbsentRowThrows(kind: StoreKind) async throws {
+    @Test("Updating a row that is not there is userNotFound", arguments: ContractStoreKind.allCases)
+    func updatingAnAbsentRowThrows(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         await #expect(throws: PersistenceError.userNotFound) {
@@ -201,8 +204,8 @@ struct PersistenceDoubleContractTests {
         }
     }
 
-    @Test("Deleting a row that is not there is userNotFound", arguments: StoreKind.allCases)
-    func deletingAnAbsentRowThrows(kind: StoreKind) async throws {
+    @Test("Deleting a row that is not there is userNotFound", arguments: ContractStoreKind.allCases)
+    func deletingAnAbsentRowThrows(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         await #expect(throws: PersistenceError.userNotFound) {
@@ -210,8 +213,8 @@ struct PersistenceDoubleContractTests {
         }
     }
 
-    @Test("deleteAll empties the store, and an empty one is not an error", arguments: StoreKind.allCases)
-    func deleteAllEmptiesTheStore(kind: StoreKind) async throws {
+    @Test("deleteAll empties the store, and an empty one is not an error", arguments: ContractStoreKind.allCases)
+    func deleteAllEmptiesTheStore(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.deleteAll()
@@ -239,8 +242,8 @@ struct PersistenceDoubleContractTests {
     /// The dated row is saved *first* so that insertion order and the correct
     /// answer disagree. A store that returned "the last one written" would pass
     /// a version of this test that saved them the other way round.
-    @Test("The current row is the one with the greatest createdAt", arguments: StoreKind.allCases)
-    func theCurrentRowIsTheNewest(kind: StoreKind) async throws {
+    @Test("The current row is the one with the greatest createdAt", arguments: ContractStoreKind.allCases)
+    func theCurrentRowIsTheNewest(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(name: "Newest", createdAt: newerInstant))
@@ -253,8 +256,8 @@ struct PersistenceDoubleContractTests {
     /// `fetchRecord(userId:)` exists because `fetchCurrentRecord()` answers a
     /// different question, and a write-then-read-back that used the latter
     /// could be handed another account's row.
-    @Test("fetchRecord answers about the row named, not the current one", arguments: StoreKind.allCases)
-    func fetchRecordAnswersAboutTheRowNamed(kind: StoreKind) async throws {
+    @Test("fetchRecord answers about the row named, not the current one", arguments: ContractStoreKind.allCases)
+    func fetchRecordAnswersAboutTheRowNamed(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
 
         try await store.save(user: makeUser(name: "Newest", createdAt: newerInstant))
@@ -271,8 +274,8 @@ struct PersistenceDoubleContractTests {
     /// both implementations, so the two can never answer about different rows.
     /// This is the pin for that: it is a one-line change in either to make them
     /// disagree, and nothing else would notice.
-    @Test("fetchCurrentUser is the row half of fetchCurrentRecord", arguments: StoreKind.allCases)
-    func theTwoCurrentReadsAgree(kind: StoreKind) async throws {
+    @Test("fetchCurrentUser is the row half of fetchCurrentRecord", arguments: ContractStoreKind.allCases)
+    func theTwoCurrentReadsAgree(kind: ContractStoreKind) async throws {
         let store = try makeStore(kind)
         try await store.save(user: makeUser(), refreshedAt: confirmedAt)
 
