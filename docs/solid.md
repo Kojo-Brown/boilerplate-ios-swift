@@ -156,6 +156,17 @@ can see what a fake is supposed to do — and it is also the failure mode: the t
 implementations of a protocol are two independent readings of a contract that is written
 down nowhere.
 
+> **Written down since Phase 12 item 5, for two of the fifteen.** `UserRepository` and
+> `UserPersistenceService` now have contract suites: each case is one sentence about the
+> protocol, taking the implementation as an argument, so it runs against the live type and
+> against the double in the same run. Finding 3 below is why — it was a divergence that
+> survived eight phases and was found by a person reading two files side by side, and the
+> repair it got pinned one method of nine. See [test-doubles.md](./test-doubles.md), which
+> also records what the two contracts deliberately do not cover, and the two further
+> divergences writing the contract down turned up: `MockUserRepository` has no state for a
+> `deleteAccount` to remove, and `LiveUserRepository.deleteAccount()` fails against a
+> correct `204 No Content`. The other thirteen seams still have doubles and no contract.
+
 Two divergences are live today.
 
 ### Finding 3 — `save(user:)` means different things in the store and in its double
@@ -528,6 +539,12 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
   suite still touches no hardware.
 - **Nothing here checks that the doc and the code agree in prose.** The pins assert
   structure. The paragraphs are still paragraphs.
+- **Thirteen of the fifteen doubles are still unverified readings of their protocol.**
+  Phase 12 item 5 wrote the contract down for `UserRepository` and
+  `UserPersistenceService` only. `KeychainStoring` is the one that most deserves the next
+  one: `KeychainWrapperTests` is titled "KeychainWrapper unit tests (via InMemoryKeychain)"
+  and every assertion in it is about the double, so `KeychainWrapper` itself is covered by
+  nothing. See [test-doubles.md](./test-doubles.md).
 
 ## Where these findings go
 
@@ -538,7 +555,7 @@ Stating the limits, because a check that is trusted beyond its reach is worse th
 | 2 — `CameraService` unabstracted | DIP | **declined** — vended as a factory, reasons above |
 | 3 — `save` diverges from its double | LSP | **fixed** — Phase 9 item 1, both upsert |
 | 4 — disjoint error types | LSP | no item — needs an error type, not a decorator (above) |
-| 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor |
+| 5 — double is `@MainActor`, live type is not | LSP | self-contained; lock instead of actor — still open, and why both contract suites in `test-doubles.md` are `@MainActor` |
 | 6 — the layer has no callers | SRP | **fixed** — Phase 8 item 3, `SyncStrategy` |
 | 7 — transport carries the retry policy | SRP / OCP | **fixed** — Phase 8 item 4, decorators |
 | 8 — dead `AppleSignInService`, duplicated nonce | SRP | not currently a spec item |
