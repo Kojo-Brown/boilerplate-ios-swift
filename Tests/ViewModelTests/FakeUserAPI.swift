@@ -58,7 +58,7 @@ class FakeUserAPI: URLProtocol {
     ///
     /// Two answers, both of them things a real server does, because the
     /// difference between them is not cosmetic here: see
-    /// `UserRepositoryDoubleDivergences.aNoContentDeleteFailsOnlyAgainstTheLiveStack`.
+    /// `UserRepositoryContractTests.aNoContentDeleteFailsOnlyAgainstTheLiveStack`.
     enum DeleteAnswer: Sendable {
         /// `200` carrying `{}` — a body `EmptyResponse` can decode.
         case okEmptyObject
