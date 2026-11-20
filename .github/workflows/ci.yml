@@ -483,6 +483,31 @@ jobs:
       - name: Audit the UI test host and the journey
         run: python3 Tools/assert-ui-test-journey.py
 
+      # Phase 12 item 5. The doubles that stand in for the network and the store
+      # are now held to their live implementations by a contract suite that runs
+      # every case twice. This is what keeps it that way.
+      #
+      # `docs/solid.md` finding 3 is why the gate exists rather than why the
+      # suite does: `save(user:)` inserted in the real store and upserted in its
+      # double for eight phases, so one user saved twice left two rows on device
+      # and one entry under test, and nothing failed — it was found by a person
+      # reading both files side by side. All four ways the new contract stops
+      # working have the same signature: they compile, run, and report success.
+      # A protocol grows a requirement no case mentions, so the new method is
+      # specified by whichever implementation a test happens to reach. A case
+      # loses its `arguments:` and runs against one side while still reading as
+      # a contract case. A divergence pin — an inverted test that fails when the
+      # divergence is *repaired* — is deleted, turning a known defect into an
+      # unknown one. Or the "live" half quietly becomes `MockAPIClient`, at
+      # which point the contract is two doubles agreeing with each other and
+      # reads as evidence.
+      #
+      # Syntactic, like the audits above it: no toolchain, no simulator, and it
+      # runs on the scheduled agent's Linux box — which is where it was checked,
+      # by reintroducing each of the defects it names.
+      - name: Audit the test doubles against their live implementations
+        run: python3 Tools/assert-test-doubles.py
+
   build-and-test:
     name: Build and test on the iOS Simulator
     runs-on: macos-15

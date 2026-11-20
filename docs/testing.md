@@ -170,6 +170,22 @@ of them, because `HomeView` renders a different view tree on a regular
 horizontal size class than on a compact one. See
 [docs/ui-testing.md](./ui-testing.md).
 
+## Doubles, and the contract they are held to
+
+Almost every suite here runs against a hand-written double rather than against
+the type it stands in for, which is what makes the suite fast and what makes it
+possible for a double to be wrong in the same direction for eight phases without
+anything failing. `docs/solid.md` finding 3 is that story.
+
+Two seams — `UserRepository` and `UserPersistenceService` — have contract suites
+now: one sentence about the protocol per case, taking the implementation as an
+argument, run against the live type and the double in the same run. The network
+one replaces the *server* rather than the client, because substituting
+`APIClient` replaces everything the contract is trying to hold the double
+against. `Tools/assert-test-doubles.py` keeps the arrangement honest, and the
+divergences the two cannot share are pinned as inverted tests. See
+[docs/test-doubles.md](./test-doubles.md).
+
 ## The worked example
 
 [docs/tdd-kata.md](./tdd-kata.md) walks one use-case built test-first under
