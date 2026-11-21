@@ -17,33 +17,51 @@ struct TimeoutTests {
 
     @Test("an operation that finishes in time returns its value without waiting")
     func aSuccessDoesNotWaitOutTheBudget() async throws {
-        let clock = ContinuousClock()
-        let start = clock.now
-
         // The budget is deliberately enormous, and that is the whole point.
         // What this test asks is whether the success path abandons the pending
-        // sleeper or waits for it. `withTimeout` has no `Clock` seam — SPEC.md
-        // Phase 7 records that gap — so the only honest way to ask it is to
-        // make "waited for it" a duration nothing else could be mistaken for.
+        // sleeper or waits for it. Without `cancelAll()` on the success path the
+        // group would still be holding that sleeper, would wait for it as a task
+        // group waits for its children, and this call would take an hour — a bug
+        // that is invisible in review and unmistakable in production.
         //
-        // It was `.seconds(30)` against a `< .seconds(5)` bound, a ratio of 6,
-        // and a loaded runner forged a failure through it on run #48 of the
-        // DI-container branch: 16.48s elapsed on a call that had in fact
-        // returned immediately — not the 30s the bug produces, just scheduling
-        // starvation in a suite that runs 400+ tests at once. Main's own last
-        // green run spent 7.6s inside this test against that 5s bound, so the
-        // margin was already nearly gone before anything was added to it.
+        // ## Why there is no stopwatch here any more
+        //
+        // There was one: `#expect(elapsed < .seconds(30))` read off a
+        // `ContinuousClock`, and before that `< .seconds(5)`. It is the third
+        // wall-clock bound in this bundle to be removed for the same reason, and
+        // it goes for the reason the other two went — `SessionObserverTests`'
+        // `waitForState` and `onDisappear cancels live updates` both record it.
+        //
+        // The bound was never a claim about `withTimeout`. The budget is an hour,
+        // so the bug's signature is an hour: the call either abandons the sleeper
+        // or waits 3600 seconds, and no reachable defect lands in between. What
+        // the bound actually measured was how long a loaded three-core runner
+        // takes to get back to a suspended task, and it has been wrong about that
+        // twice — run #48 recorded 16.48s elapsed under the 5s bound on a call
+        // that had in fact returned immediately, and run #197 recorded 40.76s
+        // under the 30s bound the same way, red on a `main` whose only other
+        // change was a line of SPEC.md. Starvation is not proportional to the
+        // budget, so no number chosen this way is safe; raising it a third time
+        // would buy nothing but the date of the next false failure.
+        //
+        // The bound that remains is the suite's `.timeLimit(.minutes(1))`:
+        // Swift Testing's own, which cancels the test's task rather than racing
+        // it, which no hour-long wait can survive, and which reports by name
+        // rather than by margin. It was always the load-bearing half of "it fails
+        // two ways rather than one". Nothing about what is asserted moves — a
+        // success path that waits for its sleeper still fails this test, and still
+        // fails it for the right reason. The only claim that stopped being made is
+        // one this suite never meant to make: that a runner executing 1068 tests
+        // will reschedule a suspended task inside 30 seconds.
+        //
+        // The repair that would remove the wait from the test rather than the
+        // clock from the assertion is a `Clock` seam on `withTimeout`, so a test
+        // clock could prove the sleeper was abandoned without reference to wall
+        // time at all. SPEC.md Phase 7 records that gap. It changes the signature
+        // every caller uses, and it is not this item.
         let value = try await withTimeout(.seconds(3600)) { 7 }
-        let elapsed = clock.now - start
 
-        // Without `cancelAll()` on the success path the group would still be
-        // holding a pending sleeper, would wait for it, and this would take an
-        // hour — a bug that is invisible in review and unmistakable in
-        // production. It now fails two ways rather than one: this expectation,
-        // and the suite's own `.timeLimit(.minutes(1))`, which no hour-long
-        // wait can survive and which reports by name rather than by margin.
         #expect(value == 7)
-        #expect(elapsed < .seconds(30))
     }
 
     @Test("an operation that overruns throws TimedOutError and is cancelled")
